@@ -1,10 +1,10 @@
 KERNEL_FLAGS ?= ARCH=arm64
 
 module = mmrm_test_module.ko
-mmrm_test_module.ko: mmrm_test_module.c
+
 kmake  = $(MAKE) $(KERNEL_FLAGS) -C $(KERNEL_DIR) M=$(CURDIR)
 
-$(module):
+$(module): mmrm_test.c mmrm_test_internal.c
   $(kmake) modules
 
 all-local: $(module)

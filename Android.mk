@@ -15,7 +15,6 @@ endif
 
 # Test module
 include $(CLEAR_VARS)
-LOCAL_SRC_FILES  := mmrm_test_module.c
 LOCAL_MODULE      := mmrm_test_module.ko
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_PATH := $(TARGET_OUT_DATA)/kernel-tests/modules
@@ -26,7 +25,7 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES    := mmrm_test.sh
 LOCAL_MODULE       := mmrm_test.sh
 LOCAL_MODULE_CLASS := EXECUTABLES
-LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_TAGS  := optional
 LOCAL_MODULE_PATH  := $(TARGET_OUT_DATA)/kernel-tests
 include $(BUILD_PREBUILT)
 

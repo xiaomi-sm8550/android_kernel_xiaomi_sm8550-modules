@@ -29,7 +29,7 @@ do_mmrm_test(){
 	if [ -e "${modpath}/mmrm_test_module.ko" ]; then
 		mmrm_test_mod=mmrm_test_module
 	else
-		echo "mmrm test module not found"
+		echo "ERROR: Failed to get mmrm test module"
 		return 1
 	fi
 
@@ -48,6 +48,8 @@ do_mmrm_test(){
 			echo "ERROR: Failed to remove mmrm test module"
 			return 1
 		fi
+	else
+		echo "ERROR: Failed to find mmrm test module"
 	fi
 
 	return 0
