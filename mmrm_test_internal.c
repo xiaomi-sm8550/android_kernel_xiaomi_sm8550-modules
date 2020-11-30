@@ -17,7 +17,7 @@
 
 #include "mmrm_test_internal.h"
 
-#define MMRM_TEST_MAX_CLK_CLIENTS 5
+#define MMRM_TEST_MAX_CLK_CLIENTS 25
 
 enum mmrm_test_vdd_levels {
 	MMRM_TEST_VDD_LEVEL_SVS_L1,
@@ -29,21 +29,81 @@ enum mmrm_test_vdd_levels {
 struct mmrm_test_clk_client {
 	struct mmrm_clk_client_desc clk_client_desc;
 	unsigned long clk_rate[MMRM_TEST_VDD_LEVEL_MAX];
+	struct mmrm_client *client;
 };
 
 static struct mmrm_test_clk_client mmrm_test_clk_client_list[][MMRM_TEST_MAX_CLK_CLIENTS] = {
 	/* LAHAINA */
 	{
 		{{MMRM_CLIENT_DOMAIN_CAMERA, 42, "cam_cc_ife_0_clk_src", NULL},
-			{600000000, 720000000, 720000000}},
+			{600000000, 720000000, 720000000},
+			NULL},
 		{{MMRM_CLIENT_DOMAIN_CAMERA, 51, "cam_cc_ife_1_clk_src", NULL},
-			{600000000, 720000000, 720000000}},
+			{600000000, 720000000, 720000000},
+			NULL},
+		{{MMRM_CLIENT_DOMAIN_CAMERA, 60, "cam_cc_ife_2_clk_src", NULL},
+			{600000000, 720000000, 720000000},
+			NULL},
+		{{MMRM_CLIENT_DOMAIN_CAMERA, 4, "cam_cc_bps_clk_src", NULL},
+			{480000000, 600000000, 600000000},
+			NULL},
+		{{MMRM_CLIENT_DOMAIN_CAMERA, 67, "cam_cc_ife_lite_clk_src", NULL},
+			{480000000, 480000000, 480000000},
+			NULL},
+		{{MMRM_CLIENT_DOMAIN_CAMERA, 77, "cam_cc_jpeg_clk_src", NULL},
+			{480000000, 600000000, 600000000},
+			NULL},
+		{{MMRM_CLIENT_DOMAIN_CAMERA, 6, "cam_cc_camnoc_axi_clk_src", NULL},
+			{400000000, 400000000, 400000000},
+			NULL},
+		{{MMRM_CLIENT_DOMAIN_CAMERA, 70, "cam_cc_ife_lite_csid_clk_src", NULL},
+			{400000000, 400000000, 400000000},
+			NULL},
+		{{MMRM_CLIENT_DOMAIN_CAMERA, 37, "cam_cc_icp_clk_src", NULL},
+			{480000000, 600000000, 600000000},
+			NULL},
+		{{MMRM_CLIENT_DOMAIN_CAMERA, 14, "cam_cc_cphy_rx_clk_src", NULL},
+			{400000000, 400000000, 400000000},
+			NULL},
+		{{MMRM_CLIENT_DOMAIN_CAMERA, 16, "cam_cc_csi0phytimer_clk_src", NULL},
+			{300000000, 300000000, 300000000},
+			NULL},
+		{{MMRM_CLIENT_DOMAIN_CAMERA, 18, "cam_cc_csi1phytimer_clk_src", NULL},
+			{300000000, 300000000, 300000000},
+			NULL},
+		{{MMRM_CLIENT_DOMAIN_CAMERA, 20, "cam_cc_csi2phytimer_clk_src", NULL},
+			{300000000, 300000000, 300000000},
+			NULL},
+		{{MMRM_CLIENT_DOMAIN_CAMERA, 22, "cam_cc_csi3phytimer_clk_src", NULL},
+			{300000000, 300000000, 300000000},
+			NULL},
+		{{MMRM_CLIENT_DOMAIN_CAMERA, 24, "cam_cc_csi4phytimer_clk_src", NULL},
+			{300000000, 300000000, 300000000},
+			NULL},
+		{{MMRM_CLIENT_DOMAIN_CAMERA, 26, "cam_cc_csi5phytimer_clk_src", NULL},
+			{300000000, 300000000, 300000000},
+			NULL},
+		{{MMRM_CLIENT_DOMAIN_CAMERA, 9, "cam_cc_cci_0_clk_src", NULL},
+			{37500000, 37500000, 37500000},
+			NULL},
+		{{MMRM_CLIENT_DOMAIN_CAMERA, 11, "cam_cc_cci_1_clk_src", NULL},
+			{37500000, 37500000, 37500000},
+			NULL},
+		{{MMRM_CLIENT_DOMAIN_CAMERA, 118, "cam_cc_slow_ahb_clk_src", NULL},
+			{80000000, 80000000, 80000000},
+			NULL},
+		{{MMRM_CLIENT_DOMAIN_CAMERA, 33, "cam_cc_fast_ahb_clk_src", NULL},
+			{300000000, 400000000, 400000000},
+			NULL},
 		{{MMRM_CLIENT_DOMAIN_CVP, 8, "video_cc_mvs1_clk_src", NULL},
-			{1098000000, 1332000000, 1332000000}},
+			{1098000000, 1332000000, 1332000000},
+			NULL},
 		{{MMRM_CLIENT_DOMAIN_DISPLAY, 41, "disp_cc_mdss_mdp_clk_src", NULL},
-			{345000000, 460000000, 460000000}},
+			{345000000, 460000000, 460000000},
+			NULL},
 		{{MMRM_CLIENT_DOMAIN_VIDEO, 3, "video_cc_mvs0_clk_src", NULL},
-			{1098000000, 1332000000, 1332000000}},
+			{1098000000, 1332000000, 1332000000},
+			NULL},
 	},
 };
 
@@ -240,12 +300,8 @@ void test_mmrm_client(struct platform_device *pdev, int index, int count)
 		if (rc == 0)
 			pass_count++;
 
-		// Free clk
-		if (!IS_ERR_OR_NULL(clk))
+		if (clk)
 			clk_put(clk);
-
-		// Reset clk
-		desc.client_info.desc.clk = NULL;
 	}
 
 	pr_info("%s: Finish client tests (pass / total): (%d / %d)\n", __func__, pass_count, count);

@@ -18,7 +18,7 @@
 #include <linux/soc/qcom/msm_mmrm.h>
 
 #define MMRM_TEST_LAHAINA 0
-#define MMRM_TEST_LAHAINA_NUM_CLK_CLIENTS 5
+#define MMRM_TEST_LAHAINA_NUM_CLK_CLIENTS 23
 
 void test_mmrm_client(struct platform_device *pdev, int index, int count);
 
