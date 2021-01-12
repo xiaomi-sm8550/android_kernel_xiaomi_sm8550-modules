@@ -44,6 +44,7 @@ static int mmrm_test_probe(struct platform_device *pdev)
 	switch (soc_id) {
 	case 415: /* LAHAINA */
 		test_mmrm_client(pdev, MMRM_TEST_LAHAINA, MMRM_TEST_LAHAINA_NUM_CLK_CLIENTS);
+		test_mmrm_client_cases(pdev, MMRM_TEST_LAHAINA, MMRM_TEST_LAHAINA_NUM_CLK_CLIENTS);
 		break;
 	default:
 		pr_info("%s: Not supported for soc_id %d [Target %s]\n",

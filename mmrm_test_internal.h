@@ -21,5 +21,6 @@
 #define MMRM_TEST_LAHAINA_NUM_CLK_CLIENTS 23
 
 void test_mmrm_client(struct platform_device *pdev, int index, int count);
+void test_mmrm_client_cases(struct platform_device *pdev, int index, int count);
 
 #endif //_MMRM_TEST_INTERNAL_H_
