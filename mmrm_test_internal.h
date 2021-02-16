@@ -19,6 +19,8 @@
 
 #define MMRM_TEST_LAHAINA 0
 #define MMRM_TEST_LAHAINA_NUM_CLK_CLIENTS 23
+#define MMRM_TEST_WAIPIO 1
+#define MMRM_TEST_WAIPIO_NUM_CLK_CLIENTS 28
 
 void test_mmrm_client(struct platform_device *pdev, int index, int count);
 void test_mmrm_client_cases(struct platform_device *pdev, int index, int count);
