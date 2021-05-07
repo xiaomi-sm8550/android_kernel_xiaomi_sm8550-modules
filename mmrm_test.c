@@ -33,11 +33,11 @@ static int mmrm_test_probe(struct platform_device *pdev)
 
 	// Check if of_node is found
 	if (!of_device_is_compatible(pdev->dev.of_node, "qcom,msm-mmrm-test")) {
-		pr_info("No compatible device node\n");
+		dev_info(&pdev->dev, "No compatible device node\n");
 		return 1;
 	}
 
-	pr_info("%s: Validating mmrm on target: %s\n", __func__, socinfo_get_id_string());
+	dev_info(&pdev->dev, "%s: Validating mmrm on target: %s\n", __func__, socinfo_get_id_string());
 
 	// Get socid to get known mmrm configurations
 	soc_id = socinfo_get_id();
@@ -77,27 +77,20 @@ static struct platform_driver mmrm_test_driver = {
 		},
 };
 
-static void mmrm_test_release(struct device *dev) { return; }
-
-static struct platform_device mmrm_test_device = {
-	.name = MODULE_NAME,
-	.id = -1,
-	.dev = {
-			.release = mmrm_test_release,
-		},
-};
-
 static int __init mmrm_test_init(void)
 {
-	platform_device_register(&mmrm_test_device);
-	return platform_driver_register(&mmrm_test_driver);
+	int rc = 0;
+	rc = platform_driver_register(&mmrm_test_driver);
+	if (rc) {
+		pr_info("%s: failed to register platform driver\n", __func__);
+	}
+	return rc;
 }
 module_init(mmrm_test_init);
 
 static void __exit mmrm_test_exit(void)
 {
 	platform_driver_unregister(&mmrm_test_driver);
-	platform_device_unregister(&mmrm_test_device);
 }
 module_exit(mmrm_test_exit);
 
