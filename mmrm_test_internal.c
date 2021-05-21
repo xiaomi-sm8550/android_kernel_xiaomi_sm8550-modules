@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -539,7 +539,357 @@ void test_mmrm_single_case(struct platform_device *pdev, int index, int count, i
 	pr_info("%s: Finish test case %d\n", __func__, test);
 }
 
-void test_mmrm_client_cases(struct platform_device *pdev, int index, int count)
+#define LAHAINA_CAM_CC_IFE_0_CLK_SRC_TEST_IDX        0
+#define LAHAINA_CAM_CC_IFE_1_CLK_SRC_TEST_IDX        1
+#define LAHAINA_CAM_CC_IFE_2_CLK_SRC_TEST_IDX        2
+#define LAHAINA_CAM_CC_CSID_CLK_SRC_TEST_IDX         3
+#define LAHAINA_CAM_CC_CFE_0_CLK_SRC_TEST_IDX        4
+#define LAHAINA_CAM_CC_CFE_1_CLK_SRC_TEST_IDX        5
+#define LAHAINA_CAM_CC_IPE_NPS_CLK_SRC_TEST_IDX      6
+#define LAHAINA_CAM_CC_BPS_CLK_SRC_TEST_IDX          7
+#define LAHAINA_CAM_CC_IFE_LITE_CLK_SRC_TEST_IDX     8
+#define LAHAINA_CAM_CC_JPEG_CLK_SRC_TEST_IDX         9
+#define LAHAINA_CAM_CC_CAMNOC_AXI_CLK_SRC_TEST_IDX    10
+#define LAHAINA_CAM_CC_IFE_LITE_CSID_CLK_SRC_TEST_IDX 11
+#define LAHAINA_CAM_CC_ICP_CLK_SRC_TEST_IDX           12
+#define LAHAINA_CAM_CC_CPHY_RX_CLK_SRC_TEST_IDX       13
+#define LAHAINA_CAM_CC_CSI0PHYTIMER_CLK_SRC_TEST_IDX       14
+#define LAHAINA_CAM_CC_CSI1PHYTIMER_CLK_SRC_TEST_IDX       15
+#define LAHAINA_CAM_CC_CSI2PHYTIMER_CLK_SRC_TEST_IDX       16
+#define LAHAINA_CAM_CC_CSI3PHYTIMER_CLK_SRC_TEST_IDX       17
+#define LAHAINA_CAM_CC_CSI4PHYTIMER_CLK_SRC_TEST_IDX       18
+#define LAHAINA_CAM_CC_CSI5PHYTIMER_CLK_SRC_TEST_IDX       19
+#define LAHAINA_CAM_CC_CCI_0_CLK_SRC_TEST_IDX              20
+#define LAHAINA_CAM_CC_CCI_1_CLK_SRC_TEST_IDX              21
+#define LAHAINA_CAM_CC_SLOW_AHB_CLK_SRC_TEST_IDX           22
+#define LAHAINA_CAM_CC_FAST_AHB_CLK_SRC_TEST_IDX           23
+#define LAHAINA_VIDEO_CC_MVS1_CLK_SRC_TEST_IDX             24
+#define LAHAINA_DISP_CC_MDSS_MDP_CLK_SRC_TEST_IDX          25
+#define LAHAINA_DISP_CC_MDSS_DPTX0_CLK_SRC_TEST_IDX        26
+#define LAHAINA_VIDEO_CC_MVS0_CLK_SRC_TEST_IDX             27
+
+
+#define WP_CAM_CC_IFE_0_IDX        0
+#define WP_CAM_CC_IFE_1_IDX        1
+#define WP_CAM_CC_IFE_2_IDX        2
+#define WAIPIO_CAM_CC_CSID_CLK_SRC_TEST_IDX         3
+#define WAIPIO_CAM_CC_CFE_0_CLK_SRC_TEST_IDX        4
+#define WAIPIO_CAM_CC_CFE_1_CLK_SRC_TEST_IDX        5
+#define WP_CAM_CC_IPE_NPS_IDX      6
+#define WP_CAM_CC_BPS_IDX          7
+#define WP_CAM_CC_IFE_LITE_IDX     8
+#define WP_CAM_CC_JPEG_IDX         9
+#define WP_CAM_CC_CAMNOC_AXI_IDX    10
+#define WP_CAM_CC_IFE_LITE_CSID_IDX 11
+#define WP_CAM_CC_ICP_IDX           12
+#define WP_CAM_CC_CPHY_RX_IDX       13
+#define WP_CAM_CC_CSI0PHYTIMER_IDX       14
+#define WP_CAM_CC_CSI1PHYTIMER_IDX       15
+#define WP_CAM_CC_CSI2PHYTIMER_IDX       16
+#define WP_CAM_CC_CSI3PHYTIMER_IDX       17
+#define WP_CAM_CC_CSI4PHYTIMER_IDX       18
+#define WP_CAM_CC_CSI5PHYTIMER_IDX       19
+#define WP_CAM_CC_CCI_0_IDX              20
+#define WP_CAM_CC_CCI_1_IDX              21
+#define WP_CAM_CC_SLOW_AHB_IDX           22
+#define WP_CAM_CC_FAST_AHB_IDX           23
+#define WP_VIDEO_CC_MVS1_IDX             24
+#define WP_DISP_CC_MDSS_MDP_IDX          25
+#define WP_DISP_CC_MDSS_DPTX0_IDX        26
+#define WP_VIDEO_CC_MVS0_IDX             27
+
+
+// for camera ife/ipe/bps at nom
+// display mdss_mdp/dp_tx0 at nom
+// video/cvp at nom
+// all camera +cvp at nom
+// all camera +cvp + mdss_mdp at nom
+// all camera + cvp +mdss_mdp +video at nom
+// all camera at nom + mdp/cvp/video svsl1
+// mdp at svsl1 + video at nom : voltage corner scaling
+
+// mdp at svsl1 + video at svsl1 + cvp at svsl1 + camera at nom
+
+
+// for camera ife/ipe/bps at nom
+//
+#define  decl_test_case_1(n) static struct mmrm_test_desc test_case_1_##n[] = {\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_2_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_LITE_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_LITE_CSID_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IPE_NPS_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_BPS_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{NULL, 0} \
+}
+
+// display mdss_mdp/dptx0 at nom
+//
+//
+//
+#define  decl_test_case_2(n) static struct mmrm_test_desc test_case_2_##n[] = {\
+	{&mmrm_test_clk_client_list[n][WP_DISP_CC_MDSS_MDP_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_DISP_CC_MDSS_DPTX0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{NULL, 0} \
+}
+
+// video/cvp at nom
+//
+#define  decl_test_case_3(n) static struct mmrm_test_desc test_case_3_##n[] = {\
+	{&mmrm_test_clk_client_list[n][WP_VIDEO_CC_MVS1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_VIDEO_CC_MVS0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{NULL, 0} \
+}
+
+// all camera +cvp at nom
+//
+#define  decl_test_case_4(n) static struct mmrm_test_desc test_case_4_##n[] = {\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_2_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_LITE_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_LITE_CSID_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IPE_NPS_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_BPS_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_JPEG_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CAMNOC_AXI_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_ICP_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CPHY_RX_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI0PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI1PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI2PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI3PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI4PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI5PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CCI_0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CCI_1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_SLOW_AHB_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_FAST_AHB_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_VIDEO_CC_MVS1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{NULL, 0} \
+}
+
+// all camera +cvp + mdss_mdp at nom
+//
+#define  decl_test_case_5(n) static struct mmrm_test_desc test_case_5_##n[] = {\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_2_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_LITE_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_LITE_CSID_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IPE_NPS_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_BPS_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_JPEG_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CAMNOC_AXI_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_ICP_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CPHY_RX_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI0PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI1PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI2PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI3PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI4PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI5PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CCI_0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CCI_1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_SLOW_AHB_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_FAST_AHB_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+\
+	{&mmrm_test_clk_client_list[n][WP_VIDEO_CC_MVS1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_DISP_CC_MDSS_MDP_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{NULL, 0} \
+}
+
+// all camera + cvp +mdss_mdp +video at nom
+//
+#define  decl_test_case_6(n) static struct mmrm_test_desc test_case_6_##n[] = {\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_2_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_LITE_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_LITE_CSID_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IPE_NPS_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_BPS_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_JPEG_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CAMNOC_AXI_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_ICP_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CPHY_RX_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI0PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI1PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI2PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI3PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI4PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI5PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CCI_0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CCI_1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_SLOW_AHB_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_FAST_AHB_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+\
+	{&mmrm_test_clk_client_list[n][WP_VIDEO_CC_MVS1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_DISP_CC_MDSS_MDP_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_VIDEO_CC_MVS0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{NULL, 0} \
+}
+
+// all camera at nom + mdp/cvp/video svsl1
+//
+#define  decl_test_case_7(n) static struct mmrm_test_desc test_case_7_##n[] = {\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_2_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_LITE_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_LITE_CSID_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IPE_NPS_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_BPS_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_JPEG_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CAMNOC_AXI_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_ICP_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CPHY_RX_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI0PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI1PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI2PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI3PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI4PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI5PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CCI_0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CCI_1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_SLOW_AHB_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_FAST_AHB_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+\
+	{&mmrm_test_clk_client_list[n][WP_VIDEO_CC_MVS1_IDX], MMRM_TEST_VDD_LEVEL_SVS_L1},\
+	{&mmrm_test_clk_client_list[n][WP_DISP_CC_MDSS_MDP_IDX], MMRM_TEST_VDD_LEVEL_SVS_L1},\
+	{&mmrm_test_clk_client_list[n][WP_VIDEO_CC_MVS0_IDX], MMRM_TEST_VDD_LEVEL_SVS_L1},\
+	{NULL, 0} \
+}
+
+// mdp at svsl1 + video at nom : voltage corner scaling
+//
+//
+//
+#define  decl_test_case_8(n) static struct mmrm_test_desc test_case_8_##n[] = {\
+	{&mmrm_test_clk_client_list[n][WP_DISP_CC_MDSS_MDP_IDX], MMRM_TEST_VDD_LEVEL_SVS_L1},\
+	{&mmrm_test_clk_client_list[n][WP_VIDEO_CC_MVS0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{NULL, 0} \
+}
+
+
+decl_test_case_1(MMRM_TEST_WAIPIO);
+decl_test_case_2(MMRM_TEST_WAIPIO);
+decl_test_case_3(MMRM_TEST_WAIPIO);
+decl_test_case_4(MMRM_TEST_WAIPIO);
+decl_test_case_5(MMRM_TEST_WAIPIO);
+decl_test_case_6(MMRM_TEST_WAIPIO);
+decl_test_case_7(MMRM_TEST_WAIPIO);
+decl_test_case_8(MMRM_TEST_WAIPIO);
+
+struct  mmrm_test_desc  *waipio_all_testcases[] = {
+	test_case_1_MMRM_TEST_WAIPIO,
+	test_case_2_MMRM_TEST_WAIPIO,
+	test_case_3_MMRM_TEST_WAIPIO,
+	test_case_4_MMRM_TEST_WAIPIO,
+	test_case_5_MMRM_TEST_WAIPIO,
+	test_case_6_MMRM_TEST_WAIPIO,
+	test_case_7_MMRM_TEST_WAIPIO,
+	test_case_8_MMRM_TEST_WAIPIO,
+	NULL,
+};
+
+void test_mmrm_testcase_register(struct platform_device *pdev, struct mmrm_test_desc *pcase)
+{
+	struct clk *clk;
+	// Create client descriptor
+	struct mmrm_client_desc desc = {
+		MMRM_CLIENT_CLOCK,          // client type
+		{},                         // clock client descriptor
+		MMRM_CLIENT_PRIOR_HIGH,     // client priority
+		NULL,                       // pvt_data
+		test_mmrm_client_callback   // callback fn
+	};
+	struct mmrm_clk_client_desc *p_clk_client_desc = &(pcase->clk_client->clk_client_desc);
+
+	desc.client_info.desc.client_domain = p_clk_client_desc->client_domain;
+	desc.client_info.desc.client_id = p_clk_client_desc->client_id;
+	strlcpy((char *)(desc.client_info.desc.name), p_clk_client_desc->name,
+								MMRM_CLK_CLIENT_NAME_SIZE);
+
+	// Get clk
+	clk = clk_get(&pdev->dev, (const char *)&desc.client_info.desc.name);
+	if (IS_ERR_OR_NULL(clk)) {
+		pr_info("%s: domain(%d) client_id(%d) name(%s) Failed clk_get\n",
+				__func__, desc.client_info.desc.client_domain,
+		desc.client_info.desc.client_id, desc.client_info.desc.name);
+		goto err_clk;
+	}
+	desc.client_info.desc.clk = clk;
+
+	// Register client
+	pcase->clk_client->client = test_mmrm_client_register(&desc);
+err_clk:
+	return;
+}
+
+void test_mmrm_run_one_case(struct platform_device *pdev, struct mmrm_test_desc *pcase)
+{
+	struct mmrm_client_data    client_data;
+	unsigned long val;
+	struct mmrm_test_desc *p = pcase;
+
+	client_data = (struct mmrm_client_data){0, MMRM_CLIENT_DATA_FLAG_RESERVE_ONLY};
+
+	while (p->clk_client != NULL) {
+		val = p->clk_client->clk_rate[p->clk_rate_id];
+
+		test_mmrm_testcase_register(pdev, p);
+		if (p->clk_client->client == NULL) {
+			pr_info("%s: client(%s) fail register\n", __func__,
+						p->clk_client->clk_client_desc.name);
+			p++;
+			continue;
+		}
+
+		test_mmrm_client_set_value(p->clk_client->client, &client_data, val);
+
+		p++;
+	}
+
+	p = pcase;
+	while (p->clk_client != NULL) {
+		if (p->clk_client->client != NULL)
+			test_mmrm_client_deregister(p->clk_client->client);
+
+		p++;
+	}
+}
+
+void test_mmrm_concurrent_client_cases(struct platform_device *pdev,
+							struct mmrm_test_desc **testcases)
+{
+	struct mmrm_test_desc **p = testcases;
+	int i;
+
+	pr_info("%s: Running all testcases\n", __func__);
+
+	for (i = 0; *p != NULL; i++, p++) {
+		pr_info("%s: testcase: %d -----\n", __func__, i);
+		test_mmrm_run_one_case(pdev, *p);
+	}
+
+	pr_info("%s: Finish all testcases\n", __func__);
+}
+
+void test_mmrm_single_client_cases(struct platform_device *pdev, int index, int count)
 {
 	int i;
 	for (i = 0; i < MMRM_TEST_NUM_CASES; i++)

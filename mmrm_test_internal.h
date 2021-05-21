@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,8 +11,8 @@
  * GNU General Public License for more details.
  */
 
-#ifndef _MMRM_TEST_INTERNAL_H_
-#define _MMRM_TEST_INTERNAL_H_
+#ifndef TEST_MMRM_TEST_INTERNAL_H_
+#define TEST_MMRM_TEST_INTERNAL_H_
 
 #include <linux/platform_device.h>
 #include <linux/soc/qcom/msm_mmrm.h>
@@ -22,7 +22,19 @@
 #define MMRM_TEST_WAIPIO 1
 #define MMRM_TEST_WAIPIO_NUM_CLK_CLIENTS 28
 
-void test_mmrm_client(struct platform_device *pdev, int index, int count);
-void test_mmrm_client_cases(struct platform_device *pdev, int index, int count);
+struct mmrm_test_desc {
+	struct mmrm_test_clk_client  *clk_client;
+	u32 clk_rate_id;
+};
 
-#endif //_MMRM_TEST_INTERNAL_H_
+extern struct  mmrm_test  *all_lahaina_testcases[];
+extern struct  mmrm_test_desc  *waipio_all_testcases[];
+
+void test_mmrm_client(struct platform_device *pdev, int index, int count);
+void test_mmrm_single_client_cases(struct platform_device *pdev,
+					int index, int count);
+void test_mmrm_concurrent_client_cases(struct platform_device *pdev,
+					struct mmrm_test_desc **testcases);
+
+
+#endif  // TEST_MMRM_TEST_INTERNAL_H_
