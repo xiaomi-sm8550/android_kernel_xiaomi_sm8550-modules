@@ -573,8 +573,8 @@ void test_mmrm_single_case(struct platform_device *pdev, int index, int count, i
 #define WP_CAM_CC_IFE_1_IDX        1
 #define WP_CAM_CC_IFE_2_IDX        2
 #define WAIPIO_CAM_CC_CSID_CLK_SRC_TEST_IDX         3
-#define WAIPIO_CAM_CC_CFE_0_CLK_SRC_TEST_IDX        4
-#define WAIPIO_CAM_CC_CFE_1_CLK_SRC_TEST_IDX        5
+#define WAIPIO_CAM_CC_SFE_0_CLK_SRC_TEST_IDX        4
+#define WAIPIO_CAM_CC_SFE_1_CLK_SRC_TEST_IDX        5
 #define WP_CAM_CC_IPE_NPS_IDX      6
 #define WP_CAM_CC_BPS_IDX          7
 #define WP_CAM_CC_IFE_LITE_IDX     8
@@ -713,6 +713,8 @@ void test_mmrm_single_case(struct platform_device *pdev, int index, int count, i
 	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
 	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_2_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
 	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_LITE_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WAIPIO_CAM_CC_SFE_0_CLK_SRC_TEST_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WAIPIO_CAM_CC_SFE_1_CLK_SRC_TEST_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
 	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_LITE_CSID_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
 	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IPE_NPS_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
 	{&mmrm_test_clk_client_list[n][WP_CAM_CC_BPS_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
@@ -747,6 +749,8 @@ void test_mmrm_single_case(struct platform_device *pdev, int index, int count, i
 	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
 	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_2_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
 	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_LITE_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WAIPIO_CAM_CC_SFE_0_CLK_SRC_TEST_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WAIPIO_CAM_CC_SFE_1_CLK_SRC_TEST_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
 	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_LITE_CSID_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
 	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IPE_NPS_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
 	{&mmrm_test_clk_client_list[n][WP_CAM_CC_BPS_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
@@ -866,8 +870,11 @@ void test_mmrm_run_one_case(struct platform_device *pdev, struct mmrm_test_desc 
 
 	p = pcase;
 	while (p->clk_client != NULL) {
-		if (p->clk_client->client != NULL)
+
+		if (p->clk_client->client != NULL) {
+			test_mmrm_client_set_value(p->clk_client->client, &client_data, 0);
 			test_mmrm_client_deregister(p->clk_client->client);
+		}
 
 		p++;
 	}
