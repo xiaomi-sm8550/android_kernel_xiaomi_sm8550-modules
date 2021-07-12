@@ -29,12 +29,13 @@ struct mmrm_test_desc {
 
 extern struct  mmrm_test  *all_lahaina_testcases[];
 extern struct  mmrm_test_desc  *waipio_all_testcases[];
+extern int waipio_all_testcases_count;
 
 void test_mmrm_client(struct platform_device *pdev, int index, int count);
 void test_mmrm_single_client_cases(struct platform_device *pdev,
 					int index, int count);
 void test_mmrm_concurrent_client_cases(struct platform_device *pdev,
-					struct mmrm_test_desc **testcases);
+					struct mmrm_test_desc **testcases, int count);
 
 
 #endif  // TEST_MMRM_TEST_INTERNAL_H_
