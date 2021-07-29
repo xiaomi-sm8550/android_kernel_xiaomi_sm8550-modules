@@ -741,6 +741,69 @@ void test_mmrm_client(struct platform_device *pdev, int index, int count)
 	{NULL, 0} \
 }
 
+// throttle display
+// vid(nom) + eva (nom) +mdp (nom) + bps(nom) + ipe(nom) +sfe0(nom) + sfe1(nom) +camnoc(nom) + ife0(nom) + csid0(nom)+ ife1(nom) + csid1(nom) + ife2(lowsvs)
+//
+//
+#define  decl_test_case_19(n) static struct mmrm_test_desc test_case_19_##n[] = {\
+	{&mmrm_test_clk_client_list[n][WP_VIDEO_CC_MVS0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_VIDEO_CC_MVS1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_DISP_CC_MDSS_MDP_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_BPS_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IPE_NPS_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_SFE_0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_SFE_1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CAMNOC_AXI_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI0PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI1PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_2_IDX], MMRM_TEST_VDD_LEVEL_LOW_SVS},\
+	{NULL, 0} \
+}
+
+// throttle video
+// vid(nom) + eva (nom) +mdp (nom) + bps(nom) + ipe(nom) +sfe0(nom) + sfe1(nom) +camnoc(nom) + ife0(nom) + csid0(nom)+ ife1(nom) + csid1(nom) + ife2(svs)
+//
+//
+#define  decl_test_case_20(n) static struct mmrm_test_desc test_case_20_##n[] = {\
+	{&mmrm_test_clk_client_list[n][WP_VIDEO_CC_MVS0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_VIDEO_CC_MVS1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_DISP_CC_MDSS_MDP_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_BPS_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IPE_NPS_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_SFE_0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_SFE_1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CAMNOC_AXI_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI0PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI1PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_2_IDX], MMRM_TEST_VDD_LEVEL_SVS},\
+	{NULL, 0} \
+}
+
+// throttle ipe
+// vid(nom) + eva (nom) +mdp (nom) + bps(nom) + ipe(nom) +sfe0(nom) + sfe1(nom) +camnoc(nom) + ife0(nom) + csid0(nom)+ ife1(nom) + csid1(nom) + ife2(svs)
+//
+//
+#define  decl_test_case_21(n) static struct mmrm_test_desc test_case_21_##n[] = {\
+	{&mmrm_test_clk_client_list[n][WP_VIDEO_CC_MVS0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_VIDEO_CC_MVS1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_DISP_CC_MDSS_MDP_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_BPS_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IPE_NPS_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_SFE_0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_SFE_1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CAMNOC_AXI_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_0_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI0PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_1_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI1PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_NOM},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_2_IDX], MMRM_TEST_VDD_LEVEL_SVS_L1},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI3PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_SVS_L1},\
+	{NULL, 0} \
+}
 
 decl_test_case_1(MMRM_TEST_WAIPIO);
 decl_test_case_2(MMRM_TEST_WAIPIO);
@@ -759,6 +822,9 @@ decl_test_case_15(MMRM_TEST_WAIPIO);
 decl_test_case_16(MMRM_TEST_WAIPIO);
 decl_test_case_17(MMRM_TEST_WAIPIO);
 decl_test_case_18(MMRM_TEST_WAIPIO);
+decl_test_case_19(MMRM_TEST_WAIPIO);
+decl_test_case_20(MMRM_TEST_WAIPIO);
+decl_test_case_21(MMRM_TEST_WAIPIO);
 
 struct  mmrm_test_desc  *waipio_all_testcases[] = {
 	test_case_1_MMRM_TEST_WAIPIO,
@@ -778,6 +844,9 @@ struct  mmrm_test_desc  *waipio_all_testcases[] = {
 	test_case_16_MMRM_TEST_WAIPIO,
 	test_case_17_MMRM_TEST_WAIPIO,
 	test_case_18_MMRM_TEST_WAIPIO,
+	test_case_19_MMRM_TEST_WAIPIO,
+	test_case_20_MMRM_TEST_WAIPIO,
+	test_case_21_MMRM_TEST_WAIPIO,
 };
 
 int waipio_all_testcases_count = sizeof(waipio_all_testcases)/sizeof(waipio_all_testcases[0]);
