@@ -196,7 +196,7 @@ static struct mmrm_test_clk_client mmrm_test_clk_client_list[][MMRM_TEST_MAX_CLK
 			{200000000, 325000000, 375000000, 500000000, 500000000},
 			NULL},
 		{{MMRM_CLIENT_DOMAIN_DISPLAY, 15, "disp_cc_mdss_dptx0_link_clk_src", NULL},
-			{270000000, 270000000, 540000, 810000, 810000}, // kHz
+			{270000, 270000, 540000, 810000, 810000}, // kHz
 			NULL},
 		{{MMRM_CLIENT_DOMAIN_VIDEO, 3, "video_cc_mvs0_clk_src", NULL},
 			{720000000, 1014000000, 1098000000, 1332000000, 1332000000},
@@ -326,7 +326,7 @@ void test_mmrm_client(struct platform_device *pdev, int index, int count)
 	unsigned long val; // mmrm set_val
 
 	int i, pass_count;
-	int rc = 0;
+	int rc = 0, rc2 = 0;
 
 	pr_info("%s: Running individual client tests\n", __func__);
 
@@ -386,15 +386,15 @@ void test_mmrm_client(struct platform_device *pdev, int index, int count)
 		test_mmrm_client_set_value(client, &client_data, 0);
 
 		// Deregister client
-		rc = test_mmrm_client_deregister(client);
-		if (rc != 0)
+		rc2 = test_mmrm_client_deregister(client);
+		if (rc2 != 0)
 			goto err_deregister;
 
 	err_clk:
 	err_register:
 	err_deregister:
 
-		if (rc == 0)
+		if ((rc == 0) && (rc2 == 0))
 			pass_count++;
 
 		if (clk)
