@@ -810,6 +810,24 @@ void test_mmrm_client(struct platform_device *pdev, int index, int count)
 	{NULL, 0} \
 }
 
+// Reinstate throttled client. Moved below clients to LOW SVS to make sufficient available power
+// for throttled client to reinstate
+#define  decl_test_case_22(n) static struct mmrm_test_desc test_case_22_##n[] = {\
+	{&mmrm_test_clk_client_list[n][WP_VIDEO_CC_MVS1_IDX], MMRM_TEST_VDD_LEVEL_LOW_SVS},\
+	{&mmrm_test_clk_client_list[n][WP_DISP_CC_MDSS_MDP_IDX], MMRM_TEST_VDD_LEVEL_LOW_SVS},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_BPS_IDX], MMRM_TEST_VDD_LEVEL_LOW_SVS},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IPE_NPS_IDX], MMRM_TEST_VDD_LEVEL_LOW_SVS},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_SFE_0_IDX], MMRM_TEST_VDD_LEVEL_LOW_SVS},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_SFE_1_IDX], MMRM_TEST_VDD_LEVEL_LOW_SVS},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CAMNOC_AXI_IDX], MMRM_TEST_VDD_LEVEL_LOW_SVS},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_0_IDX], MMRM_TEST_VDD_LEVEL_LOW_SVS},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI0PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_LOW_SVS},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_IFE_1_IDX], MMRM_TEST_VDD_LEVEL_LOW_SVS},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI1PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_LOW_SVS},\
+	{&mmrm_test_clk_client_list[n][WP_CAM_CC_CSI3PHYTIMER_IDX], MMRM_TEST_VDD_LEVEL_LOW_SVS},\
+	{NULL, 0} \
+}
+
 // all camera +cam_cc_csid + cvp at nom
 //
 #define  decl_test_case_9(n) static struct mmrm_test_desc test_case_9_##n[] = {\
@@ -903,6 +921,7 @@ decl_test_case_18(MMRM_TEST_WAIPIO);
 decl_test_case_19(MMRM_TEST_WAIPIO);
 decl_test_case_20(MMRM_TEST_WAIPIO);
 decl_test_case_21(MMRM_TEST_WAIPIO);
+decl_test_case_22(MMRM_TEST_WAIPIO);
 
 struct  mmrm_test_desc  *waipio_all_testcases[] = {
 	test_case_1_MMRM_TEST_WAIPIO,
@@ -926,6 +945,7 @@ struct  mmrm_test_desc  *waipio_all_testcases[] = {
 	test_case_19_MMRM_TEST_WAIPIO,
 	test_case_20_MMRM_TEST_WAIPIO,
 	test_case_21_MMRM_TEST_WAIPIO,
+	test_case_22_MMRM_TEST_WAIPIO,
 };
 
 int waipio_all_testcases_count = sizeof(waipio_all_testcases)/sizeof(waipio_all_testcases[0]);
