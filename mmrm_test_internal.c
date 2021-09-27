@@ -263,7 +263,7 @@ void test_mmrm_client(struct platform_device *pdev, int index, int count)
 
 // for camera ife/ipe/bps at nom
 //
-static test_case_t test_case_1[] = {
+static test_case_info_t test_case_1[] = {
 	{"cam_cc_ife_0_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"cam_cc_ife_1_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"cam_cc_ife_2_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
@@ -278,7 +278,7 @@ static test_case_t test_case_1[] = {
 //
 //
 //
-static test_case_t test_case_2[] = {
+static test_case_info_t test_case_2[] = {
 	{"disp_cc_mdss_mdp_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"disp_cc_mdss_dptx0_link_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"", MMRM_TEST_VDD_LEVEL_MAX}
@@ -286,7 +286,7 @@ static test_case_t test_case_2[] = {
 
 // video/cvp at nom
 //
-static test_case_t test_case_3[] = {
+static test_case_info_t test_case_3[] = {
 	{"video_cc_mvs1_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"video_cc_mvs0_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"", MMRM_TEST_VDD_LEVEL_MAX}
@@ -294,7 +294,7 @@ static test_case_t test_case_3[] = {
 
 // all camera +cvp at nom
 //
-static test_case_t test_case_4[] = {
+static test_case_info_t test_case_4[] = {
 	{"cam_cc_ife_0_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"cam_cc_ife_1_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"cam_cc_ife_2_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
@@ -327,7 +327,7 @@ static test_case_t test_case_4[] = {
 
 // all camera +cvp + mdss_mdp at nom
 //
-static test_case_t test_case_5[] = {
+static test_case_info_t test_case_5[] = {
 	{"cam_cc_ife_0_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"cam_cc_ife_1_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"cam_cc_ife_2_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
@@ -361,7 +361,7 @@ static test_case_t test_case_5[] = {
 
 // all camera + cvp +mdss_mdp +video at nom
 //
-static test_case_t test_case_6[] = {
+static test_case_info_t test_case_6[] = {
 	{"cam_cc_ife_0_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"cam_cc_ife_1_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"cam_cc_ife_2_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
@@ -398,7 +398,7 @@ static test_case_t test_case_6[] = {
 
 // all camera at nom + mdp/cvp/video svsl1
 //
-static test_case_t test_case_7[] = {
+static test_case_info_t test_case_7[] = {
 	{"cam_cc_ife_0_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"cam_cc_ife_1_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"cam_cc_ife_2_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
@@ -437,7 +437,7 @@ static test_case_t test_case_7[] = {
 //
 //
 //
-static test_case_t test_case_8[] = {
+static test_case_info_t test_case_8[] = {
 	{"disp_cc_mdss_mdp_clk_src", MMRM_TEST_VDD_LEVEL_SVS_L1},
 	{"video_cc_mvs0_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 
@@ -455,7 +455,7 @@ static test_case_t test_case_8[] = {
 //	ife0, ife1 (lowsvs) + ipe (nom) + bps (nom) + sbi (lowsvs) + mdp (svsl1) + eva (lowsvs) + vid (lowsvs)
 //	ife0, ife1 (lowsvs) + ipe (svs) + bps (nom) + mdp (svsl1) + eva (svsl1) + vid (svsl1)
 
-static test_case_t test_case_11[] = {
+static test_case_info_t test_case_11[] = {
 	{"cam_cc_ife_0_clk_src", MMRM_TEST_VDD_LEVEL_LOW_SVS},
 	{"cam_cc_ife_1_clk_src", MMRM_TEST_VDD_LEVEL_LOW_SVS},
 	{"cam_cc_ipe_nps_clk_src", MMRM_TEST_VDD_LEVEL_SVS},
@@ -468,7 +468,7 @@ static test_case_t test_case_11[] = {
 };
 
 //		ife0, ife1 (lowsvs) + ipe (nom) + bps (nom) + sbi (lowsvs) + mdp (svsl1) + eva (lowsvs) + vid (lowsvs)
-static test_case_t test_case_12[] = {
+static test_case_info_t test_case_12[] = {
 	{"cam_cc_ife_0_clk_src", MMRM_TEST_VDD_LEVEL_LOW_SVS},
 	{"cam_cc_ife_1_clk_src", MMRM_TEST_VDD_LEVEL_LOW_SVS},
 	{"cam_cc_ipe_nps_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
@@ -482,7 +482,7 @@ static test_case_t test_case_12[] = {
 };
 
 //		ife0, ife1 (lowsvs) + ipe (nom) + bps (nom) + sbi (lowsvs) + mdp (svsl1) + eva (lowsvs) + vid (svs)
-static test_case_t test_case_13[] = {
+static test_case_info_t test_case_13[] = {
 	{"cam_cc_ife_0_clk_src", MMRM_TEST_VDD_LEVEL_LOW_SVS},
 	{"cam_cc_ife_1_clk_src", MMRM_TEST_VDD_LEVEL_LOW_SVS},
 	{"cam_cc_ipe_nps_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
@@ -497,7 +497,7 @@ static test_case_t test_case_13[] = {
 
 
 //		ife0, ife1 (lowsvs) + ipe (nom) + bps (nom) + sbi (lowsvs) + mdp (svsl1) + eva (nom) + vid (lowsvs)
-static test_case_t test_case_14[] = {
+static test_case_info_t test_case_14[] = {
 	{"cam_cc_ife_0_clk_src", MMRM_TEST_VDD_LEVEL_LOW_SVS},
 	{"cam_cc_ife_1_clk_src", MMRM_TEST_VDD_LEVEL_LOW_SVS},
 	{"cam_cc_ipe_nps_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
@@ -511,7 +511,7 @@ static test_case_t test_case_14[] = {
 };
 
 //		ife0, ife1, ife2 (svs) + ipe (nom) + bps (nom) + sbi (svs) + mdp (svsl1) + eva (svs) + vid (lowsvs)
-static test_case_t test_case_15[] = {
+static test_case_info_t test_case_15[] = {
 	{"cam_cc_ife_0_clk_src", MMRM_TEST_VDD_LEVEL_SVS},
 	{"cam_cc_ife_1_clk_src", MMRM_TEST_VDD_LEVEL_SVS},
 	{"cam_cc_ife_2_clk_src", MMRM_TEST_VDD_LEVEL_SVS},
@@ -527,7 +527,7 @@ static test_case_t test_case_15[] = {
 
 //		ife0, ife1 (svs) , ife2 (lowsvs) + sfe0 (svs) + sfe1(svs) + ipe (nom) +
 //		bps (nom) + sbi (svs) + mdp (svsl1) + eva (lowsvs)
-static test_case_t test_case_16[] = {
+static test_case_info_t test_case_16[] = {
 	{"cam_cc_ife_0_clk_src", MMRM_TEST_VDD_LEVEL_SVS},
 	{"cam_cc_ife_1_clk_src", MMRM_TEST_VDD_LEVEL_SVS},
 	{"cam_cc_ife_2_clk_src", MMRM_TEST_VDD_LEVEL_LOW_SVS},
@@ -543,7 +543,7 @@ static test_case_t test_case_16[] = {
 };
 
 //		ife0, ife1 (svs) + ipe (nom) + bps (nom) + sbi (svs) + mdp (svsl1) + eva (svs) + vid (svs)
-static test_case_t test_case_17[] = {
+static test_case_info_t test_case_17[] = {
 	{"cam_cc_ife_0_clk_src", MMRM_TEST_VDD_LEVEL_SVS},
 	{"cam_cc_ife_1_clk_src", MMRM_TEST_VDD_LEVEL_SVS},
 	{"cam_cc_ipe_nps_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
@@ -557,7 +557,7 @@ static test_case_t test_case_17[] = {
 };
 
 //		ife0, ife1 (lowsvs) + ipe (nom) + bps (nom) + sbi (lowsvs) + mdp (svsl1) + eva (lowsvs) + vid (lowsvs)
-static test_case_t test_case_18[] = {
+static test_case_info_t test_case_18[] = {
 	{"cam_cc_ife_0_clk_src", MMRM_TEST_VDD_LEVEL_LOW_SVS},
 	{"cam_cc_ife_1_clk_src", MMRM_TEST_VDD_LEVEL_LOW_SVS},
 	{"cam_cc_ipe_nps_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
@@ -574,7 +574,7 @@ static test_case_t test_case_18[] = {
 // vid(nom) + eva (nom) +mdp (nom) + bps(nom) + ipe(nom) +sfe0(nom) + sfe1(nom) +camnoc(nom) + ife0(nom) + csid0(nom)+ ife1(nom) + csid1(nom) + ife2(lowsvs)
 //
 //
-static test_case_t test_case_19[] = {
+static test_case_info_t test_case_19[] = {
 	{"video_cc_mvs0_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"video_cc_mvs1_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 
@@ -599,7 +599,7 @@ static test_case_t test_case_19[] = {
 // vid(nom) + eva (nom) +mdp (nom) + bps(nom) + ipe(nom) +sfe0(nom) + sfe1(nom) +camnoc(nom) + ife0(nom) + csid0(nom)+ ife1(nom) + csid1(nom) + ife2(svs)
 //
 //
-static test_case_t test_case_20[] = {
+static test_case_info_t test_case_20[] = {
 	{"video_cc_mvs0_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"video_cc_mvs1_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 
@@ -625,7 +625,7 @@ static test_case_t test_case_20[] = {
 //
 //
 
-static test_case_t test_case_21[] = {
+static test_case_info_t test_case_21[] = {
 	{"video_cc_mvs0_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"video_cc_mvs1_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 
@@ -649,7 +649,7 @@ static test_case_t test_case_21[] = {
 
 // Reinstate throttled client. Moved below clients to LOW SVS to make sufficient available power
 // for throttled client to reinstate
-static test_case_t test_case_22[] = {
+static test_case_info_t test_case_22[] = {
 	{"video_cc_mvs1_clk_src", MMRM_TEST_VDD_LEVEL_LOW_SVS},
 	{"disp_cc_mdss_mdp_clk_src", MMRM_TEST_VDD_LEVEL_LOW_SVS},
 	{"cam_cc_bps_clk_src", MMRM_TEST_VDD_LEVEL_LOW_SVS},
@@ -670,7 +670,7 @@ static test_case_t test_case_22[] = {
 // all camera +cam_cc_csid + cvp at nom
 //
 
-static test_case_t test_case_9[] = {
+static test_case_info_t test_case_9[] = {
 	{"cam_cc_ife_0_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"cam_cc_ife_1_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"cam_cc_ife_2_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
@@ -679,7 +679,7 @@ static test_case_t test_case_9[] = {
 	{"cam_cc_ipe_nps_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"cam_cc_bps_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 
-	{"cam_cc_csid_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
+	{"cam_cc_csid_clk_src", MMRM_TEST_VDD_LEVEL_NOM, 0, 3},
 
 	{"cam_cc_jpeg_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"cam_cc_camnoc_axi_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
@@ -704,7 +704,7 @@ static test_case_t test_case_9[] = {
 
 // all camera at nom + cam_cc_csid + mdp/cvp/video svsl1
 //
-static test_case_t test_case_10[] = {
+static test_case_info_t test_case_10[] = {
 	{"cam_cc_ife_0_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"cam_cc_ife_1_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"cam_cc_ife_2_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
@@ -715,7 +715,7 @@ static test_case_t test_case_10[] = {
 	{"cam_cc_ipe_nps_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"cam_cc_bps_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 
-	{"cam_cc_csid_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
+	{"cam_cc_csid_clk_src", MMRM_TEST_VDD_LEVEL_NOM, 0, 3},
 
 	{"cam_cc_jpeg_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
 	{"cam_cc_camnoc_axi_clk_src", MMRM_TEST_VDD_LEVEL_NOM},
@@ -741,7 +741,7 @@ static test_case_t test_case_10[] = {
 	{"", MMRM_TEST_VDD_LEVEL_MAX}
 };
 
-test_case_t  *waipio_testcases[] = {
+test_case_info_t  *waipio_testcases[] = {
 	test_case_1,
 	test_case_2,
 	test_case_3,
@@ -768,60 +768,35 @@ test_case_t  *waipio_testcases[] = {
 
 int waipio_testcases_count = sizeof(waipio_testcases)/sizeof(waipio_testcases[0]);
 
-int test_mmrm_testcase_register(struct platform_device *pdev, struct mmrm_test_desc *pcase)
-{
-	struct clk *clk;
-	int rc = TEST_MMRM_SUCCESS;
-	// Create client descriptor
-	struct mmrm_client_desc desc = {
-		MMRM_CLIENT_CLOCK,          // client type
-		{},                         // clock client descriptor
-		MMRM_CLIENT_PRIOR_HIGH,     // client priority
-		NULL,                       // pvt_data
-		test_mmrm_client_callback   // callback fn
-	};
-	struct mmrm_clk_client_desc *p_clk_client_desc = &(pcase->clk_client->clk_client_desc);
+static test_case_info_t cornercases_1 [] = {
+	{"cam_cc_csid_clk_src", MMRM_TEST_VDD_LEVEL_NOM, 1, 3},
+	{"cam_cc_csid_clk_src", MMRM_TEST_VDD_LEVEL_NOM, 1, 2},
+	{"cam_cc_csid_clk_src", MMRM_TEST_VDD_LEVEL_NOM, 1, 1},
+	{"cam_cc_csid_clk_src", MMRM_TEST_VDD_LEVEL_NOM, 1, 2},
+	{"cam_cc_csid_clk_src", MMRM_TEST_VDD_LEVEL_NOM, 1, 3},
 
-	desc.client_info.desc.client_domain = p_clk_client_desc->client_domain;
-	desc.client_info.desc.client_id = p_clk_client_desc->client_id;
-	strlcpy((char *)(desc.client_info.desc.name), p_clk_client_desc->name,
-								MMRM_CLK_CLIENT_NAME_SIZE);
+	{"", MMRM_TEST_VDD_LEVEL_MAX}
+};
 
-	// Get clk
-	clk = clk_get(&pdev->dev, (const char *)&desc.client_info.desc.name);
-	if (IS_ERR_OR_NULL(clk)) {
-		pr_info("%s: domain(%d) client_id(%d) name(%s) Failed clk_get\n",
-				__func__, desc.client_info.desc.client_domain,
-		desc.client_info.desc.client_id, desc.client_info.desc.name);
-		rc = -TEST_MMRM_FAIL_CLKGET;
-		goto err_clk;
-	}
-	desc.client_info.desc.clk = clk;
+static test_case_info_t cornercases_2 [] = {
+	{"cam_cc_csid_clk_src", MMRM_TEST_VDD_LEVEL_LOW_SVS, 1, 3},
+	{"cam_cc_csid_clk_src", MMRM_TEST_VDD_LEVEL_LOW_SVS, 1, 2},
+	{"cam_cc_csid_clk_src", MMRM_TEST_VDD_LEVEL_SVS_L1, 1, 1},
+	{"cam_cc_csid_clk_src", MMRM_TEST_VDD_LEVEL_NOM, 1, 2},
+	{"cam_cc_csid_clk_src", MMRM_TEST_VDD_LEVEL_NOM, 1, 3},
+	{"cam_cc_csid_clk_src", MMRM_TEST_VDD_LEVEL_SVS_L1, 1, 1},
+	{"", MMRM_TEST_VDD_LEVEL_MAX}
+};
 
-	// Register client
-	pcase->clk_client->client = test_mmrm_client_register(&desc);
+test_case_info_t *waipio_cornercase_testcases [] = {
+	cornercases_1,
+	cornercases_2,
+};
 
-err_clk:
-	return rc;
-}
-
-int test_mmrm_get_num_hw_block(test_case_t *pcase)
-{
-	test_case_t *p = pcase;
-	int   count = 0;
-
-	while (p->vdd_level != MMRM_TEST_VDD_LEVEL_MAX) {
-		if (p->client_id == get_ife0_id(MMRM_TEST_WAIPIO) ||
-			p->client_id == get_ife1_id(MMRM_TEST_WAIPIO) ||
-			p->client_id == get_ife2_id(MMRM_TEST_WAIPIO))
-			count++;
-		p++;
-	}
-	return count;
-}
+int waipio_cornercase_testcases_count = sizeof(waipio_cornercase_testcases)/sizeof(waipio_cornercase_testcases[0]);
 
 int test_mmrm_testcase_client_register(struct platform_device *pdev,
-	test_case_t *pcase)
+	test_case_info_t *pcase)
 {
 	struct clk *clk;
 	int rc = TEST_MMRM_SUCCESS;
@@ -837,7 +812,7 @@ int test_mmrm_testcase_client_register(struct platform_device *pdev,
 	desc.client_info.desc.client_domain = pcase->client_domain;
 	desc.client_info.desc.client_id = pcase->client_id;
 	strlcpy((char *)(desc.client_info.desc.name), pcase->name,
-								MMRM_CLK_CLIENT_NAME_SIZE);
+						MMRM_CLK_CLIENT_NAME_SIZE);
 
 	// Get clk
 	clk = clk_get(&pdev->dev, (const char *)&desc.client_info.desc.name);
@@ -858,18 +833,17 @@ err_clk:
 }
 
 int test_mmrm_run_one_case(struct platform_device *pdev,
-	test_case_t *pcase)
+	test_case_info_t *pcase)
 {
 	struct mmrm_client_data    client_data;
 	unsigned long val;
-	test_case_t *p = pcase;
+	test_case_info_t *p = pcase;
 	int rc = TEST_MMRM_SUCCESS;
 
 	client_data = (struct mmrm_client_data){0, MMRM_CLIENT_DATA_FLAG_RESERVE_ONLY};
 
 	while (p->vdd_level != MMRM_TEST_VDD_LEVEL_MAX) {
 		val = p->clk_rate[p->vdd_level];
-
 		rc = test_mmrm_testcase_client_register(pdev, p);
 		if ((rc != TEST_MMRM_SUCCESS) || (IS_ERR_OR_NULL(p->client))) {
 			pr_info("%s: client(%s) fail register\n", __func__,
@@ -878,9 +852,11 @@ int test_mmrm_run_one_case(struct platform_device *pdev,
 			break;
 		}
 
-		client_data.num_hw_blocks = 1;
-		if (p->client_id == get_csid_id(MMRM_TEST_WAIPIO))
-			client_data.num_hw_blocks = test_mmrm_get_num_hw_block(pcase);
+		if (p->num_hw_blocks == 0) {
+			client_data.num_hw_blocks = 1;
+		} else {
+			client_data.num_hw_blocks = p->num_hw_blocks;
+		}
 
 		pr_info("%s: domain:%d  csid:%d num_hw_block:%d\n",
 					__func__,
@@ -909,10 +885,10 @@ int test_mmrm_run_one_case(struct platform_device *pdev,
 }
 
 int test_mmrm_populate_testcase(struct platform_device *pdev,
-	test_case_t **pcase, int count)
+	test_case_info_t **pcase, int count)
 {
 	int i;
-	test_case_t **p = pcase, *ptr;
+	test_case_info_t **p = pcase, *ptr;
 	struct clock_rate *p_clk_rate;
 
 	if (pcase[0]->client_id != 0)
@@ -926,6 +902,9 @@ int test_mmrm_populate_testcase(struct platform_device *pdev,
 				ptr->client_domain = p_clk_rate->domain;
 				ptr->client_id = p_clk_rate->id;
 				memcpy(ptr->clk_rate, p_clk_rate->clk_rates, sizeof(ptr->clk_rate));
+
+				if (ptr->num_hw_blocks == 0)
+					ptr->num_hw_blocks = 1;
 			}
 			ptr++;
 		}
@@ -934,9 +913,9 @@ int test_mmrm_populate_testcase(struct platform_device *pdev,
 }
 
 void test_mmrm_concurrent_client_cases(struct platform_device *pdev,
-							test_case_t **testcases, int count)
+	test_case_info_t **testcases, int count)
 {
-	test_case_t **p = testcases;
+	test_case_info_t **p = testcases;
 	int i;
 	int size, rc, pass = 0;
 	int *result_ptr;
@@ -964,6 +943,51 @@ void test_mmrm_concurrent_client_cases(struct platform_device *pdev,
 	}
 
 	pr_info("%s: Finish concurrent client tests (pass / total): (%d / %d)\n",
+			__func__, pass, count);
+
+	for (i = 0; i < count; i++) {
+		if (result_ptr[i] != TEST_MMRM_SUCCESS)
+			pr_info("%s: Failed client test# %d reason %d\n",
+				__func__, i, result_ptr[i]);
+	}
+	kfree(result_ptr);
+
+err_fail_alloc_result_ptr:
+	;
+
+}
+
+void test_mmrm_switch_volt_corner_client_testcases(struct platform_device *pdev,
+	test_case_info_t **testcases, int count)
+{
+	test_case_info_t **p = testcases;
+	int i;
+	int size, rc, pass = 0;
+	int *result_ptr;
+
+	pr_info("%s: Started\n", __func__);
+
+	size = sizeof(int) * count;
+
+	test_mmrm_populate_testcase(pdev, testcases, count);
+
+	result_ptr = kzalloc(size, GFP_KERNEL);
+	if (IS_ERR_OR_NULL(result_ptr)) {
+		pr_info("%s: failed to allocate memory for concurrent client test\n",
+			__func__);
+		goto err_fail_alloc_result_ptr;
+	}
+
+	p = testcases;
+	for (i = 0; i < count; i++, p++) {
+		pr_info("%s: switch volt corner testcase: %d -----\n", __func__, i);
+		rc = test_mmrm_run_one_case(pdev, *p);
+		result_ptr[i] = rc;
+		if (rc == TEST_MMRM_SUCCESS)
+			pass++;
+	}
+
+	pr_info("%s: Finish switch volt corner client tests (pass / total): (%d / %d)\n",
 			__func__, pass, count);
 
 	for (i = 0; i < count; i++) {

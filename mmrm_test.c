@@ -194,6 +194,7 @@ static int mmrm_test_probe(struct platform_device *pdev)
 	case 457: /* WAIPIO */
 		test_mmrm_client(pdev, MMRM_TEST_WAIPIO, MMRM_TEST_WAIPIO_NUM_CLK_CLIENTS);
 		test_mmrm_concurrent_client_cases(pdev, waipio_testcases, waipio_testcases_count);
+		test_mmrm_switch_volt_corner_client_testcases(pdev, waipio_cornercase_testcases, waipio_cornercase_testcases_count);
 		break;
 	default:
 		pr_info("%s: Not supported for soc_id %d [Target %s]\n",
