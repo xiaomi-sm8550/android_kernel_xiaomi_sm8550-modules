@@ -9,7 +9,11 @@
 #include <linux/etherdevice.h>
 #include <linux/debugfs.h>
 #include <linux/of.h>
+#ifdef CONFIG_CNSS_OUT_OF_TREE
+#include "cnss_utils.h"
+#else
 #include <net/cnss_utils.h>
+#endif
 
 #define CNSS_MAX_CH_NUM 157
 struct cnss_unsafe_channel_list {

@@ -19,7 +19,11 @@
 #include <linux/pm_qos.h>
 #include <linux/platform_device.h>
 #include <linux/time64.h>
+#ifdef CONFIG_CNSS_OUT_OF_TREE
+#include "cnss2.h"
+#else
 #include <net/cnss2.h>
+#endif
 #if IS_ENABLED(CONFIG_QCOM_MEMORY_DUMP_V2)
 #include <soc/qcom/memory_dump.h>
 #endif

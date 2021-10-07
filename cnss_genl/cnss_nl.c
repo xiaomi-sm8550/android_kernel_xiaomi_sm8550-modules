@@ -2,7 +2,11 @@
 /* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved. */
 
 #include <net/genetlink.h>
+#ifdef CONFIG_CNSS_OUT_OF_TREE
+#include "cnss_nl.h"
+#else
 #include <net/cnss_nl.h>
+#endif
 #include <linux/module.h>
 #include <linux/of.h>
 

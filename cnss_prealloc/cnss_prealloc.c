@@ -7,7 +7,11 @@
 #include <linux/mm.h>
 #include <linux/err.h>
 #include <linux/of.h>
+#ifdef CONFIG_CNSS_OUT_OF_TREE
+#include "cnss_prealloc.h"
+#else
 #include <net/cnss_prealloc.h>
+#endif
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("CNSS prealloc driver");
