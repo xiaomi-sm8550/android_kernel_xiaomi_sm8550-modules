@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2021, The Linux Foundation. All rights reserved. */
-
+/*
+ * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/qrtr.h>
@@ -737,7 +739,7 @@ static struct qmi_msg_handler cnss_plat_ipc_qmi_req_handlers[] = {
 		.msg_id = CNSS_PLAT_IPC_QMI_REG_CLIENT_REQ_V01,
 		.ei = cnss_plat_ipc_qmi_reg_client_req_msg_v01_ei,
 		.decoded_size =
-			CNSS_PLAT_IPC_QMI_REG_CLIENT_REQ_MSG_V01_MAX_MSG_LEN,
+		sizeof(struct cnss_plat_ipc_qmi_reg_client_req_msg_v01),
 		.fn = cnss_plat_ipc_qmi_reg_client_req_handler,
 	},
 	{
@@ -745,7 +747,7 @@ static struct qmi_msg_handler cnss_plat_ipc_qmi_req_handlers[] = {
 		.msg_id = CNSS_PLAT_IPC_QMI_INIT_SETUP_REQ_V01,
 		.ei = cnss_plat_ipc_qmi_init_setup_req_msg_v01_ei,
 		.decoded_size =
-			CNSS_PLAT_IPC_QMI_INIT_SETUP_REQ_MSG_V01_MAX_MSG_LEN,
+		sizeof(struct cnss_plat_ipc_qmi_init_setup_req_msg_v01),
 		.fn = cnss_plat_ipc_qmi_init_setup_req_handler,
 	},
 	{
@@ -753,7 +755,7 @@ static struct qmi_msg_handler cnss_plat_ipc_qmi_req_handlers[] = {
 		.msg_id = CNSS_PLAT_IPC_QMI_FILE_DOWNLOAD_REQ_V01,
 		.ei = cnss_plat_ipc_qmi_file_download_req_msg_v01_ei,
 		.decoded_size =
-			CNSS_PLAT_IPC_QMI_FILE_DOWNLOAD_REQ_MSG_V01_MAX_MSG_LEN,
+		sizeof(struct cnss_plat_ipc_qmi_file_download_req_msg_v01),
 		.fn = cnss_plat_ipc_qmi_file_download_req_handler,
 	},
 	{
@@ -761,7 +763,7 @@ static struct qmi_msg_handler cnss_plat_ipc_qmi_req_handlers[] = {
 		.msg_id = CNSS_PLAT_IPC_QMI_FILE_UPLOAD_REQ_V01,
 		.ei = cnss_plat_ipc_qmi_file_upload_req_msg_v01_ei,
 		.decoded_size =
-			CNSS_PLAT_IPC_QMI_FILE_UPLOAD_REQ_MSG_V01_MAX_MSG_LEN,
+		sizeof(struct cnss_plat_ipc_qmi_file_upload_req_msg_v01),
 		.fn = cnss_plat_ipc_qmi_file_upload_req_handler,
 	},
 	{}
