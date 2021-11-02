@@ -5,6 +5,8 @@
  */
 
 #include <linux/delay.h>
+#include <linux/devcoredump.h>
+#include <linux/elf.h>
 #include <linux/jiffies.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -2050,25 +2052,6 @@ static void cnss_driver_event_work(struct work_struct *work)
 	cnss_pm_relax(plat_priv);
 }
 
-int cnss_va_to_pa(struct device *dev, size_t size, void *va, dma_addr_t dma,
-		  phys_addr_t *pa, unsigned long attrs)
-{
-	struct sg_table sgt;
-	int ret;
-
-	ret = dma_get_sgtable_attrs(dev, &sgt, va, dma, size, attrs);
-	if (ret) {
-		cnss_pr_err("Failed to get sgtable for va: 0x%pK, dma: %pa, size: 0x%zx, attrs: 0x%x\n",
-			    va, &dma, size, attrs);
-		return -EINVAL;
-	}
-
-	*pa = page_to_phys(sg_page(sgt.sgl));
-	sg_free_table(&sgt);
-
-	return 0;
-}
-
 #if IS_ENABLED(CONFIG_MSM_SUBSYSTEM_RESTART)
 int cnss_register_subsys(struct cnss_plat_data *plat_priv)
 {
@@ -2264,6 +2247,198 @@ int cnss_do_ramdump(struct cnss_plat_data *plat_priv)
 
 	return qcom_dump(&head, ramdump_info->ramdump_dev);
 }
+#else
+int cnss_do_ramdump(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+/* Using completion event inside dynamically allocated ramdump_desc
+ * may result a race between freeing the event after setting it to
+ * complete inside dev coredump free callback and the thread that is
+ * waiting for completion.
+ */
+DECLARE_COMPLETION(dump_done);
+#define TIMEOUT_SAVE_DUMP_MS 30000
+
+#define SIZEOF_ELF_STRUCT(__xhdr)					\
+static inline size_t sizeof_elf_##__xhdr(unsigned char class)		\
+{									\
+	if (class == ELFCLASS32)					\
+		return sizeof(struct elf32_##__xhdr);			\
+	else								\
+		return sizeof(struct elf64_##__xhdr);			\
+}
+
+SIZEOF_ELF_STRUCT(phdr)
+SIZEOF_ELF_STRUCT(hdr)
+
+#define set_xhdr_property(__xhdr, arg, class, member, value)		\
+do {									\
+	if (class == ELFCLASS32)					\
+		((struct elf32_##__xhdr *)arg)->member = value;		\
+	else								\
+		((struct elf64_##__xhdr *)arg)->member = value;		\
+} while (0)
+
+#define set_ehdr_property(arg, class, member, value) \
+	set_xhdr_property(hdr, arg, class, member, value)
+#define set_phdr_property(arg, class, member, value) \
+	set_xhdr_property(phdr, arg, class, member, value)
+
+/* These replace qcom_ramdump driver APIs called from common API
+ * cnss_do_elf_dump() by the ones defined here.
+ */
+#define qcom_dump_segment cnss_qcom_dump_segment
+#define qcom_elf_dump cnss_qcom_elf_dump
+#define dump_enabled cnss_dump_enabled
+
+struct cnss_qcom_dump_segment {
+	struct list_head node;
+	dma_addr_t da;
+	void *va;
+	size_t size;
+};
+
+struct cnss_qcom_ramdump_desc {
+	void *data;
+	struct completion dump_done;
+};
+
+static ssize_t cnss_qcom_devcd_readv(char *buffer, loff_t offset, size_t count,
+				     void *data, size_t datalen)
+{
+	struct cnss_qcom_ramdump_desc *desc = data;
+
+	return memory_read_from_buffer(buffer, count, &offset, desc->data,
+				       datalen);
+}
+
+static void cnss_qcom_devcd_freev(void *data)
+{
+	struct cnss_qcom_ramdump_desc *desc = data;
+
+	cnss_pr_dbg("Free dump data for dev coredump\n");
+
+	complete(&dump_done);
+	vfree(desc->data);
+	kfree(desc);
+}
+
+static int cnss_qcom_devcd_dump(struct device *dev, void *data, size_t datalen,
+				gfp_t gfp)
+{
+	struct cnss_qcom_ramdump_desc *desc;
+	unsigned int timeout = TIMEOUT_SAVE_DUMP_MS;
+	int ret;
+
+	desc = kmalloc(sizeof(*desc), GFP_KERNEL);
+	if (!desc)
+		return -ENOMEM;
+
+	desc->data = data;
+	reinit_completion(&dump_done);
+
+	dev_coredumpm(dev, NULL, desc, datalen, gfp,
+		      cnss_qcom_devcd_readv, cnss_qcom_devcd_freev);
+
+	ret = wait_for_completion_timeout(&dump_done,
+					  msecs_to_jiffies(timeout));
+	if (!ret)
+		cnss_pr_err("Timeout waiting (%dms) for saving dump to file system\n",
+			    timeout);
+
+	return ret ? 0 : -ETIMEDOUT;
+}
+
+/* Since the elf32 and elf64 identification is identical apart from
+ * the class, use elf32 by default.
+ */
+static void init_elf_identification(struct elf32_hdr *ehdr, unsigned char class)
+{
+	memcpy(ehdr->e_ident, ELFMAG, SELFMAG);
+	ehdr->e_ident[EI_CLASS] = class;
+	ehdr->e_ident[EI_DATA] = ELFDATA2LSB;
+	ehdr->e_ident[EI_VERSION] = EV_CURRENT;
+	ehdr->e_ident[EI_OSABI] = ELFOSABI_NONE;
+}
+
+int cnss_qcom_elf_dump(struct list_head *segs, struct device *dev,
+		       unsigned char class)
+{
+	struct cnss_qcom_dump_segment *segment;
+	void *phdr, *ehdr;
+	size_t data_size, offset;
+	int phnum = 0;
+	void *data;
+	void __iomem *ptr;
+
+	if (!segs || list_empty(segs))
+		return -EINVAL;
+
+	data_size = sizeof_elf_hdr(class);
+	list_for_each_entry(segment, segs, node) {
+		data_size += sizeof_elf_phdr(class) + segment->size;
+		phnum++;
+	}
+
+	data = vmalloc(data_size);
+	if (!data)
+		return -ENOMEM;
+
+	cnss_pr_dbg("Creating ELF file with size %d\n", data_size);
+
+	ehdr = data;
+	memset(ehdr, 0, sizeof_elf_hdr(class));
+	init_elf_identification(ehdr, class);
+	set_ehdr_property(ehdr, class, e_type, ET_CORE);
+	set_ehdr_property(ehdr, class, e_machine, EM_NONE);
+	set_ehdr_property(ehdr, class, e_version, EV_CURRENT);
+	set_ehdr_property(ehdr, class, e_phoff, sizeof_elf_hdr(class));
+	set_ehdr_property(ehdr, class, e_ehsize, sizeof_elf_hdr(class));
+	set_ehdr_property(ehdr, class, e_phentsize, sizeof_elf_phdr(class));
+	set_ehdr_property(ehdr, class, e_phnum, phnum);
+
+	phdr = data + sizeof_elf_hdr(class);
+	offset = sizeof_elf_hdr(class) + sizeof_elf_phdr(class) * phnum;
+	list_for_each_entry(segment, segs, node) {
+		memset(phdr, 0, sizeof_elf_phdr(class));
+		set_phdr_property(phdr, class, p_type, PT_LOAD);
+		set_phdr_property(phdr, class, p_offset, offset);
+		set_phdr_property(phdr, class, p_vaddr, segment->da);
+		set_phdr_property(phdr, class, p_paddr, segment->da);
+		set_phdr_property(phdr, class, p_filesz, segment->size);
+		set_phdr_property(phdr, class, p_memsz, segment->size);
+		set_phdr_property(phdr, class, p_flags, PF_R | PF_W | PF_X);
+		set_phdr_property(phdr, class, p_align, 0);
+
+		if (segment->va) {
+			memcpy(data + offset, segment->va, segment->size);
+		} else {
+			ptr = devm_ioremap(dev, segment->da, segment->size);
+			if (!ptr) {
+				cnss_pr_err("Invalid coredump segment (%pad, %zu)\n",
+					    &segment->da, segment->size);
+				memset(data + offset, 0xff, segment->size);
+			} else {
+				memcpy_fromio(data + offset, ptr,
+					      segment->size);
+			}
+		}
+
+		offset += segment->size;
+		phdr += sizeof_elf_phdr(class);
+	}
+
+	return cnss_qcom_devcd_dump(dev, data, data_size, GFP_KERNEL);
+}
+
+/* Saving dump to file system is always needed in this case. */
+static bool cnss_dump_enabled(void)
+{
+	return true;
+}
+#endif /* CONFIG_QCOM_RAMDUMP */
 
 int cnss_do_elf_ramdump(struct cnss_plat_data *plat_priv)
 {
@@ -2327,17 +2502,6 @@ do_elf_dump:
 
 	return ret;
 }
-#else
-int cnss_do_ramdump(struct cnss_plat_data *plat_priv)
-{
-	return 0;
-}
-
-int cnss_do_elf_ramdump(struct cnss_plat_data *plat_priv)
-{
-	return 0;
-}
-#endif /* CONFIG_QCOM_RAMDUMP */
 #endif /* CONFIG_MSM_SUBSYSTEM_RESTART */
 
 #if IS_ENABLED(CONFIG_QCOM_MEMORY_DUMP_V2)
@@ -2553,13 +2717,64 @@ void cnss_unregister_ramdump(struct cnss_plat_data *plat_priv)
 #else
 int cnss_register_ramdump(struct cnss_plat_data *plat_priv)
 {
+	struct cnss_ramdump_info_v2 *info_v2 = &plat_priv->ramdump_info_v2;
+	struct cnss_dump_data *dump_data = dump_data = &info_v2->dump_data;
+	struct device *dev = &plat_priv->plat_dev->dev;
+	u32 ramdump_size = 0;
+
+	if (of_property_read_u32(dev->of_node, "qcom,wlan-ramdump-dynamic",
+				 &ramdump_size) == 0)
+		info_v2->ramdump_size = ramdump_size;
+
+	cnss_pr_dbg("Ramdump size 0x%lx\n", info_v2->ramdump_size);
+
+	info_v2->dump_data_vaddr = kzalloc(CNSS_DUMP_DESC_SIZE, GFP_KERNEL);
+	if (!info_v2->dump_data_vaddr)
+		return -ENOMEM;
+
+	dump_data->paddr = virt_to_phys(info_v2->dump_data_vaddr);
+	dump_data->version = CNSS_DUMP_FORMAT_VER_V2;
+	dump_data->magic = CNSS_DUMP_MAGIC_VER_V2;
+	dump_data->seg_version = CNSS_DUMP_SEG_VER;
+	strlcpy(dump_data->name, CNSS_DUMP_NAME,
+		sizeof(dump_data->name));
+
+	info_v2->ramdump_dev = dev;
+
 	return 0;
 }
 
-void cnss_unregister_ramdump(struct cnss_plat_data *plat_priv) {}
+void cnss_unregister_ramdump(struct cnss_plat_data *plat_priv)
+{
+	struct cnss_ramdump_info_v2 *info_v2 = &plat_priv->ramdump_info_v2;
+
+	info_v2->ramdump_dev = NULL;
+	kfree(info_v2->dump_data_vaddr);
+	info_v2->dump_data_vaddr = NULL;
+	info_v2->dump_data_valid = false;
+}
 #endif /* CONFIG_QCOM_MEMORY_DUMP_V2 */
 
 #if IS_ENABLED(CONFIG_QCOM_MINIDUMP)
+int cnss_va_to_pa(struct device *dev, size_t size, void *va, dma_addr_t dma,
+		  phys_addr_t *pa, unsigned long attrs)
+{
+	struct sg_table sgt;
+	int ret;
+
+	ret = dma_get_sgtable_attrs(dev, &sgt, va, dma, size, attrs);
+	if (ret) {
+		cnss_pr_err("Failed to get sgtable for va: 0x%pK, dma: %pa, size: 0x%zx, attrs: 0x%x\n",
+			    va, &dma, size, attrs);
+		return -EINVAL;
+	}
+
+	*pa = page_to_phys(sg_page(sgt.sgl));
+	sg_free_table(&sgt);
+
+	return 0;
+}
+
 int cnss_minidump_add_region(struct cnss_plat_data *plat_priv,
 			     enum cnss_fw_dump_type type, int seg_no,
 			     void *va, phys_addr_t pa, size_t size)
@@ -2641,6 +2856,12 @@ int cnss_minidump_remove_region(struct cnss_plat_data *plat_priv,
 	return ret;
 }
 #else
+int cnss_va_to_pa(struct device *dev, size_t size, void *va, dma_addr_t dma,
+		  phys_addr_t *pa, unsigned long attrs)
+{
+	return 0;
+}
+
 int cnss_minidump_add_region(struct cnss_plat_data *plat_priv,
 			     enum cnss_fw_dump_type type, int seg_no,
 			     void *va, phys_addr_t pa, size_t size)
