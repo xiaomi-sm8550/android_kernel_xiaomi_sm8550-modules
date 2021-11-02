@@ -5,8 +5,10 @@
  */
 
 #include <linux/cma.h>
+#include <linux/completion.h>
 #include <linux/io.h>
 #include <linux/irq.h>
+#include <linux/memblock.h>
 #include <linux/module.h>
 #include <linux/msi.h>
 #include <linux/of.h>
@@ -14,8 +16,7 @@
 #include <linux/of_reserved_mem.h>
 #include <linux/pm_runtime.h>
 #include <linux/suspend.h>
-#include <linux/memblock.h>
-#include <linux/completion.h>
+#include <linux/version.h>
 
 #include "main.h"
 #include "bus.h"
@@ -177,7 +178,11 @@ static const struct mhi_channel_config cnss_mhi_channels[] = {
 	},
 };
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0))
+static struct mhi_event_config cnss_mhi_events[] = {
+#else
 static const struct mhi_event_config cnss_mhi_events[] = {
+#endif
 	{
 		.num_elements = 32,
 		.irq_moderation_ms = 0,
@@ -829,6 +834,11 @@ cnss_mhi_controller_set_bw_scale_cb(struct cnss_pci_data *pci_priv,
 {
 	mhi_controller_set_bw_scale_cb(pci_priv->mhi_ctrl, cb);
 }
+
+static int cnss_mhi_force_reset(struct cnss_pci_data *pci_priv)
+{
+	return mhi_force_reset(pci_priv->mhi_ctrl);
+}
 #else
 static void cnss_mhi_debug_reg_dump(struct cnss_pci_data *pci_priv)
 {
@@ -872,6 +882,11 @@ cnss_mhi_controller_set_bw_scale_cb(struct cnss_pci_data *pci_priv,
 				    int (*cb)(struct mhi_controller *mhi_ctrl,
 					      struct mhi_link_info *link_info))
 {
+}
+
+static int cnss_mhi_force_reset(struct cnss_pci_data *pci_priv)
+{
+	return -EOPNOTSUPP;
 }
 #endif /* CONFIG_MHI_BUS_MISC */
 
@@ -1943,7 +1958,7 @@ retry_mhi_suspend:
 			cnss_pr_err("Failed to trigger RDDM, err = %d\n", ret);
 
 			cnss_pr_dbg("Sending host reset req\n");
-			ret = mhi_force_reset(pci_priv->mhi_ctrl);
+			ret = cnss_mhi_force_reset(pci_priv);
 		}
 		break;
 	case CNSS_MHI_RDDM_DONE:
@@ -4819,7 +4834,7 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 		pci_priv->dma_bit_mask = PCI_DMA_MASK_36_BIT;
 		break;
 	default:
-		pci_priv->dma_bit_mask = PCI_DMA_MASK_64_BIT;
+		pci_priv->dma_bit_mask = PCI_DMA_MASK_32_BIT;
 		break;
 	}
 
