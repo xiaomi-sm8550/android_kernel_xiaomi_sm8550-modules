@@ -1,5 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved. */
+/*
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
 
 #ifndef _CNSS_PCI_H
 #define _CNSS_PCI_H
@@ -45,7 +48,7 @@ enum  cnss_rtpm_id {
 enum cnss_pci_reg_dev_mask {
 	REG_MASK_QCA6390,
 	REG_MASK_QCA6490,
-	REG_MASK_WCN7850,
+	REG_MASK_KIWI,
 };
 
 struct cnss_msi_user {
