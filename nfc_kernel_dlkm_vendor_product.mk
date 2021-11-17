@@ -1,0 +1,1 @@
+PRODUCT_PACKAGES += nfc_i2c.ko
