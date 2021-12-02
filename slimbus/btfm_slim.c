@@ -27,6 +27,7 @@
 
 #ifdef CONFIG_SLIMBUS
 static bool btfm_is_port_opening_delayed = true;
+static int btfm_num_ports_open;
 #endif
 
 int btfm_slim_write(struct btfmslim *btfmslim,
@@ -183,7 +184,11 @@ int btfm_slim_enable_ch(struct btfmslim *btfmslim, struct btfmslim_ch *ch,
 		BTFMSLIM_ERR("slim_stream_enable failed = %d", ret);
 		goto error;
 	}
+
+	if (ret == 0)
+		btfm_num_ports_open++;
 error:
+	BTFMSLIM_INFO("btfm_num_ports_open: %d", btfm_num_ports_open);
 	kfree(chan->dai.sconfig.chs);
 	return ret;
 }
@@ -224,6 +229,10 @@ int btfm_slim_disable_ch(struct btfmslim *btfmslim, struct btfmslim_ch *ch,
 	}
 	ch->dai.sconfig.port_mask = 0;
 	kfree(ch->dai.sconfig.chs);
+
+	if (btfm_num_ports_open > 0)
+		btfm_num_ports_open--;
+	BTFMSLIM_INFO("btfm_num_ports_open: %d", btfm_num_ports_open);
 	return ret;
 }
 
@@ -354,6 +363,27 @@ int btfm_slim_hw_init(struct btfmslim *btfmslim)
 		slim_ifd->e_addr.dev_index = 0x0;
 		slim_ifd->e_addr.instance = 0x0;
 		slim_ifd->laddr = 0x0;
+	} else if (chipset_ver == QCA_HAMILTON_SOC_ID_0100 ||
+		chipset_ver ==  QCA_HAMILTON_SOC_ID_0101 ||
+		chipset_ver ==  QCA_HAMILTON_SOC_ID_0200) {
+		BTFMSLIM_INFO("chipset is Hamliton, overwriting EA");
+		slim->is_laddr_valid = false;
+		slim->e_addr.manf_id = SLIM_MANF_ID_QCOM;
+		slim->e_addr.prod_code = 0x220;
+		slim->e_addr.dev_index = 0x01;
+		slim->e_addr.instance = 0x0;
+		/* we are doing this to indicate that this is not a child node
+		 * (doesn't have call back functions). Needed only for querying
+		 * logical address.
+		 */
+		slim_ifd->dev.driver = NULL;
+		slim_ifd->ctrl = btfmslim->slim_pgd->ctrl; //slimbus controller structure.
+		slim_ifd->is_laddr_valid = false;
+		slim_ifd->e_addr.manf_id = SLIM_MANF_ID_QCOM;
+		slim_ifd->e_addr.prod_code = 0x220;
+		slim_ifd->e_addr.dev_index = 0x0;
+		slim_ifd->e_addr.instance = 0x0;
+		slim_ifd->laddr = 0x0;
 	}
 		BTFMSLIM_INFO(
 			"PGD Enum Addr: manu id:%.02x prod code:%.02x dev idx:%.02x instance:%.02x",
@@ -364,6 +394,14 @@ int btfm_slim_hw_init(struct btfmslim *btfmslim)
 			"IFD Enum Addr: manu id:%.02x prod code:%.02x dev idx:%.02x instance:%.02x",
 			slim_ifd->e_addr.manf_id, slim_ifd->e_addr.prod_code,
 			slim_ifd->e_addr.dev_index, slim_ifd->e_addr.instance);
+
+	if (btfm_num_ports_open == 0 && (chipset_ver == QCA_HSP_SOC_ID_0200 ||
+		chipset_ver == QCA_HSP_SOC_ID_0210 ||
+		chipset_ver == QCA_HSP_SOC_ID_1201 ||
+		chipset_ver == QCA_HSP_SOC_ID_1211)) {
+		BTFMSLIM_INFO("SB reset needed before getting LA, sleeping");
+		msleep(DELAY_FOR_PORT_OPEN_MS);
+	}
 
 	/* Assign Logical Address for PGD (Ported Generic Device)
 	 * enumeration address
