@@ -58,6 +58,7 @@ extern int msm_cvp_fw_debug;
 extern int msm_cvp_fw_debug_mode;
 extern int msm_cvp_fw_low_power_mode;
 extern bool msm_cvp_fw_coverage;
+extern bool msm_cvp_auto_pil;
 extern bool msm_cvp_thermal_mitigation_disabled;
 extern bool msm_cvp_cacheop_disabled;
 extern int msm_cvp_clock_voting;

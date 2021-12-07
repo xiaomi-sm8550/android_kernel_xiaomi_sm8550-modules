@@ -22,6 +22,7 @@ int msm_cvp_fw_debug = 0x18;
 int msm_cvp_fw_debug_mode = 1;
 int msm_cvp_fw_low_power_mode = 1;
 bool msm_cvp_fw_coverage = !true;
+bool msm_cvp_auto_pil = true;
 bool msm_cvp_cacheop_enabled = true;
 bool msm_cvp_thermal_mitigation_disabled = !true;
 bool msm_cvp_cacheop_disabled = !true;
@@ -255,6 +256,7 @@ struct dentry *msm_cvp_debugfs_init_drv(void)
 	debugfs_create_u32("minidump_enable", 0644, dir,
 			&msm_cvp_minidump_enable);
 	debugfs_create_bool("fw_coverage", 0644, dir, &msm_cvp_fw_coverage);
+	debugfs_create_bool("auto_pil", 0644, dir, &msm_cvp_auto_pil);
 	debugfs_create_bool("disable_thermal_mitigation", 0644, dir,
 			&msm_cvp_thermal_mitigation_disabled);
 	debugfs_create_bool("enable_cacheop", 0644, dir,

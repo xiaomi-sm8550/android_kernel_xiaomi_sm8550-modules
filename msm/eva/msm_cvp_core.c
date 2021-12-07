@@ -144,7 +144,7 @@ void *msm_cvp_open(int core_id, int session_type)
 		goto err_invalid_core;
 	}
 
-	if (!core->resources.auto_pil && session_type == MSM_CVP_BOOT) {
+	if (!msm_cvp_auto_pil && session_type == MSM_CVP_BOOT) {
 		dprintk(CVP_SESS, "Auto PIL disabled, bypass CVP init at boot");
 		goto err_invalid_core;
 	}

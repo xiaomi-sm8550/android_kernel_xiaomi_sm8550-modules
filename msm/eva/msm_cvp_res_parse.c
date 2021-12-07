@@ -766,9 +766,6 @@ int cvp_read_platform_resources_from_drv_data(
 
 	dprintk(CVP_CORE, "Firmware filename: %s\n", res->fw_name);
 
-	res->auto_pil = find_key_value(platform_data,
-			"qcom,auto-pil");
-
 	res->dsp_enabled = find_key_value(platform_data,
 			"qcom,dsp-enabled");
 
