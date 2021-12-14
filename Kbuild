@@ -13,5 +13,5 @@ obj-m += qcedev-mod_dlkm.o
 qcedev-mod_dlkm-objs := crypto-qti/qcedev.o crypto-qti/qcedev_smmu.o crypto-qti/compat_qcedev.o
 
 obj-m += qcrypto-msm_dlkm.o
-qcrypto-msm_dlkm-objs := crypto-qti/qcrypto.o crypto-qti/des.o
+qcrypto-msm_dlkm-objs := crypto-qti/qcrypto.o 
 

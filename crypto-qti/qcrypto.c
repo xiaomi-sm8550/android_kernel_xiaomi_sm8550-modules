@@ -1494,12 +1494,14 @@ static int _qcrypto_setkey_des(struct crypto_skcipher *tfm, const u8 *key,
 		return -EINVAL;
 	}
 	memset(&dctx, 0, sizeof(dctx));
+	/*Need to be fixed. Compilation error was seen with the below API.
+	Needs to be uncommented and enable
 	if (des_expand_key(&dctx, key, keylen) == -ENOKEY) {
 		if (crypto_skcipher_get_flags(tfm) & CRYPTO_TFM_REQ_FORBID_WEAK_KEYS)
 			return -EINVAL;
 		else
 			return 0;
-	}
+	}*/
 
 	/*
 	 * TODO: delete of find equivalent in skcipher api
