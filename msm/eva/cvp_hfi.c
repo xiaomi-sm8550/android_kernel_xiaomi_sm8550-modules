@@ -993,8 +993,8 @@ static inline int __boot_firmware(struct iris_hfi_device *device)
 			break;
 		}
 
-		/* Reduce to 1/100th and x100 of max_tries */
-		usleep_range(500, 1000);
+		/* Reduce to 500, 1000 on silicon */
+		usleep_range(5000, 10000);
 		count++;
 	}
 
