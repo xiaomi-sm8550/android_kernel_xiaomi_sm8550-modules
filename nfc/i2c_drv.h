@@ -17,14 +17,19 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
  ******************************************************************************/
+/*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ ******************************************************************************/
 #ifndef _I2C_DRV_H_
 #define _I2C_DRV_H_
 
 #include <linux/i2c.h>
 
-/* kept same as dts */
-#define NFC_I2C_DRV_STR			"nxp,pn544"
-#define NFC_I2C_DEV_ID			"pn553"
+#define NFC_I2C_DRV_STR   "qcom,sn-nci"	/*kept same as dts */
+#define NFC_I2C_DEV_ID	  "sn-i2c"
+
+struct nfc_dev;
 
 /* Interface specific parameters */
 struct i2c_dev {
@@ -43,4 +48,14 @@ int nfc_i2c_dev_remove(struct i2c_client *client);
 int nfc_i2c_dev_suspend(struct device *device);
 int nfc_i2c_dev_resume(struct device *device);
 
-#endif /* _I2C_DRV_H_ */
+#if IS_ENABLED(CONFIG_NXP_NFC_I2C)
+
+int i2c_enable_irq(struct nfc_dev *dev);
+int i2c_disable_irq(struct nfc_dev *dev);
+int i2c_write(struct nfc_dev *dev, const char *buf, size_t count,
+						int max_retry_cnt);
+int i2c_read(struct nfc_dev *dev, char *buf, size_t count, int timeout);
+
+#endif
+
+#endif //_I2C_DRV_H_

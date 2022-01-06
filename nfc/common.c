@@ -17,17 +17,23 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
  ******************************************************************************/
+/*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ *****************************************************************************/
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
 #include <linux/delay.h>
 
-#include "common_ese.h"
+#include "common.h"
 
 int nfc_parse_dt(struct device *dev, struct platform_configs *nfc_configs,
 		 uint8_t interface)
 {
+	int ret;
 	struct device_node *np = dev->of_node;
 	struct platform_gpio *nfc_gpio = &nfc_configs->gpio;
+	struct platform_ldo *ldo = &nfc_configs->ldo;
 
 	if (!np) {
 		pr_err("%s: nfc of_node NULL\n", __func__);
@@ -42,7 +48,7 @@ int nfc_parse_dt(struct device *dev, struct platform_configs *nfc_configs,
 	if (interface == PLATFORM_IF_I2C) {
 		nfc_gpio->irq = of_get_named_gpio(np, DTS_IRQ_GPIO_STR, 0);
 		if ((!gpio_is_valid(nfc_gpio->irq))) {
-			pr_err("%s: irq gpio invalid %d\n", __func__,
+			pr_err("%s: nfc irq gpio invalid %d\n", __func__,
 			       nfc_gpio->irq);
 			return -EINVAL;
 		}
@@ -50,17 +56,38 @@ int nfc_parse_dt(struct device *dev, struct platform_configs *nfc_configs,
 	}
 	nfc_gpio->ven = of_get_named_gpio(np, DTS_VEN_GPIO_STR, 0);
 	if ((!gpio_is_valid(nfc_gpio->ven))) {
-		pr_err("%s: ven gpio invalid %d\n", __func__, nfc_gpio->ven);
+		pr_err("%s: nfc ven gpio invalid %d\n", __func__, nfc_gpio->ven);
 		return -EINVAL;
 	}
 	/* some products like sn220 does not required fw dwl pin */
 	nfc_gpio->dwl_req = of_get_named_gpio(np, DTS_FWDN_GPIO_STR, 0);
+	/* not returning failure for dwl gpio as it is optional for sn220 */
 	if ((!gpio_is_valid(nfc_gpio->dwl_req)))
-		pr_warn("%s: dwl_req gpio invalid %d\n", __func__,
+		pr_warn("%s: nfc dwl_req gpio invalid %d\n", __func__,
 			nfc_gpio->dwl_req);
 
-	pr_info("%s: %d, %d, %d\n", __func__, nfc_gpio->irq, nfc_gpio->ven,
+	pr_info("%s: irq %d, ven %d, dwl %d\n", __func__, nfc_gpio->irq, nfc_gpio->ven,
 		nfc_gpio->dwl_req);
+
+	/* optional property */
+	ret = of_property_read_u32_array(np, NFC_LDO_VOL_DT_NAME,
+			(u32 *) ldo->vdd_levels,
+			ARRAY_SIZE(ldo->vdd_levels));
+	if (ret) {
+		dev_err(dev, "error reading NFC VDDIO min and max value\n");
+		// set default as per datasheet
+		ldo->vdd_levels[0] = NFC_VDDIO_MIN;
+		ldo->vdd_levels[1] = NFC_VDDIO_MAX;
+	}
+
+	/* optional property */
+	ret = of_property_read_u32(np, NFC_LDO_CUR_DT_NAME, &ldo->max_current);
+	if (ret) {
+		dev_err(dev, "error reading NFC current value\n");
+		// set default as per datasheet
+		ldo->max_current = NFC_CURRENT_MAX;
+	}
+
 	return 0;
 }
 
@@ -92,9 +119,6 @@ void gpio_set_ven(struct nfc_dev *nfc_dev, int value)
 
 	if (gpio_get_value(nfc_gpio->ven) != value) {
 		pr_debug("%s: value %d\n", __func__, value);
-		/* reset on change in level from high to low */
-		if (value)
-			ese_cold_reset_release(nfc_dev);
 
 		gpio_set_value(nfc_gpio->ven, value);
 		/* hardware dependent delay */
@@ -168,10 +192,13 @@ void gpio_free_all(struct nfc_dev *nfc_dev)
 void nfc_misc_unregister(struct nfc_dev *nfc_dev, int count)
 {
 	pr_debug("%s: entry\n", __func__);
+	kfree(nfc_dev->kbuf);
 	device_destroy(nfc_dev->nfc_class, nfc_dev->devno);
 	cdev_del(&nfc_dev->c_dev);
 	class_destroy(nfc_dev->nfc_class);
 	unregister_chrdev_region(nfc_dev->devno, count);
+	if (nfc_dev->ipcl)
+		ipc_log_context_destroy(nfc_dev->ipcl);
 }
 
 int nfc_misc_register(struct nfc_dev *nfc_dev,
@@ -213,6 +240,23 @@ int nfc_misc_register(struct nfc_dev *nfc_dev,
 		unregister_chrdev_region(nfc_dev->devno, count);
 		return ret;
 	}
+	nfc_dev->ipcl = ipc_log_context_create(NUM_OF_IPC_LOG_PAGES,
+						dev_name(nfc_dev->nfc_device), 0);
+
+	nfc_dev->kbuflen = MAX_NCI_BUFFER_SIZE;
+	nfc_dev->kbuf = kzalloc(MAX_NCI_BUFFER_SIZE, GFP_KERNEL | GFP_DMA);
+	if (!nfc_dev->kbuf) {
+		nfc_misc_unregister(nfc_dev, count);
+		return -ENOMEM;
+	}
+
+	nfc_dev->cold_reset.rsp_pending = false;
+	nfc_dev->cold_reset.is_nfc_enabled = false;
+	nfc_dev->cold_reset.is_crp_en = false;
+	nfc_dev->cold_reset.last_src_ese_prot = ESE_COLD_RESET_ORIGIN_NONE;
+
+	init_waitqueue_head(&nfc_dev->cold_reset.read_wq);
+
 	return 0;
 }
 
@@ -264,6 +308,7 @@ static int nfc_ioctl_power_states(struct nfc_dev *nfc_dev, unsigned long arg)
 		 * Setting firmware download gpio to HIGH
 		 * before FW download start
 		 */
+		pr_debug("set fw gpio high\n");
 		set_valid_gpio(nfc_gpio->dwl_req, 1);
 		nfc_dev->nfc_state = NFC_STATE_FW_DWL;
 
@@ -272,15 +317,29 @@ static int nfc_ioctl_power_states(struct nfc_dev *nfc_dev, unsigned long arg)
 		gpio_set_ven(nfc_dev, 0);
 		gpio_set_ven(nfc_dev, 1);
 		nfc_dev->nfc_enable_intr(nfc_dev);
+		pr_info("%s VEN forced reset done\n", __func__);
+
 	} else if (arg == NFC_FW_DWL_LOW) {
 		/*
 		 * Setting firmware download gpio to LOW
 		 * FW download finished
 		 */
+		pr_debug("set fw gpio LOW\n");
 		set_valid_gpio(nfc_gpio->dwl_req, 0);
 		nfc_dev->nfc_state = NFC_STATE_NCI;
-	} else {
-		pr_err("%s: bad arg %lu\n", __func__, arg);
+
+	} else if (arg == NFC_ENABLE) {
+		/*
+		 * Setting flag true when NFC is enabled
+		 */
+		nfc_dev->cold_reset.is_nfc_enabled = true;
+	} else if (arg == NFC_DISABLE) {
+		/*
+		 * Setting flag true when NFC is disabled
+		 */
+		nfc_dev->cold_reset.is_nfc_enabled = false;
+	}  else {
+		pr_err("%s bad arg %lu\n", __func__, arg);
 		ret = -ENOIOCTLCMD;
 	}
 	return ret;
@@ -343,10 +402,17 @@ long nfc_dev_ioctl(struct file *pfile, unsigned int cmd, unsigned long arg)
 	case ESE_GET_PWR:
 		ret = nfc_ese_pwr(nfc_dev, ESE_POWER_STATE);
 		break;
+	case NFCC_GET_INFO:
+		ret = nfc_ioctl_nfcc_info(pfile, arg);
+		break;
+	case ESE_COLD_RESET:
+		pr_debug("nfc ese cold reset ioctl\n");
+		ret = ese_cold_reset_ioctl(nfc_dev, arg);
+		break;
 	default:
 		pr_err("%s: bad cmd %lu\n", __func__, arg);
 		ret = -ENOIOCTLCMD;
-	};
+	}
 	return ret;
 }
 
@@ -413,14 +479,7 @@ int nfc_dev_close(struct inode *inode, struct file *filp)
 	}
 	if (nfc_dev->dev_ref_count > 0)
 		nfc_dev->dev_ref_count = nfc_dev->dev_ref_count - 1;
-	else {
-		/*
-		 * Use "ESE_RST_PROT_DIS" as argument
-		 * if eSE calls flow is via NFC driver
-		 * i.e. direct calls from SPI HAL to NFC driver
-		 */
-		nfc_ese_pwr(nfc_dev, ESE_RST_PROT_DIS_NFC);
-	}
+
 	filp->private_data = NULL;
 
 	mutex_unlock(&nfc_dev->dev_ref_mutex);

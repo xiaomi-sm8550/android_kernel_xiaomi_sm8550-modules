@@ -17,40 +17,67 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
  ******************************************************************************/
+/*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ *****************************************************************************/
 #ifndef _COMMON_H_
 #define _COMMON_H_
 
 #include <linux/cdev.h>
-
+#include <linux/of_gpio.h>
+#include <linux/delay.h>
+#include <linux/ipc_logging.h>
+#include <nfcinfo.h>
 #include "i2c_drv.h"
+#include "ese_cold_reset.h"
 
 /* Max device count for this driver */
 #define DEV_COUNT			1
 /* i2c device class */
-#define CLASS_NAME			"nfc"
+#define CLASS_NAME		"qti-nfc"
 
 /* NFC character device name, this will be in /dev/ */
-#define NFC_CHAR_DEV_NAME		"pn553"
+#define NFC_CHAR_DEV_NAME	 "nq-nci"
 
 /* NCI packet details */
 #define NCI_CMD				(0x20)
 #define NCI_RSP				(0x40)
+#define NCI_NTF				(0x60)
 #define NCI_HDR_LEN			(3)
 #define NCI_HDR_IDX			(0)
+#define DL_CMD			0x00
+#define DL_PAYLOAD_BYTE_ZERO		0x00
 #define NCI_HDR_OID_IDX			(1)
 #define NCI_PAYLOAD_IDX			(3)
 #define NCI_PAYLOAD_LEN_IDX		(2)
 
-/* FW DNLD packet details */
+/*Time to wait for first NCI rest response*/
+#define NCI_RESET_RESP_READ_DELAY  (10000) // 10ms
+#define NCI_RESET_RESP_TIMEOUT     (500)  // 500ms
+
+// FW DNLD packet details
+#define FW_MSG_CMD_RSP              0x00
 #define DL_HDR_LEN			(2)
+#define FW_PAYLOAD_LEN_IDX          1
 #define DL_CRC_LEN			(2)
 
+#define NCI_RSP_PKT_TYPE		(0x40)
+#define FW_MIN_PAYLOAD_LEN          4
+#define MIN_NFC_DL_FRAME_SIZE       3
+
+#define GET_VERSION_CMD_LEN			8
+#define GET_SESSION_STATE_CMD_LEN			8
 #define MAX_NCI_PAYLOAD_LEN		(255)
 #define MAX_NCI_BUFFER_SIZE		(NCI_HDR_LEN + MAX_NCI_PAYLOAD_LEN)
+/*
+ * From MW 11.04 buffer size increased to support
+ * frame size of 554 in FW download mode
+ * Frame len(2) + Frame Header(6) + DATA(512) + HASH(32) + CRC(2) + RFU(4)
+ */
 #define MAX_DL_PAYLOAD_LEN		(550)
 #define MAX_DL_BUFFER_SIZE		(DL_HDR_LEN + DL_CRC_LEN + \
 					MAX_DL_PAYLOAD_LEN)
-
 
 /* Retry count for normal write */
 #define NO_RETRY			(1)
@@ -64,6 +91,8 @@
 #define NCI_CMD_RSP_TIMEOUT_MS		(2000)
 /* Time to wait for NFCC to be ready again after any change in the GPIO */
 #define NFC_GPIO_SET_WAIT_TIME_US	(10000)
+/*Time to wait after soft reset via any NCI/DL cmd*/
+#define NFC_SOFT_RESET_WAIT_TIME_USEC   (5000)
 /* Time to wait for IRQ low during write 5*3ms */
 #define NFC_WRITE_IRQ_WAIT_TIME_US	(3000)
 /* Time to wait before retrying i2c/I3C writes */
@@ -72,15 +101,51 @@
 #define READ_RETRY_WAIT_TIME_US		(3500)
 #define NFC_MAGIC			(0xE9)
 
-/* Ioctls */
-/* The type should be aligned with MW HAL definitions */
-#define NFC_SET_PWR			_IOW(NFC_MAGIC, 0x01, uint32_t)
-#define ESE_SET_PWR			_IOW(NFC_MAGIC, 0x02, uint32_t)
-#define ESE_GET_PWR			_IOR(NFC_MAGIC, 0x03, uint32_t)
+// Ioctls
+// The type should be aligned with MW HAL definitions
 
-#define DTS_IRQ_GPIO_STR		"nxp,pn544-irq"
-#define DTS_VEN_GPIO_STR		"nxp,pn544-ven"
-#define DTS_FWDN_GPIO_STR		"nxp,pn544-fw-dwnld"
+#define NFC_SET_PWR		_IOW(NFC_MAGIC, 0x01, unsigned int)
+#define ESE_SET_PWR		_IOW(NFC_MAGIC, 0x02, unsigned int)
+#define ESE_GET_PWR		_IOR(NFC_MAGIC, 0x03, unsigned int)
+
+#define DTS_IRQ_GPIO_STR	"qcom,sn-irq"
+#define DTS_VEN_GPIO_STR	"qcom,sn-ven"
+#define DTS_FWDN_GPIO_STR	"qcom,sn-firm"
+#define NFC_LDO_SUPPLY_DT_NAME		"qcom,sn-vdd-1p8"
+#define NFC_LDO_SUPPLY_NAME		"qcom,sn-vdd-1p8-supply"
+#define NFC_LDO_VOL_DT_NAME		"qcom,sn-vdd-1p8-voltage"
+#define NFC_LDO_CUR_DT_NAME		"qcom,sn-vdd-1p8-current"
+
+//as per SN1x0 datasheet
+#define NFC_VDDIO_MIN		1650000 //in uV
+#define NFC_VDDIO_MAX		1950000 //in uV
+#define NFC_CURRENT_MAX		157000 //in uA
+
+
+#define NUM_OF_IPC_LOG_PAGES	(2)
+#define PKT_MAX_LEN		(4) // no of max bytes to print for cmd/resp
+
+#define GET_IPCLOG_MAX_PKT_LEN(c)	((c > PKT_MAX_LEN) ? PKT_MAX_LEN : c)
+
+#define NFCLOG_IPC(nfc_dev, log_to_dmesg, x...)	\
+do { \
+	ipc_log_string(nfc_dev->ipcl, x); \
+	if (log_to_dmesg) { \
+		if (nfc_dev->nfc_device) \
+			dev_err((nfc_dev->nfc_device), x); \
+		else \
+			pr_err(x); \
+	} \
+} while (0)
+
+enum ese_ioctl_request {
+	/* eSE POWER ON */
+	ESE_POWER_ON = 0,
+	/* eSE POWER OFF */
+	ESE_POWER_OFF,
+	/* eSE POWER STATE */
+	ESE_POWER_STATE
+};
 
 enum nfcc_ioctl_request {
 	/* NFC disable request with VEN LOW */
@@ -97,6 +162,10 @@ enum nfcc_ioctl_request {
 	NFC_VEN_FORCED_HARD_RESET,
 	/* request for firmware download gpio LOW */
 	NFC_FW_DWL_LOW,
+	/* NFC enable without VEN gpio modification */
+	NFC_ENABLE,
+	/* NFC disable without VEN gpio modification */
+	NFC_DISABLE,
 };
 
 /* nfc platform interface type */
@@ -142,21 +211,18 @@ struct platform_gpio {
 	unsigned int dwl_req;
 };
 
+// NFC LDO entries from DT
+struct platform_ldo {
+	int vdd_levels[2];
+	int max_current;
+};
+
 /* NFC Struct to get all the required configs from DTS */
 struct platform_configs {
 	struct platform_gpio gpio;
+	struct platform_ldo ldo;
 };
 
-/* cold reset Features specific Parameters */
-struct cold_reset {
-	bool rsp_pending;	/* cmd rsp pending status */
-	bool in_progress;	/* for cold reset when gurad timer in progress */
-	bool reset_protection;	/* reset protection enabled/disabled */
-	uint8_t status;		/* status from response buffer */
-	uint8_t rst_prot_src;	/* reset protection source (SPI, NFC) */
-	struct timer_list timer;
-	wait_queue_head_t read_wq;
-};
 
 /* Device specific structure */
 struct nfc_dev {
@@ -177,12 +243,25 @@ struct nfc_dev {
 	uint8_t nfc_state;
 	/* NFC VEN pin state */
 	bool nfc_ven_enabled;
+	/* current firmware major version */
+	uint8_t fw_major_version;
+	bool is_vreg_enabled;
+	bool is_ese_session_active;
 	bool release_read;
 	union {
 		struct i2c_dev i2c_dev;
 	};
 	struct platform_configs configs;
 	struct cold_reset cold_reset;
+	struct regulator *reg;
+
+	/* read buffer*/
+	size_t kbuflen;
+	u8 *kbuf;
+
+	union nqx_uinfo nqx_info;
+
+	void *ipcl;
 
 	/* function pointers for the common i2c functionality */
 	int (*nfc_read)(struct nfc_dev *dev, char *buf, size_t count,
@@ -207,6 +286,14 @@ int nfc_misc_register(struct nfc_dev *nfc_dev,
 void nfc_misc_unregister(struct nfc_dev *nfc_dev, int count);
 int configure_gpio(unsigned int gpio, int flag);
 void gpio_set_ven(struct nfc_dev *nfc_dev, int value);
+void set_valid_gpio(int gpio, int value);
+int nfcc_hw_check(struct nfc_dev *nfc_dev);
+unsigned int nfc_ioctl_nfcc_info(struct file *, unsigned long);
 void gpio_free_all(struct nfc_dev *nfc_dev);
+int nfc_ldo_config(struct device *dev, struct nfc_dev *nfc_dev);
+int nfc_ldo_vote(struct nfc_dev *nfc_dev);
+int nfc_ese_pwr(struct nfc_dev *nfc_dev, unsigned long arg);
+int nfc_ldo_unvote(struct nfc_dev *nfc_dev);
+int is_nfc_data_available_for_read(struct nfc_dev *nfc_dev);
 int validate_nfc_state_nci(struct nfc_dev *nfc_dev);
 #endif /* _COMMON_H_ */

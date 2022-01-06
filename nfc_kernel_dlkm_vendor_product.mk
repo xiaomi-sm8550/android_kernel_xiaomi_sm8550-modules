@@ -1,1 +1,1 @@
-PRODUCT_PACKAGES += nfc_i2c.ko
+PRODUCT_PACKAGES += nxp-nci.ko

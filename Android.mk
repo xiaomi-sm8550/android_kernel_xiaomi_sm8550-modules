@@ -7,7 +7,7 @@ LOCAL_PATH        := $(call my-dir)
 
 include $(CLEAR_VARS)
 
-LOCAL_MODULE      := nfc_i2c.ko
+LOCAL_MODULE      := nxp-nci.ko
 LOCAL_MODULE_PATH := $(KERNEL_MODULES_OUT)
 LOCAL_SRC_FILES   := $(wildcard $(LOCAL_PATH)/**/*) $(wildcard $(LOCAL_PATH)/*)
 

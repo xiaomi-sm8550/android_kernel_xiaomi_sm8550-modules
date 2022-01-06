@@ -1,12 +1,61 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- */
+ *
+ ***************************************************************************/
+/*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ ***************************************************************************/
 
 #include <linux/slab.h>
 #include <linux/gpio.h>
 #include <linux/uaccess.h>
-#include "nfc_common.h"
+#include "common.h"
+
+/*
+ * Power management of the eSE
+ * eSE and NFCC both are powered using VEN gpio,
+ * VEN HIGH - eSE and NFCC both are powered on
+ * VEN LOW - eSE and NFCC both are power down
+ */
+int nfc_ese_pwr(struct nfc_dev *nfc_dev, unsigned long arg)
+{
+	int ret = 0;
+
+	if (arg == ESE_POWER_ON) {
+		/*
+		 * Let's store the NFC VEN pin state
+		 * will check stored value in case of eSE power off request,
+		 * to find out if NFC MW also sent request to set VEN HIGH
+		 * VEN state will remain HIGH if NFC is enabled otherwise
+		 * it will be set as LOW
+		 */
+		nfc_dev->nfc_ven_enabled = gpio_get_value(nfc_dev->configs.gpio.ven);
+		if (!nfc_dev->nfc_ven_enabled) {
+			pr_debug("eSE HAL service setting ven HIGH\n");
+			gpio_set_ven(nfc_dev, 1);
+		} else {
+			pr_debug("ven already HIGH\n");
+		}
+		nfc_dev->is_ese_session_active = true;
+	} else if (arg == ESE_POWER_OFF) {
+		if (!nfc_dev->nfc_ven_enabled) {
+			pr_debug("NFC not enabled, disabling ven\n");
+			gpio_set_ven(nfc_dev, 0);
+		} else {
+			pr_debug("keep ven high as NFC is enabled\n");
+		}
+		nfc_dev->is_ese_session_active = false;
+	} else if (arg == ESE_POWER_STATE) {
+		/* get VEN gpio state for eSE, as eSE also enabled through same GPIO */
+		ret = gpio_get_value(nfc_dev->configs.gpio.ven);
+	} else {
+		pr_err("%s bad arg %lu\n", __func__, arg);
+		ret = -ENOIOCTLCMD;
+	}
+	return ret;
+}
 
 /**
  * send_ese_cmd() - Send eSE command to NFC controller.
@@ -106,7 +155,7 @@ int read_cold_reset_rsp(struct nfc_dev *nfc_dev, char *header)
 		ret = nfc_dev->nfc_read(nfc_dev,
 			     &rsp_buf[NCI_PAYLOAD_IDX],
 			     rsp_buf[NCI_PAYLOAD_LEN_IDX],
-			     NCI_CMD_RSP_TIMEOUT);
+			     NCI_CMD_RSP_TIMEOUT_MS);
 
 		if (ret <= 0) {
 			dev_err(nfc_dev->nfc_device,
