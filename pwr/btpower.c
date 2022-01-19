@@ -178,12 +178,6 @@ static struct bt_power bt_vreg_info_qca6174 = {
 	.compatible = "qcom,qca6174",
 	.vregs = bt_vregs_info_qca61x4_937x,
 	.num_vregs = ARRAY_SIZE(bt_vregs_info_qca61x4_937x),
-
-
-static struct bt_power bt_vreg_info_kiwi = {
-	.compatible = "qcom,kiwi",
-	.vregs = bt_vregs_info_kiwi,
-	.num_vregs = ARRAY_SIZE(bt_vregs_info_kiwi),
 };
 
 static struct bt_power bt_vreg_info_qca6390 = {
@@ -196,6 +190,12 @@ static struct bt_power bt_vreg_info_qca6490 = {
 	.compatible = "qcom,qca6490",
 	.vregs = bt_vregs_info_qca6xx0,
 	.num_vregs = ARRAY_SIZE(bt_vregs_info_qca6xx0),
+};
+
+static struct bt_power bt_vreg_info_kiwi = {
+	.compatible = "qcom,kiwi",
+	.vregs = bt_vregs_info_kiwi,
+	.num_vregs = ARRAY_SIZE(bt_vregs_info_kiwi),
 };
 
 

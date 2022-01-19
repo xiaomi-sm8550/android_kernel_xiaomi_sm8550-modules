@@ -25,16 +25,13 @@
 #define SLIM_MANF_ID_QCOM	0x217
 #define SLIM_PROD_CODE		0x221
 
-#ifdef CONFIG_SLIMBUS
 static bool btfm_is_port_opening_delayed = true;
 static int btfm_num_ports_open;
-#endif
 
 int btfm_slim_write(struct btfmslim *btfmslim,
 		uint16_t reg, uint8_t reg_val, uint8_t pgd)
 {
 	int ret = -1;
-#ifdef CONFIG_SLIMBUS
 	uint32_t reg_addr;
 	int slim_write_tries = SLIM_SLAVE_RW_MAX_TRIES;
 
@@ -60,14 +57,12 @@ int btfm_slim_write(struct btfmslim *btfmslim,
 		BTFMSLIM_DBG("retrying to Write 0x%02x to reg 0x%x ret %d",
 				reg_val, reg_addr, ret);
 	}
-#endif
 	return ret;
 }
 
 int btfm_slim_read(struct btfmslim *btfmslim, uint32_t reg, uint8_t pgd)
 {
 	int ret = -1;
-#ifdef CONFIG_SLIMBUS
 	int slim_read_tries = SLIM_SLAVE_RW_MAX_TRIES;
 	uint32_t reg_addr;
 	BTFMSLIM_DBG("Read from %s", pgd?"PGD":"IFD");
@@ -84,11 +79,9 @@ int btfm_slim_read(struct btfmslim *btfmslim, uint32_t reg, uint8_t pgd)
 			break;
 		usleep_range(5000, 5100);
 	}
-#endif
 	return ret;
 }
 
-#ifdef CONFIG_SLIMBUS
 static bool btfm_slim_is_sb_reset_needed(int chip_ver)
 {
 	switch (chip_ver) {
@@ -455,20 +448,17 @@ int btfm_slim_hw_deinit(struct btfmslim *btfmslim)
 	mutex_unlock(&btfmslim->io_lock);
 	return ret;
 }
-#endif
 
 static int btfm_slim_status(struct slim_device *sdev,
 				enum slim_device_status status)
 {
 	int ret = 0;
-#ifdef CONFIG_SLIMBUS
 	struct device *dev = &sdev->dev;
 	struct btfmslim *btfm_slim;
 	btfm_slim = dev_get_drvdata(dev);
 	ret = btfm_slim_register_codec(btfm_slim);
 	if (ret)
 		BTFMSLIM_ERR("error, registering slimbus codec failed");
-#endif
 	return ret;
 }
 
@@ -562,8 +552,6 @@ static struct slim_driver btfm_slim_driver = {
 	.id_table = btfm_slim_id
 };
 
-#ifdef CONFIG_SLIMBUS
 module_slim_driver(btfm_slim_driver);
-#endif
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("BTFM Slimbus Slave driver");

@@ -25,7 +25,6 @@
 static int bt_soc_enable_status;
 int btfm_feedback_ch_setting;
 
-#ifdef CONFIG_SLIMBUS
 static int btfm_slim_codec_write(struct snd_soc_component *codec,
 			unsigned int reg, unsigned int value)
 {
@@ -458,7 +457,6 @@ void btfm_slim_unregister_codec(struct device *dev)
 	/* Unregister Codec driver */
 	snd_soc_unregister_component(dev);
 }
-#endif
 
 MODULE_DESCRIPTION("BTFM Slimbus Codec driver");
 MODULE_LICENSE("GPL v2");
