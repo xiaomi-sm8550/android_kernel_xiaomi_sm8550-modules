@@ -74,6 +74,9 @@ static int _copy_pkt_from_user(struct eva_kmd_arg *kp,
 		if (get_user(k->pkt_data[i], &u->pkt_data[i]))
 			return -EFAULT;
 
+	if (get_user(k->oob_buf, &u->oob_buf))
+		return -EFAULT;
+
 	return 0;
 }
 
@@ -87,6 +90,9 @@ static int _copy_synx_data_from_user(
 		if (get_user(k->fence_data[i], &u->fence_data[i]))
 			return -EFAULT;
 	}
+
+	if (get_user(k->oob_buf, &u->oob_buf))
+		return -EFAULT;
 
 	return 0;
 }
@@ -180,6 +186,9 @@ static int _copy_pkt_to_user(struct eva_kmd_arg *kp,
 		if (put_user(k->pkt_data[i], &u->pkt_data[i]))
 			return -EFAULT;
 
+	if (put_user(k->oob_buf, &u->oob_buf))
+		return -EFAULT;
+
 	return 0;
 }
 
@@ -196,6 +205,9 @@ static int _copy_fence_pkt_to_user(struct eva_kmd_arg *kp,
 		if (put_user(k->pkt_data[i], &u->pkt_data[i]))
 			return -EFAULT;
 	}
+
+	if (put_user(k->oob_buf, &u->oob_buf))
+		return -EFAULT;
 
 	return 0;
 }

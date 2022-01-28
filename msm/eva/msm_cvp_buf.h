@@ -75,6 +75,12 @@ struct msm_cvp_smem {
 	struct cvp_dma_mapping_info mapping_info;
 };
 
+struct msm_cvp_wncc_buffer {
+	u32 fd;
+	u32 iova;
+	u32 size;
+};
+
 struct cvp_dmamap_cache {
 	unsigned long usage_bitmap;
 	struct mutex lock;
@@ -184,6 +190,12 @@ int msm_cvp_map_buf_dsp_new(struct msm_cvp_inst *inst,
 			uint32_t *iova);
 int msm_cvp_unmap_buf_dsp_new(struct msm_cvp_inst *inst,
 			struct eva_kmd_buffer *buf);
+int msm_cvp_map_buf_wncc(struct msm_cvp_inst* inst,
+			struct eva_kmd_buffer* buf);
+int msm_cvp_unmap_buf_wncc(struct msm_cvp_inst* inst,
+			struct eva_kmd_buffer* buf);
+int msm_cvp_proc_oob(struct msm_cvp_inst* inst,
+			struct eva_kmd_hfi_packet* in_pkt);
 void msm_cvp_cache_operations(struct msm_cvp_smem *smem,
 			u32 type, u32 offset, u32 size);
 u32 msm_cvp_map_frame_buf(struct msm_cvp_inst *inst,

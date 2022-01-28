@@ -216,6 +216,13 @@ static int msm_cvp_session_process_hfi(
 		dprintk(CVP_ERR, "Incorrect buffer num and offset in cmd\n");
 		return -EINVAL;
 	}
+
+	rc = msm_cvp_proc_oob(inst, in_pkt);
+	if (rc) {
+		dprintk(CVP_ERR, "%s: failed to process OOB buffer", __func__);
+		goto exit;
+	}
+
 	pkt_type = in_pkt->pkt_data[1];
 	map_type = cvp_find_map_type(pkt_type);
 

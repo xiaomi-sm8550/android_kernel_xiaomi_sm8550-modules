@@ -176,7 +176,11 @@ void *msm_cvp_open(int core_id, int session_type)
 	INIT_MSM_CVP_LIST(&inst->persistbufs);
 	INIT_DMAMAP_CACHE(&inst->dma_cache);
 	INIT_MSM_CVP_LIST(&inst->cvpdspbufs);
+	INIT_MSM_CVP_LIST(&inst->cvpwnccbufs);
 	INIT_MSM_CVP_LIST(&inst->frames);
+
+	inst->cvpwnccbufs_num = 0;
+	inst->cvpwnccbufs_table = NULL;
 
 	init_waitqueue_head(&inst->event_handler.wq);
 
@@ -234,6 +238,7 @@ fail_init:
 	DEINIT_MSM_CVP_LIST(&inst->persistbufs);
 	DEINIT_DMAMAP_CACHE(&inst->dma_cache);
 	DEINIT_MSM_CVP_LIST(&inst->cvpdspbufs);
+	DEINIT_MSM_CVP_LIST(&inst->cvpwnccbufs);
 	DEINIT_MSM_CVP_LIST(&inst->frames);
 
 	kfree(inst);
@@ -364,7 +369,11 @@ int msm_cvp_destroy(struct msm_cvp_inst *inst)
 	DEINIT_MSM_CVP_LIST(&inst->persistbufs);
 	DEINIT_DMAMAP_CACHE(&inst->dma_cache);
 	DEINIT_MSM_CVP_LIST(&inst->cvpdspbufs);
+	DEINIT_MSM_CVP_LIST(&inst->cvpwnccbufs);
 	DEINIT_MSM_CVP_LIST(&inst->frames);
+
+	kfree(inst->cvpwnccbufs_table);
+	inst->cvpwnccbufs_table = NULL;
 
 	mutex_destroy(&inst->sync_lock);
 	mutex_destroy(&inst->lock);

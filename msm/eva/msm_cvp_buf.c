@@ -32,6 +32,9 @@
 			inst->dma_cache.usage_bitmap); \
 	} while (0)
 
+static void _wncc_print_cvpwnccbufs_table(struct msm_cvp_inst* inst);
+static int _wncc_unmap_metadata_bufs(struct eva_kmd_hfi_packet* in_pkt,
+	unsigned int num_layers, struct eva_kmd_wncc_metadata** wncc_metadata);
 
 int print_smem(u32 tag, const char *str, struct msm_cvp_inst *inst,
 		struct msm_cvp_smem *smem)
@@ -132,13 +135,15 @@ static void _log_buf(struct inst_snapshot *snapshot, enum smem_prop prop,
 void print_client_buffer(u32 tag, const char *str,
 		struct msm_cvp_inst *inst, struct eva_kmd_buffer *cbuf)
 {
-	if (!(tag & msm_cvp_debug) || !inst || !cbuf)
+	if (!(tag & msm_cvp_debug) || !str || !inst || !cbuf)
 		return;
 
 	dprintk(tag,
-		"%s: %x : idx %2d fd %d off %d size %d type %d flags 0x%x\n",
+		"%s: %x : idx %2d fd %d off %d size %d type %d flags 0x%x"
+                " reserved[0] %u\n",
 		str, hash32_ptr(inst->session), cbuf->index, cbuf->fd,
-		cbuf->offset, cbuf->size, cbuf->type, cbuf->flags);
+		cbuf->offset, cbuf->size, cbuf->type, cbuf->flags,
+		cbuf->reserved[0]);
 }
 
 static bool __is_buf_valid(struct msm_cvp_inst *inst,
@@ -359,6 +364,655 @@ int msm_cvp_unmap_buf_dsp(struct msm_cvp_inst *inst, struct eva_kmd_buffer *buf)
 	return rc;
 }
 
+int msm_cvp_map_buf_wncc(struct msm_cvp_inst *inst,
+	struct eva_kmd_buffer *buf)
+{
+	int rc = 0, i;
+	bool found = false;
+	struct cvp_internal_buf* cbuf;
+	struct msm_cvp_smem* smem = NULL;
+	struct dma_buf* dma_buf = NULL;
+
+	if (!inst || !inst->core || !buf) {
+		dprintk(CVP_ERR, "%s: invalid params", __func__);
+		return -EINVAL;
+	}
+
+	if (!inst->session) {
+		dprintk(CVP_ERR, "%s: invalid session", __func__);
+		return -EINVAL;
+	}
+
+	if (buf->index) {
+		dprintk(CVP_ERR, "%s: buf index is NOT 0 fd=%d",
+			__func__, buf->fd);
+		return -EINVAL;
+	}
+
+	if (buf->fd < 0) {
+		dprintk(CVP_ERR, "%s: invalid fd = %d", __func__, buf->fd);
+		return -EINVAL;
+	}
+
+	if (buf->offset) {
+		dprintk(CVP_ERR, "%s: offset is not supported, set to 0.",
+			__func__);
+		return -EINVAL;
+	}
+
+	mutex_lock(&inst->cvpwnccbufs.lock);
+	list_for_each_entry(cbuf, &inst->cvpwnccbufs.list, list) {
+		if (cbuf->fd == buf->fd) {
+			if (cbuf->size != buf->size) {
+				dprintk(CVP_ERR, "%s: buf size mismatch",
+					__func__);
+				mutex_unlock(&inst->cvpwnccbufs.lock);
+				return -EINVAL;
+			}
+			found = true;
+			break;
+		}
+	}
+	mutex_unlock(&inst->cvpwnccbufs.lock);
+	if (found) {
+		print_internal_buffer(CVP_ERR, "duplicate", inst, cbuf);
+		return -EINVAL;
+	}
+
+	dma_buf = msm_cvp_smem_get_dma_buf(buf->fd);
+	if (!dma_buf) {
+		dprintk(CVP_ERR, "%s: invalid fd = %d", __func__, buf->fd);
+		return -EINVAL;
+	}
+
+	cbuf = kmem_cache_zalloc(cvp_driver->buf_cache, GFP_KERNEL);
+	if (!cbuf) {
+		msm_cvp_smem_put_dma_buf(dma_buf);
+		return -ENOMEM;
+	}
+
+	smem = kmem_cache_zalloc(cvp_driver->smem_cache, GFP_KERNEL);
+	if (!smem) {
+		kmem_cache_free(cvp_driver->buf_cache, cbuf);
+		msm_cvp_smem_put_dma_buf(dma_buf);
+		return -ENOMEM;
+	}
+
+	smem->dma_buf = dma_buf;
+	smem->bitmap_index = MAX_DMABUF_NUMS;
+	dprintk(CVP_MEM, "%s: dma_buf = %llx", __func__, dma_buf);
+	rc = msm_cvp_map_smem(inst, smem, "map wncc");
+	if (rc) {
+		dprintk(CVP_ERR, "%s: map failed", __func__);
+		print_client_buffer(CVP_ERR, __func__, inst, buf);
+		goto exit;
+	}
+
+	cbuf->smem = smem;
+	cbuf->fd = buf->fd;
+	cbuf->size = buf->size;
+	cbuf->offset = buf->offset;
+	cbuf->ownership = CLIENT;
+	cbuf->index = buf->index;
+
+	/* Added for PreSil/RUMI testing */
+#ifdef USE_PRESIL
+	dprintk(CVP_DBG,
+		"wncc buffer is %x for cam_presil_send_buffer"
+		" with MAP_ADDR_OFFSET %x",
+		(u64)(smem->device_addr) - MAP_ADDR_OFFSET, MAP_ADDR_OFFSET);
+	cam_presil_send_buffer((u64)smem->dma_buf, 0,
+		(u32)cbuf->offset, (u32)cbuf->size,
+		(u64)(smem->device_addr) - MAP_ADDR_OFFSET);
+#endif
+
+	mutex_lock(&inst->cvpwnccbufs.lock);
+	if (inst->cvpwnccbufs_table == NULL) {
+		inst->cvpwnccbufs_table =
+			(struct msm_cvp_wncc_buffer*) kzalloc(
+				sizeof(struct msm_cvp_wncc_buffer) *
+				EVA_KMD_WNCC_MAX_SRC_BUFS,
+				GFP_KERNEL);
+	}
+
+	list_add_tail(&cbuf->list, &inst->cvpwnccbufs.list);
+	for (i = 0; i < EVA_KMD_WNCC_MAX_SRC_BUFS; i++)
+	{
+		if (inst->cvpwnccbufs_table[i].iova == 0)
+		{
+			inst->cvpwnccbufs_num++;
+			inst->cvpwnccbufs_table[i].fd = buf->fd;
+			inst->cvpwnccbufs_table[i].iova = smem->device_addr;
+			inst->cvpwnccbufs_table[i].size = smem->size;
+
+			/* buf reserved[0] used to store wncc src buf id */
+			buf->reserved[0] = i + EVA_KMD_WNCC_SRC_BUF_ID_OFFSET;
+			/* cbuf ktid used to store wncc src buf id */
+			cbuf->ktid = i + EVA_KMD_WNCC_SRC_BUF_ID_OFFSET;
+
+			dprintk(CVP_MEM, "%s: wncc buf iova: 0x%08X",
+				__func__, inst->cvpwnccbufs_table[i].iova);
+			break;
+		}
+	}
+	if (i == EVA_KMD_WNCC_MAX_SRC_BUFS) {
+		dprintk(CVP_ERR,
+			"%s: wncc buf table full - max (%u) already registered",
+			__func__, EVA_KMD_WNCC_MAX_SRC_BUFS);
+		/* _wncc_print_cvpwnccbufs_table(inst); */
+		mutex_unlock(&inst->cvpwnccbufs.lock);
+		rc = -EDQUOT;
+		goto exit;
+	}
+	mutex_unlock(&inst->cvpwnccbufs.lock);
+
+	return rc;
+
+exit:
+	if (smem->device_addr) {
+		msm_cvp_unmap_smem(inst, smem, "unmap wncc");
+		msm_cvp_smem_put_dma_buf(smem->dma_buf);
+	}
+	kmem_cache_free(cvp_driver->buf_cache, cbuf);
+	cbuf = NULL;
+	kmem_cache_free(cvp_driver->smem_cache, smem);
+	smem = NULL;
+	return rc;
+}
+
+int msm_cvp_unmap_buf_wncc(struct msm_cvp_inst *inst,
+	struct eva_kmd_buffer *buf)
+{
+	int rc = 0;
+	bool found;
+	struct cvp_internal_buf *cbuf;
+	uint32_t buf_id, buf_idx;
+
+	if (!inst || !inst->core || !buf) {
+		dprintk(CVP_ERR, "%s: invalid params", __func__);
+		return -EINVAL;
+	}
+
+	if (!inst->session) {
+		dprintk(CVP_ERR, "%s: invalid session", __func__);
+		return -EINVAL;
+	}
+
+	if (buf->index) {
+		dprintk(CVP_ERR, "%s: buf index is NOT 0 fd=%d",
+			__func__, buf->fd);
+		return -EINVAL;
+	}
+
+	buf_id = buf->reserved[0];
+	if (buf_id < EVA_KMD_WNCC_SRC_BUF_ID_OFFSET || buf_id >=
+		(EVA_KMD_WNCC_MAX_SRC_BUFS + EVA_KMD_WNCC_SRC_BUF_ID_OFFSET)) {
+		dprintk(CVP_ERR, "%s: invalid buffer id %d",
+			__func__, buf->reserved[0]);
+		return -EINVAL;
+	}
+
+	mutex_lock(&inst->cvpwnccbufs.lock);
+	if (inst->cvpwnccbufs_num == 0) {
+		dprintk(CVP_ERR, "%s: no wncc buffers currently mapped", __func__);
+		mutex_unlock(&inst->cvpwnccbufs.lock);
+		return -EINVAL;
+	}
+
+	buf_idx = buf_id - EVA_KMD_WNCC_SRC_BUF_ID_OFFSET;
+	if (inst->cvpwnccbufs_table[buf_idx].iova == 0) {
+		dprintk(CVP_ERR, "%s: buffer id %d not found",
+			__func__, buf_id);
+		mutex_unlock(&inst->cvpwnccbufs.lock);
+		return -EINVAL;
+	}
+
+	buf->fd = inst->cvpwnccbufs_table[buf_idx].fd;
+	found = false;
+	list_for_each_entry(cbuf, &inst->cvpwnccbufs.list, list) {
+		if (cbuf->fd == buf->fd) {
+			found = true;
+			break;
+		}
+	}
+	if (!found) {
+		dprintk(CVP_ERR, "%s: buffer id %d not found",
+			__func__, buf_id);
+		print_client_buffer(CVP_ERR, __func__, inst, buf);
+		_wncc_print_cvpwnccbufs_table(inst);
+		mutex_unlock(&inst->cvpwnccbufs.lock);
+		return -EINVAL;
+	}
+	mutex_unlock(&inst->cvpwnccbufs.lock);
+
+	if (cbuf->smem->device_addr) {
+		msm_cvp_unmap_smem(inst, cbuf->smem, "unmap wncc");
+		msm_cvp_smem_put_dma_buf(cbuf->smem->dma_buf);
+	}
+
+	mutex_lock(&inst->cvpwnccbufs.lock);
+	list_del(&cbuf->list);
+	inst->cvpwnccbufs_table[buf_idx].fd = 0;
+	inst->cvpwnccbufs_table[buf_idx].iova = 0;
+	inst->cvpwnccbufs_table[buf_idx].size = 0;
+	inst->cvpwnccbufs_num--;
+	if (inst->cvpwnccbufs_num == 0) {
+		kfree(inst->cvpwnccbufs_table);
+		inst->cvpwnccbufs_table = NULL;
+	}
+	mutex_unlock(&inst->cvpwnccbufs.lock);
+
+	kmem_cache_free(cvp_driver->smem_cache, cbuf->smem);
+	kmem_cache_free(cvp_driver->buf_cache, cbuf);
+	return rc;
+}
+
+static void _wncc_print_oob(struct eva_kmd_oob_wncc* wncc_oob)
+{
+	u32 i, j;
+
+	if (!wncc_oob) {
+		dprintk(CVP_ERR, "%s: invalid params", __func__);
+		return;
+	}
+
+	dprintk(CVP_DBG, "%s: wncc OOB --", __func__);
+	dprintk(CVP_DBG, "%s: num_layers: %u", __func__, wncc_oob->num_layers);
+	for (i = 0; i < wncc_oob->num_layers; i++) {
+		dprintk(CVP_DBG, "%s:   layers[%u].num_addrs: %u",
+			__func__, i, wncc_oob->layers[i].num_addrs);
+
+		for (j = 0; j < wncc_oob->layers[i].num_addrs; j++) {
+			dprintk(CVP_DBG,
+				"%s:    layers[%u].addrs[%u]: %04u 0x%08x",
+				__func__, i, j,
+				wncc_oob->layers[i].addrs[j].buffer_id,
+				wncc_oob->layers[i].addrs[j].offset);
+		}
+	}
+}
+
+static void _wncc_print_cvpwnccbufs_table(struct msm_cvp_inst* inst)
+{
+	u32 i, entries = 0;
+
+	if (!inst) {
+		dprintk(CVP_ERR, "%s: invalid params", __func__);
+		return;
+	}
+
+	if (inst->cvpwnccbufs_num == 0) {
+		dprintk(CVP_DBG, "%s: wncc buffer look-up table is empty",
+			__func__);
+		return;
+	}
+
+	if (!inst->cvpwnccbufs_table) {
+		dprintk(CVP_ERR, "%s: invalid params", __func__);
+		return;
+	}
+
+	dprintk(CVP_DBG, "%s: wncc buffer table:");
+	for (i = 0; i < EVA_KMD_WNCC_MAX_SRC_BUFS &&
+		entries < inst->cvpwnccbufs_num; i++) {
+		if (inst->cvpwnccbufs_table[i].iova != 0) {
+			dprintk(CVP_DBG,
+				"%s: buf_idx=%04d --> "
+				"fd=%03d, iova=0x%08x, size=%d",
+				__func__, i,
+				inst->cvpwnccbufs_table[i].fd,
+				inst->cvpwnccbufs_table[i].iova,
+				inst->cvpwnccbufs_table[i].size);
+			entries++;
+		}
+	}
+}
+
+static void _wncc_print_metadata_buf(u32 num_layers, u32 num_addrs,
+	struct eva_kmd_wncc_metadata** wncc_metadata)
+{
+	u32 i, j, iova;
+
+	if (num_layers < 1 || num_layers > EVA_KMD_WNCC_MAX_LAYERS ||
+		!wncc_metadata) {
+		dprintk(CVP_ERR, "%s: invalid params", __func__);
+		return;
+	}
+
+	dprintk(CVP_DBG, "%s: wncc metadata buffers --", __func__);
+	dprintk(CVP_DBG, "%s: num_layers: %u", __func__, num_layers);
+	dprintk(CVP_DBG, "%s: num_addrs:  %u", __func__, num_addrs);
+	for (i = 0; i < num_layers; i++) {
+		for (j = 0; j < num_addrs; j++) {
+			iova = (wncc_metadata[i][j].iova_msb << 22) |
+				wncc_metadata[i][j].iova_lsb;
+			dprintk(CVP_DBG,
+				"%s:   wncc_metadata[%u][%u]: "
+				"%4u %3u %4u %3u 0x%08x %1u %4d %4d %4d %4d",
+				__func__, i, j,
+				wncc_metadata[i][j].loc_x_dec,
+				wncc_metadata[i][j].loc_x_frac,
+				wncc_metadata[i][j].loc_y_dec,
+				wncc_metadata[i][j].loc_y_frac,
+				iova,
+				wncc_metadata[i][j].scale_idx,
+				wncc_metadata[i][j].aff_coeff_3,
+				wncc_metadata[i][j].aff_coeff_2,
+				wncc_metadata[i][j].aff_coeff_1,
+				wncc_metadata[i][j].aff_coeff_0);
+		}
+	}
+}
+
+static int _wncc_copy_oob_from_user(struct eva_kmd_hfi_packet* in_pkt,
+	struct eva_kmd_oob_wncc* wncc_oob)
+{
+	int rc = 0;
+	u32 oob_type;
+	struct eva_kmd_oob_wncc* wncc_oob_u;
+	struct eva_kmd_oob_wncc* wncc_oob_k;
+	unsigned int i;
+	u32 num_addrs;
+
+	if (!in_pkt || !wncc_oob) {
+		dprintk(CVP_ERR, "%s: invalid params", __func__);
+		return -EINVAL;
+	}
+
+	if (!access_ok(in_pkt->oob_buf, sizeof(*in_pkt->oob_buf))) {
+		dprintk(CVP_ERR, "%s: invalid OOB buf pointer", __func__);
+		return -EINVAL;
+	}
+
+	rc = get_user(oob_type, &in_pkt->oob_buf->oob_type);
+	if (rc)
+		return rc;
+	if (oob_type != EVA_KMD_OOB_WNCC) {
+		dprintk(CVP_ERR, "%s: incorrect OOB type (%d) for wncc",
+			__func__, oob_type);
+		return -EINVAL;
+	}
+
+	wncc_oob_u = &in_pkt->oob_buf->wncc;
+	wncc_oob_k = wncc_oob;
+
+	rc = get_user(wncc_oob_k->num_layers, &wncc_oob_u->num_layers);
+	if (rc)
+		return rc;
+	if (wncc_oob_k->num_layers < 1 ||
+		wncc_oob_k->num_layers > EVA_KMD_WNCC_MAX_LAYERS) {
+		dprintk(CVP_ERR, "%s: invalid wncc num layers", __func__);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < wncc_oob_k->num_layers; i++) {
+
+		rc = get_user(wncc_oob_k->layers[i].num_addrs,
+			&wncc_oob_u->layers[i].num_addrs);
+		if (rc)
+			break;
+
+		num_addrs = wncc_oob_k->layers[i].num_addrs;
+		if (num_addrs < 1 || num_addrs > EVA_KMD_WNCC_MAX_ADDRESSES) {
+			dprintk(CVP_ERR,
+				"%s: invalid wncc num addrs for layer %u",
+				__func__, i);
+			rc = -EINVAL;
+			break;
+		}
+
+		rc = copy_from_user(wncc_oob_k->layers[i].addrs,
+			wncc_oob_u->layers[i].addrs,
+			wncc_oob_k->layers[i].num_addrs *
+			sizeof(struct eva_kmd_wncc_addr));
+		if (rc)
+			break;
+	}
+
+	if (false)
+		_wncc_print_oob(wncc_oob);
+
+	return rc;
+}
+
+static int _wncc_map_metadata_bufs(struct eva_kmd_hfi_packet* in_pkt,
+	unsigned int num_layers, struct eva_kmd_wncc_metadata** wncc_metadata)
+{
+	int rc = 0, i;
+	struct cvp_buf_type* wncc_metadata_bufs;
+	struct dma_buf* dmabuf;
+	struct dma_buf_map map;
+
+	if (!in_pkt || !wncc_metadata ||
+		num_layers < 1 || num_layers > EVA_KMD_WNCC_MAX_LAYERS) {
+		dprintk(CVP_ERR, "%s: invalid params", __func__);
+		return -EINVAL;
+	}
+
+	wncc_metadata_bufs = (struct cvp_buf_type*)
+		&in_pkt->pkt_data[EVA_KMD_WNCC_HFI_METADATA_BUFS_OFFSET];
+	for (i = 0; i < num_layers; i++) {
+		dmabuf = dma_buf_get(wncc_metadata_bufs[i].fd);
+		if (IS_ERR(dmabuf)) {
+			rc = PTR_ERR(dmabuf);
+			dprintk(CVP_ERR,
+				"%s: dma_buf_get() failed for "
+				"wncc_metadata_bufs[%d], rc %d",
+				__func__, i, rc);
+			break;
+		}
+
+		rc = dma_buf_begin_cpu_access(dmabuf, DMA_TO_DEVICE);
+		if (rc) {
+			dprintk(CVP_ERR,
+				"%s: dma_buf_begin_cpu_access() failed "
+				"for wncc_metadata_bufs[%d], rc %d",
+				__func__, i, rc);
+			dma_buf_put(dmabuf);
+			break;
+		}
+
+		rc = dma_buf_vmap(dmabuf, &map);
+		if (rc) {
+			dprintk(CVP_ERR,
+				"%s: dma_buf_vmap() failed for "
+				"wncc_metadata_bufs[%d]",
+				__func__, i);
+			dma_buf_end_cpu_access(dmabuf, DMA_TO_DEVICE);
+			dma_buf_put(dmabuf);
+			break;
+		}
+		dprintk(CVP_DBG,
+			"%s: wncc_metadata_bufs[%d] map.is_iomem is %d",
+			__func__, i, map.is_iomem);
+		wncc_metadata[i] = (struct eva_kmd_wncc_metadata*)map.vaddr;
+
+		dma_buf_put(dmabuf);
+	}
+
+	if (rc)
+		_wncc_unmap_metadata_bufs(in_pkt, i, wncc_metadata);
+
+	return rc;
+}
+
+static int _wncc_unmap_metadata_bufs(struct eva_kmd_hfi_packet* in_pkt,
+	unsigned int num_layers, struct eva_kmd_wncc_metadata** wncc_metadata)
+{
+	int rc = 0, i;
+	struct cvp_buf_type* wncc_metadata_bufs;
+	struct dma_buf* dmabuf;
+	struct dma_buf_map map;
+
+	if (!in_pkt || !wncc_metadata ||
+		num_layers < 1 || num_layers > EVA_KMD_WNCC_MAX_LAYERS) {
+		dprintk(CVP_ERR, "%s: invalid params", __func__);
+		return -EINVAL;
+	}
+
+	wncc_metadata_bufs = (struct cvp_buf_type*)
+		&in_pkt->pkt_data[EVA_KMD_WNCC_HFI_METADATA_BUFS_OFFSET];
+	for (i = 0; i < num_layers; i++) {
+		if (!wncc_metadata[i]) {
+			rc = -EINVAL;
+			break;
+		}
+
+		dmabuf = dma_buf_get(wncc_metadata_bufs[i].fd);
+		if (IS_ERR(dmabuf)) {
+			rc = -PTR_ERR(dmabuf);
+			dprintk(CVP_ERR,
+				"%s: dma_buf_get() failed for "
+				"wncc_metadata_bufs[%d], rc %d",
+				__func__, i, rc);
+			break;
+		}
+
+		dma_buf_map_set_vaddr(&map, wncc_metadata[i]);
+		dma_buf_vunmap(dmabuf, &map);
+		wncc_metadata[i] = NULL;
+
+		rc = dma_buf_end_cpu_access(dmabuf, DMA_TO_DEVICE);
+		dma_buf_put(dmabuf);
+		if (rc) {
+			dprintk(CVP_ERR,
+				"%s: dma_buf_end_cpu_access() failed "
+				"for wncc_metadata_bufs[%d], rc %d",
+				__func__, i, rc);
+			break;
+		}
+	}
+
+	return rc;
+}
+
+static int msm_cvp_proc_oob_wncc(struct msm_cvp_inst* inst,
+	struct eva_kmd_hfi_packet* in_pkt)
+{
+	int rc = 0;
+	struct eva_kmd_oob_wncc* wncc_oob;
+	struct eva_kmd_wncc_metadata* wncc_metadata[EVA_KMD_WNCC_MAX_LAYERS];
+	unsigned int i, j;
+	bool empty = false;
+	u32 buf_id, buf_idx, buf_offset, iova;
+
+	if (!inst || !inst->core || !in_pkt) {
+		dprintk(CVP_ERR, "%s: invalid params", __func__);
+		return -EINVAL;
+	}
+
+	wncc_oob = (struct eva_kmd_oob_wncc*)kzalloc(
+		sizeof(struct eva_kmd_oob_wncc), GFP_KERNEL);
+	if (!wncc_oob)
+		return -ENOMEM;
+	rc = _wncc_copy_oob_from_user(in_pkt, wncc_oob);
+	if (rc) {
+		dprintk(CVP_ERR, "%s: OOB buf copying failed", __func__);
+		goto exit;
+	}
+
+	rc = _wncc_map_metadata_bufs(in_pkt,
+		wncc_oob->num_layers, wncc_metadata);
+	if (rc) {
+		dprintk(CVP_ERR, "%s: failed to map wncc metadata bufs",
+			__func__);
+		goto exit;
+	}
+
+	mutex_lock(&inst->cvpwnccbufs.lock);
+	if (inst->cvpwnccbufs_num == 0 || inst->cvpwnccbufs_table == NULL) {
+		dprintk(CVP_ERR, "%s: no wncc bufs currently mapped", __func__);
+		empty = true;
+		rc = -EINVAL;
+	}
+
+	for (i = 0; !empty && i < wncc_oob->num_layers; i++) {
+		for (j = 0; j < wncc_oob->layers[i].num_addrs; j++) {
+			buf_id = wncc_oob->layers[i].addrs[j].buffer_id;
+			if (buf_id < EVA_KMD_WNCC_SRC_BUF_ID_OFFSET ||
+				buf_id >= (EVA_KMD_WNCC_SRC_BUF_ID_OFFSET +
+					EVA_KMD_WNCC_MAX_SRC_BUFS)) {
+				dprintk(CVP_ERR,
+					"%s: invalid wncc buf id %u "
+					"in layer #%u address #%u",
+					__func__, buf_id, i, j);
+				rc = -EINVAL;
+				break;
+			}
+
+			buf_idx = buf_id - EVA_KMD_WNCC_SRC_BUF_ID_OFFSET;
+			if (inst->cvpwnccbufs_table[buf_idx].iova == 0) {
+				dprintk(CVP_ERR,
+					"%s: unmapped wncc buf id %u "
+					"in layer #%u address #%u",
+					__func__, buf_id, i, j);
+				/* _wncc_print_cvpwnccbufs_table(inst); */
+				rc = -EINVAL;
+				break;
+			}
+
+			buf_offset = wncc_oob->layers[i].addrs[j].offset;
+			if (buf_offset >=
+				inst->cvpwnccbufs_table[buf_idx].size) {
+				/* NOTE: This buffer offset validation is
+				 * not comprehensive since wncc src image
+				 * resolution information is not known to
+				 * KMD. UMD is responsible for comprehensive
+				 * validation.
+				 */
+				dprintk(CVP_ERR,
+					"%s: invalid wncc buf offset %u "
+					"in layer #%u address #%u",
+					__func__, buf_offset, i, j);
+				rc = -EINVAL;
+				break;
+			}
+
+			iova = inst->cvpwnccbufs_table[buf_idx].iova +
+				buf_offset;
+			wncc_metadata[i][j].iova_lsb = iova;
+			wncc_metadata[i][j].iova_msb = iova >> 22;
+		}
+	}
+	mutex_unlock(&inst->cvpwnccbufs.lock);
+
+	if (false)
+		_wncc_print_metadata_buf(wncc_oob->num_layers,
+			wncc_oob->layers[0].num_addrs, wncc_metadata);
+
+	if (_wncc_unmap_metadata_bufs(in_pkt,
+		wncc_oob->num_layers, wncc_metadata)) {
+		dprintk(CVP_ERR, "%s: failed to unmap wncc metadata bufs",
+			__func__);
+	}
+
+exit:
+	kfree(wncc_oob);
+	return rc;
+}
+
+int msm_cvp_proc_oob(struct msm_cvp_inst* inst,
+	struct eva_kmd_hfi_packet* in_pkt)
+{
+	int rc = 0;
+	struct cvp_hfi_cmd_session_hdr* cmd_hdr =
+		(struct cvp_hfi_cmd_session_hdr*)in_pkt;
+
+	if (!inst || !inst->core || !in_pkt) {
+		dprintk(CVP_ERR, "%s: invalid params", __func__);
+		return -EINVAL;
+	}
+
+	switch (cmd_hdr->packet_type) {
+	case HFI_CMD_SESSION_CVP_WARP_NCC_FRAME:
+		rc = msm_cvp_proc_oob_wncc(inst, in_pkt);
+		break;
+	default:
+		break;
+	}
+
+	return rc;
+}
 
 void msm_cvp_cache_operations(struct msm_cvp_smem *smem, u32 type,
 				u32 offset, u32 size)
@@ -865,6 +1519,7 @@ int msm_cvp_session_deinit_buffers(struct msm_cvp_inst *inst)
 	struct msm_cvp_frame *frame, *dummy1;
 	struct msm_cvp_smem *smem;
 	struct cvp_hal_session *session;
+	struct eva_kmd_buffer buf;
 
 	session = (struct cvp_hal_session *)inst->session;
 
@@ -922,6 +1577,21 @@ int msm_cvp_session_deinit_buffers(struct msm_cvp_inst *inst)
 	}
 	mutex_unlock(&inst->cvpdspbufs.lock);
 
+	mutex_lock(&inst->cvpwnccbufs.lock);
+	if (inst->cvpwnccbufs_num != 0)
+		dprintk(CVP_WARN, "%s: cvpwnccbufs not empty, contains %d bufs",
+			__func__, inst->cvpwnccbufs_num);
+	list_for_each_entry_safe(cbuf, dummy, &inst->cvpwnccbufs.list, list) {
+		print_internal_buffer(CVP_MEM, "remove wnccbufs", inst, cbuf);
+		buf.fd = cbuf->fd;
+		buf.reserved[0] = cbuf->ktid;
+
+		mutex_unlock(&inst->cvpwnccbufs.lock);
+		msm_cvp_unmap_buf_wncc(inst, &buf);
+		mutex_lock(&inst->cvpwnccbufs.lock);
+	}
+	mutex_unlock(&inst->cvpwnccbufs.lock);
+
 	return rc;
 }
 
@@ -960,6 +1630,12 @@ void msm_cvp_print_inst_bufs(struct msm_cvp_inst *inst, bool log)
 	list_for_each_entry(buf, &inst->cvpdspbufs.list, list)
 		_log_buf(snap, SMEM_ADSP, inst, buf, log);
 	mutex_unlock(&inst->cvpdspbufs.lock);
+
+	mutex_lock(&inst->cvpwnccbufs.lock);
+	dprintk(CVP_ERR, "wncc buffer list:\n");
+	list_for_each_entry(buf, &inst->cvpwnccbufs.list, list)
+		print_cvp_buffer(CVP_ERR, "bufdump", inst, buf);
+	mutex_unlock(&inst->cvpwnccbufs.lock);
 
 	mutex_lock(&inst->persistbufs.lock);
 	dprintk(CVP_ERR, "persist buffer list:\n");
@@ -1213,9 +1889,6 @@ int msm_cvp_register_buffer(struct msm_cvp_inst *inst,
 		return -EINVAL;
 	}
 
-	if (!buf->index)
-		return 0;
-
 	s = cvp_get_inst_validate(inst->core, inst);
 	if (!s)
 		return -ECONNRESET;
@@ -1229,7 +1902,10 @@ int msm_cvp_register_buffer(struct msm_cvp_inst *inst,
 	hdev = inst->core->device;
 	print_client_buffer(CVP_HFI, "register", inst, buf);
 
-	rc = msm_cvp_map_buf_dsp(inst, buf);
+	if (buf->index)
+		rc = msm_cvp_map_buf_dsp(inst, buf);
+	else
+		rc = msm_cvp_map_buf_wncc(inst, buf);
 	dprintk(CVP_DSP, "%s: fd %d, iova 0x%x\n", __func__,
 			buf->fd, buf->reserved[0]);
 exit:
@@ -1248,19 +1924,16 @@ int msm_cvp_unregister_buffer(struct msm_cvp_inst *inst,
 		return -EINVAL;
 	}
 
-	if (!buf->index)
-		return 0;
-
 	s = cvp_get_inst_validate(inst->core, inst);
 	if (!s)
 		return -ECONNRESET;
 
 	print_client_buffer(CVP_HFI, "unregister", inst, buf);
 
-	rc = msm_cvp_unmap_buf_dsp(inst, buf);
+	if (buf->index)
+		rc = msm_cvp_unmap_buf_dsp(inst, buf);
+	else
+		rc = msm_cvp_unmap_buf_wncc(inst, buf);
 	cvp_put_inst(s);
 	return rc;
 }
-
-
-

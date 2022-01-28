@@ -390,7 +390,10 @@ struct msm_cvp_inst {
 	struct msm_cvp_list persistbufs;
 	struct cvp_dmamap_cache dma_cache;
 	struct msm_cvp_list cvpdspbufs;
+	struct msm_cvp_list cvpwnccbufs;
 	struct msm_cvp_list frames;
+	u32 cvpwnccbufs_num;
+	struct msm_cvp_wncc_buffer* cvpwnccbufs_table;
 	struct completion completions[SESSION_MSG_END - SESSION_MSG_START + 1];
 	struct dentry *debugfs_root;
 	struct msm_cvp_debug debug;
