@@ -22,3 +22,6 @@ qcrypto-msm_dlkm-objs := crypto-qti/qcrypto.o
 
 obj-$(CONFIG_HDCP_QSEECOM) += hdcp_qseecom_dlkm.o
 hdcp_qseecom_dlkm-objs := hdcp/hdcp_qseecom.o
+
+obj-$(CONFIG_MSM_TMECOM_QMP) := tmecom-intf_dlkm.o
+tmecom-intf_dlkm-objs := tmecom/tmecom.o tmecom/tme_hwkm_master.o
