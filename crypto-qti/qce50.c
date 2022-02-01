@@ -6055,9 +6055,9 @@ void *qce_open(struct platform_device *pdev, int *rc)
 
 	qce_init_ce_cfg_val(pce_dev);
 	*rc  = qce_sps_init(pce_dev);
-	if (*rc)
-		goto err;
-	qce_setup_ce_sps_data(pce_dev);
+	if (*rc == 0)
+		qce_setup_ce_sps_data(pce_dev);
+	*rc = 0;
 	qce_disable_clk(pce_dev);
 	setup_dummy_req(pce_dev);
 	atomic_set(&pce_dev->no_of_queued_req, 0);
