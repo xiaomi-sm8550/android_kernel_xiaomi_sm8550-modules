@@ -20,13 +20,13 @@
 #include <linux/dma-fence-array.h>
 #include <linux/sync_file.h>
 #include <uapi/sync_fence/qcom_sync_file.h>
+#include <linux/soc/qcom/qcom_sync_file.h>
 
 #define CLASS_NAME	"sync"
 #define DRV_NAME	"spec_sync"
 #define DRV_VERSION	1
 #define NAME_LEN	32
 
-#define SPEC_FENCE_FLAG_FENCE_ARRAY 0x10 /* user flags for debug */
 #define FENCE_MIN	1
 #define FENCE_MAX	32
 
@@ -44,6 +44,7 @@ struct sync_device {
 	uint32_t version;
 	struct mutex l_lock;
 	struct list_head fence_array_list;
+	wait_queue_head_t wait_queue;
 };
 
 struct fence_array_node {
@@ -254,6 +255,34 @@ static int spec_sync_ioctl_create_fence(struct sync_device *obj, unsigned long _
 	return 0;
 }
 
+int spec_sync_wait_bind_array(struct dma_fence_array *fence_array, u32 timeout_ms)
+{
+	int ret;
+
+	/* Check if fence-array is a speculative fence */
+	if (!fence_array || !test_bit(SPEC_FENCE_FLAG_FENCE_ARRAY, &fence_array->base.flags)) {
+		pr_err("invalid fence!\n");
+		return -EINVAL;
+	} else if (test_bit(SPEC_FENCE_FLAG_FENCE_ARRAY_BOUND, &fence_array->base.flags)) {
+		/* This fence-array is already bound, just return success */
+		return 0;
+	}
+
+	/* Wait for the fence-array bind */
+	ret = wait_event_timeout(sync_dev.wait_queue,
+		test_bit(SPEC_FENCE_FLAG_FENCE_ARRAY_BOUND, &fence_array->base.flags),
+		msecs_to_jiffies(timeout_ms));
+	if (!ret) {
+		pr_err("timed out waiting for bind fence-array %d\n", timeout_ms);
+		ret = -ETIMEDOUT;
+	} else {
+		ret = 0;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(spec_sync_wait_bind_array);
+
 static int spec_sync_bind_array(struct fence_bind_data *sync_bind_info)
 {
 	struct dma_fence_array *fence_array;
@@ -328,6 +357,9 @@ static int spec_sync_bind_array(struct fence_bind_data *sync_bind_info)
 	clear_fence_array_tracker(false);
 
 bind_invalid:
+	set_bit(SPEC_FENCE_FLAG_FENCE_ARRAY_BOUND, &fence_array->base.flags);
+	wake_up_all(&sync_dev.wait_queue);
+
 	if (ret) {
 		for (i = counter - 1; i >= 0; i--)
 			dma_fence_put(fence_array->fences[i]);
@@ -434,6 +466,7 @@ static int spec_sync_register_device(void)
 	mutex_init(&sync_dev.lock);
 	mutex_init(&sync_dev.l_lock);
 	INIT_LIST_HEAD(&sync_dev.fence_array_list);
+	init_waitqueue_head(&sync_dev.wait_queue);
 
 	return 0;
 
