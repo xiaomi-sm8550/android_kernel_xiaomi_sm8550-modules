@@ -6,9 +6,9 @@ LOCAL_PATH := $(call my-dir)
 ifeq ($(call is-board-platform-in-list,taro kalama), true)
 
 BT_SELECT := CONFIG_MSM_BT_POWER=m
-ifdef CONFIG_SLIMBUS
+#ifdef CONFIG_SLIMBUS
 BT_SELECT += CONFIG_BTFM_SLIM=m
-endif
+#endif
 BT_SELECT += CONFIG_I2C_RTC6226_QCA=m
 
 LOCAL_PATH := $(call my-dir)
