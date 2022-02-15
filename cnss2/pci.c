@@ -3255,9 +3255,12 @@ static bool cnss_pci_is_drv_supported(struct cnss_pci_data *pci_priv)
 
 	root_of_node = root_port->dev.of_node;
 
-	if (root_of_node->parent)
+	if (root_of_node->parent) {
 		drv_supported = of_property_read_bool(root_of_node->parent,
-						      "qcom,drv-supported");
+						      "qcom,drv-supported") ||
+				of_property_read_bool(root_of_node->parent,
+						      "qcom,drv-name");
+	}
 
 	cnss_pr_dbg("PCIe DRV is %s\n",
 		    drv_supported ? "supported" : "not supported");
