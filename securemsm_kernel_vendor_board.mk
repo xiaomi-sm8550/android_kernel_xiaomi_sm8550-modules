@@ -4,5 +4,4 @@ BOARD_VENDOR_KERNEL_MODULES += $(KERNEL_MODULES_OUT)/smcinvoke_dlkm.ko \
       $(KERNEL_MODULES_OUT)/qcrypto-msm_dlkm.ko \
       $(KERNEL_MODULES_OUT)/qce50_dlkm.ko \
       $(KERNEL_MODULES_OUT)/hdcp_qseecom_dlkm.ko \
-      $(KERNEL_MODULES_OUT)/tmecom-intf_dlkm.ko \
 
