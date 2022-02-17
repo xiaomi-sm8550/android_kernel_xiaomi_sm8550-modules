@@ -393,6 +393,35 @@ open_err_req_irq:
 	return retval;
 }
 
+static int rtc6226_fm_alt_sleep_clk_reg_cfg(struct rtc6226_device *radio, bool power)
+{
+	int rc =0;
+	struct fm_power_vreg_data *vreg;
+
+	vreg = radio->alt_sleep_clkreg;
+	if (!vreg) {
+		FMDERR("In %s, vio reg is NULL\n", __func__);
+		return rc;
+	}
+	if (power) {
+		FMDBG("vreg is : %s\n", vreg->name);
+		rc = regulator_enable(vreg->reg);
+		if (rc < 0) {
+			FMDERR("reg enable(%s) failed.rc=%d\n", vreg->name, rc);
+			return rc;
+		}
+		vreg->is_enabled = true;
+        } else {
+		rc = regulator_disable(vreg->reg);
+		if (rc < 0) {
+			FMDERR("reg disable(%s) fail rc=%d\n", vreg->name, rc);
+			return rc;
+		}
+		vreg->is_enabled = false;
+	}
+	return rc;
+}
+
 static int rtc6226_fm_vio_reg_cfg(struct rtc6226_device *radio, bool on)
 {
 	int rc = 0;
@@ -525,6 +554,13 @@ static int rtc6226_fm_power_cfg(struct rtc6226_device *radio, bool powerflag)
 			rtc6226_fm_vdd_reg_cfg(radio, false);
 			return rc;
 		}
+		rc = rtc6226_fm_alt_sleep_clk_reg_cfg(radio, powerflag);
+		if (rc < 0) {
+			FMDERR("In %s, vio reg cfg failed %x\n", __func__, rc);
+			rtc6226_fm_vdd_reg_cfg(radio, false);
+			rtc6226_fm_vio_reg_cfg(radio, false);
+			return rc;
+		}
 	} else {
 		/* Turn OFF sequence */
 		rc = rtc6226_fm_vdd_reg_cfg(radio, powerflag);
@@ -533,6 +569,9 @@ static int rtc6226_fm_power_cfg(struct rtc6226_device *radio, bool powerflag)
 		rc = rtc6226_fm_vio_reg_cfg(radio, powerflag);
 		if (rc < 0)
 			FMDERR("In %s, vio reg cfg failed %x\n", __func__, rc);
+		rc = rtc6226_fm_alt_sleep_clk_reg_cfg(radio, powerflag);
+		if (rc < 0)
+			FMDERR("In %s, alt_sleep_clk_ reg cfg failed %x\n", __func__, rc);
 	}
 	return rc;
 }
@@ -705,6 +744,7 @@ static int rtc6226_i2c_probe(struct i2c_client *client,
 	struct v4l2_ctrl_handler *hdl;
 	struct regulator *vddvreg = NULL;
 	struct regulator *viovreg = NULL;
+	struct regulator *alt_sleep_clk_vreg = NULL;
 	int retval = 0;
 	int i = 0;
 	int kfifo_alloc_rc = 0;
@@ -740,6 +780,15 @@ static int rtc6226_i2c_probe(struct i2c_client *client,
 		return retval;
 	}
 
+	alt_sleep_clk_vreg = regulator_get(&client->dev, "alt-sleep-clk");
+	if (IS_ERR(alt_sleep_clk_vreg)) {
+		retval = PTR_ERR(alt_sleep_clk_vreg);
+		FMDERR("%s: regulator_get(alt_sleep_clk) failed. retval=%d\n",
+			__func__, retval);
+		regulator_put(vddvreg);
+		regulator_put(viovreg);
+		return retval;
+	}
 	/* private data allocation and initialization */
 	radio = kzalloc(sizeof(struct rtc6226_device), GFP_KERNEL);
 	if (!radio) {
@@ -813,6 +862,19 @@ static int rtc6226_i2c_probe(struct i2c_client *client,
 		FMDERR("%s: parsing vio-supply failed\n", __func__);
 		goto err_v4l2;
 	}
+	radio->alt_sleep_clkreg = devm_kzalloc(&client->dev,
+				sizeof(struct fm_power_vreg_data),
+				GFP_KERNEL);
+	if (!radio->alt_sleep_clkreg) {
+		FMDERR("%s: allocating memory for alt_sleep_clk vreg failed\n",
+							__func__);
+		retval = -ENOMEM;
+		goto err_v4l2;
+        }
+	radio->alt_sleep_clkreg->reg = alt_sleep_clk_vreg;
+	radio->alt_sleep_clkreg->name = "alt-sleep-clk";
+	radio->alt_sleep_clkreg->is_enabled = false;
+
 	/* Initialize pin control*/
 	retval = rtc6226_pinctrl_init(radio);
 	if (retval) {
@@ -921,6 +983,12 @@ err_vreg:
 		devm_kfree(&client->dev, radio->vddreg);
 	} else {
 		regulator_put(vddvreg);
+	}
+	if (radio && radio->alt_sleep_clkreg && radio->alt_sleep_clkreg->reg) {
+		regulator_put(radio->alt_sleep_clkreg->reg);
+		devm_kfree(&client->dev, radio->alt_sleep_clkreg);
+	} else {
+		regulator_put(alt_sleep_clk_vreg);
 	}
 	kfree(radio);
 	return retval;
