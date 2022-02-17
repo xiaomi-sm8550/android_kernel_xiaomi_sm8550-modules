@@ -431,6 +431,12 @@ int nfc_i2c_dev_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		pr_err("nfc hw check failed ret %d\n", ret);
 		goto err_nfcc_hw_check;
 	}
+
+	if(nfc_dev->configs.clk_pin_voting)
+		nfc_dev->clk_run = false;
+	else
+		nfc_dev->clk_run = true;
+
 	gpio_set_ven(nfc_dev, 1);
 	gpio_set_ven(nfc_dev, 0);
 	gpio_set_ven(nfc_dev, 1);

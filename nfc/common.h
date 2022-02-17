@@ -28,6 +28,7 @@
 #include <linux/of_gpio.h>
 #include <linux/delay.h>
 #include <linux/ipc_logging.h>
+#include <linux/clk.h>
 #include <nfcinfo.h>
 #include "i2c_drv.h"
 #include "ese_cold_reset.h"
@@ -111,6 +112,7 @@
 #define DTS_IRQ_GPIO_STR	"qcom,sn-irq"
 #define DTS_VEN_GPIO_STR	"qcom,sn-ven"
 #define DTS_FWDN_GPIO_STR	"qcom,sn-firm"
+#define DTS_CLKSRC_GPIO_STR	"qcom,clk-src"
 #define NFC_LDO_SUPPLY_DT_NAME		"qcom,sn-vdd-1p8"
 #define NFC_LDO_SUPPLY_NAME		"qcom,sn-vdd-1p8-supply"
 #define NFC_LDO_VOL_DT_NAME		"qcom,sn-vdd-1p8-voltage"
@@ -221,6 +223,9 @@ struct platform_ldo {
 struct platform_configs {
 	struct platform_gpio gpio;
 	struct platform_ldo ldo;
+        const char *clk_src_name;
+	/* NFC_CLK pin voting state */
+	bool clk_pin_voting;
 };
 
 
@@ -261,6 +266,10 @@ struct nfc_dev {
 
 	union nqx_uinfo nqx_info;
 
+	/* CLK control */
+	bool clk_run;
+	struct clk *s_clk;
+
 	void *ipcl;
 
 	/* function pointers for the common i2c functionality */
@@ -296,4 +305,6 @@ int nfc_ese_pwr(struct nfc_dev *nfc_dev, unsigned long arg);
 int nfc_ldo_unvote(struct nfc_dev *nfc_dev);
 int is_nfc_data_available_for_read(struct nfc_dev *nfc_dev);
 int validate_nfc_state_nci(struct nfc_dev *nfc_dev);
+int nfc_clock_select(struct nfc_dev *nfc_dev);
+int nfc_clock_deselect(struct nfc_dev *nfc_dev);
 #endif /* _COMMON_H_ */
