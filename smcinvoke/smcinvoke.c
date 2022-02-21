@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2022, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt) "smcinvoke: %s: " fmt, __func__
@@ -950,6 +950,23 @@ out:
 	return ret;
 }
 
+static int32_t smcinvoke_sleep(void *buf, size_t buf_len)
+{
+    struct smcinvoke_tzcb_req *msg = buf;
+    uint32_t sleepTimeMs_val = 0;
+
+    if (msg->hdr.counts != OBJECT_COUNTS_PACK(1, 0, 0, 0) ||
+       (buf_len - msg->args[0].b.offset < msg->args[0].b.size)) {
+         pr_err("Invalid counts received for sleeping in hlos\n");
+         return OBJECT_ERROR_INVALID;
+    }
+
+    /* Time in miliseconds is expected from tz */
+    sleepTimeMs_val = *((uint32_t *)(buf + msg->args[0].b.offset));
+    msleep(sleepTimeMs_val);
+    return OBJECT_OK;
+}
+
 static void process_kernel_obj(void *buf, size_t buf_len)
 {
 	struct smcinvoke_tzcb_req *cb_req = buf;
@@ -961,6 +978,9 @@ static void process_kernel_obj(void *buf, size_t buf_len)
 	case OBJECT_OP_YIELD:
 		cb_req->result = OBJECT_OK;
 		break;
+        case OBJECT_OP_SLEEP:
+                cb_req->result = smcinvoke_sleep(buf, buf_len);
+                break;
 	default:
 		pr_err(" invalid operation for tz kernel object\n");
 		cb_req->result = OBJECT_ERROR_INVALID;
