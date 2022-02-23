@@ -173,6 +173,8 @@ void test_mmrm_client(struct platform_device *pdev, int index, int count)
 
 		// Create client descriptor
 		p_clk_res = get_nth_clock(i);
+		if (p_clk_res == NULL)
+			break;
 
 		desc.client_type = MMRM_CLIENT_CLOCK;
 		desc.priority = MMRM_CLIENT_PRIOR_HIGH;

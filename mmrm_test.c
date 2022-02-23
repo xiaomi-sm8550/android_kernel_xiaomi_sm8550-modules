@@ -28,6 +28,13 @@
 
 #define MODULE_NAME "mmrm_test"
 
+enum PLATFORM_SOC_ID {
+	SOC_ID_LAHAINA = 415,	/* LAHAINA */
+	SOC_ID_WAIPIO = 457,	/* WAIPIO */
+	SOC_ID_KAILUA = 519,	/* KAILUA */
+};
+
+
 struct mmrm_test_platform_resources {
 	struct platform_device *pdev;
 	struct clock_rate *clk_rate_tbl;
@@ -129,6 +136,9 @@ struct clock_rate *get_nth_clock(int nth)
 {
 	struct mmrm_test_platform_resources  *res = &test_drv_data->clk_res;
 
+	if (nth >= res->count)
+		return NULL;
+
 	return &(res->clk_rate_tbl[nth]);
 }
 
@@ -194,12 +204,17 @@ static int mmrm_test_probe(struct platform_device *pdev)
 	// Get socid to get known mmrm configurations
 	soc_id = socinfo_get_id();
 	switch (soc_id) {
-	case 415: /* LAHAINA */
+	case SOC_ID_LAHAINA: /* LAHAINA */
 		test_mmrm_client(pdev, MMRM_TEST_LAHAINA, MMRM_TEST_LAHAINA_NUM_CLK_CLIENTS);
 //		test_mmrm_concurrent_client_cases(pdev, all_lahaina_testcases);
 		break;
-	case 457: /* WAIPIO */
+	case SOC_ID_WAIPIO: /* WAIPIO */
 		test_mmrm_client(pdev, MMRM_TEST_WAIPIO, MMRM_TEST_WAIPIO_NUM_CLK_CLIENTS);
+		test_mmrm_concurrent_client_cases(pdev, waipio_testcases, waipio_testcases_count);
+		test_mmrm_switch_volt_corner_client_testcases(pdev, waipio_cornercase_testcases, waipio_cornercase_testcases_count);
+		break;
+	case SOC_ID_KAILUA: /* KAILUA */
+		test_mmrm_client(pdev, MMRM_TEST_KAILUA, MMRM_TEST_KAILUA_NUM_CLK_CLIENTS);
 		test_mmrm_concurrent_client_cases(pdev, waipio_testcases, waipio_testcases_count);
 		test_mmrm_switch_volt_corner_client_testcases(pdev, waipio_cornercase_testcases, waipio_cornercase_testcases_count);
 		break;
