@@ -1,4 +1,4 @@
-include $(SSG_MODULE_ROOT)/config/ssg_smcinvoke.conf
+include $(SSG_MODULE_ROOT)/config/sec-kernel_defconfig.conf
 
 LINUXINCLUDE += -I$(SSG_MODULE_ROOT)/ \
                 -I$(SSG_MODULE_ROOT)/linux/
@@ -22,3 +22,6 @@ qcrypto-msm_dlkm-objs := crypto-qti/qcrypto.o
 
 obj-$(CONFIG_HDCP_QSEECOM) += hdcp_qseecom_dlkm.o
 hdcp_qseecom_dlkm-objs := hdcp/hdcp_qseecom.o
+
+obj-$(CONFIG_HW_RANDOM_MSM_LEGACY) += qrng_dlkm.o
+qrng_dlkm-objs := qrng/msm_rng.o
