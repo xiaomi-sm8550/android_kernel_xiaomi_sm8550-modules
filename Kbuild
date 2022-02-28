@@ -6,10 +6,12 @@ LINUXINCLUDE    += -I$(NFC_ROOT)/include/uapi/linux/nfc
 
 LINUXINCLUDE   += -include $(NFC_ROOT)/config/gki_nfc_conf.h
 
-obj-$(CONFIG_NFC_QTI_I2C) += nfc_i2c.o
+obj-$(CONFIG_NXP_NFC_I2C) += nxp-nci.o
 
 #source files
-nfc_i2c-objs += qti/ese_cold_reset.o \
-                qti/nfc_common.o \
-                qti/nfc_i2c_drv.o
+nxp-nci-objs += nfc/ese_cold_reset.o \
+                nfc/common.o \
+		nfc/common_nxp.o \
+		nfc/common_qcom.o \
+		nfc/i2c_drv.o
 
