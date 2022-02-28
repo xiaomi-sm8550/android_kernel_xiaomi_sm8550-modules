@@ -482,7 +482,6 @@ struct rtc6226_device {
 	struct v4l2_ctrl_handler ctrl_handler;
 	struct fm_power_vreg_data *vddreg;
 	struct fm_power_vreg_data *vioreg;
-	struct fm_power_vreg_data *alt_sleep_clkreg;
 	int band;
 	int space;
 	atomic_t users;
