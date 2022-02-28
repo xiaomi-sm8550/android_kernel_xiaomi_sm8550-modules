@@ -47,6 +47,7 @@
 #define KIWI_PATH_PREFIX		"kiwi/"
 #define DEFAULT_PHY_M3_FILE_NAME	"m3.bin"
 #define DEFAULT_PHY_UCODE_FILE_NAME	"phy_ucode.elf"
+#define PHY_UCODE_V2_FILE_NAME		"phy_ucode20.elf"
 #define DEFAULT_FW_FILE_NAME		"amss.bin"
 #define FW_V2_FILE_NAME			"amss20.bin"
 #define DEVICE_MAJOR_VERSION_MASK	0xF
@@ -1257,7 +1258,8 @@ static int cnss_pci_get_link_status(struct cnss_pci_data *pci_priv)
 static int cnss_set_pci_link_status(struct cnss_pci_data *pci_priv,
 				    enum pci_link_status status)
 {
-	u16 link_speed, link_width;
+	u16 link_speed, link_width = pci_priv->def_link_width;
+	u16 one_lane = PCI_EXP_LNKSTA_NLW_X1 >> PCI_EXP_LNKSTA_NLW_SHIFT;
 	int ret;
 
 	cnss_pr_vdbg("Set PCI link status to: %u\n", status);
@@ -1265,16 +1267,17 @@ static int cnss_set_pci_link_status(struct cnss_pci_data *pci_priv,
 	switch (status) {
 	case PCI_GEN1:
 		link_speed = PCI_EXP_LNKSTA_CLS_2_5GB;
-		link_width = PCI_EXP_LNKSTA_NLW_X1 >> PCI_EXP_LNKSTA_NLW_SHIFT;
+		if (!link_width)
+			link_width = one_lane;
 		break;
 	case PCI_GEN2:
 		link_speed = PCI_EXP_LNKSTA_CLS_5_0GB;
-		link_width = PCI_EXP_LNKSTA_NLW_X1 >> PCI_EXP_LNKSTA_NLW_SHIFT;
+		if (!link_width)
+			link_width = one_lane;
 		break;
 	case PCI_DEF:
 		link_speed = pci_priv->def_link_speed;
-		link_width = pci_priv->def_link_width;
-		if (!link_speed && !link_width) {
+		if (!link_speed || !link_width) {
 			cnss_pr_err("PCI link speed or width is not valid\n");
 			return -EINVAL;
 		}
@@ -1965,7 +1968,11 @@ retry_mhi_suspend:
 	case CNSS_MHI_RESUME:
 		mutex_lock(&pci_priv->mhi_ctrl->pm_mutex);
 		if (pci_priv->drv_connected_last) {
-			cnss_pci_prevent_l1(&pci_priv->pci_dev->dev);
+			ret = cnss_pci_prevent_l1(&pci_priv->pci_dev->dev);
+			if (ret) {
+				mutex_unlock(&pci_priv->mhi_ctrl->pm_mutex);
+				break;
+			}
 			ret = cnss_mhi_pm_fast_resume(pci_priv, true);
 			cnss_pci_allow_l1(&pci_priv->pci_dev->dev);
 		} else {
@@ -3127,6 +3134,14 @@ int cnss_wlan_register_driver(struct cnss_wlan_driver *driver_ops)
 		return -ENODEV;
 	}
 
+	if (driver_ops->chip_version != CNSS_CHIP_VER_ANY &&
+	    driver_ops->chip_version != plat_priv->device_version.major_version) {
+		cnss_pr_err("Driver built for chip ver 0x%x, enumerated ver 0x%x, reject unsupported driver\n",
+			    driver_ops->chip_version,
+			    plat_priv->device_version.major_version);
+		return -ENODEV;
+	}
+
 	if (!plat_priv->cbc_enabled ||
 	    test_bit(CNSS_COLD_BOOT_CAL_DONE, &plat_priv->driver_state))
 		goto register_driver;
@@ -3254,9 +3269,12 @@ static bool cnss_pci_is_drv_supported(struct cnss_pci_data *pci_priv)
 
 	root_of_node = root_port->dev.of_node;
 
-	if (root_of_node->parent)
+	if (root_of_node->parent) {
 		drv_supported = of_property_read_bool(root_of_node->parent,
-						      "qcom,drv-supported");
+						      "qcom,drv-supported") ||
+				of_property_read_bool(root_of_node->parent,
+						      "qcom,drv-name");
+	}
 
 	cnss_pr_dbg("PCIe DRV is %s\n",
 		    drv_supported ? "supported" : "not supported");
@@ -4302,6 +4320,15 @@ int cnss_pci_load_m3(struct cnss_pci_data *pci_priv)
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 		phy_filename = DEFAULT_PHY_M3_FILE_NAME;
+		break;
+	case KIWI_DEVICE_ID:
+		switch (plat_priv->device_version.major_version) {
+		case FW_V2_NUMBER:
+			phy_filename = PHY_UCODE_V2_FILE_NAME;
+			break;
+		default:
+			break;
+		}
 		break;
 	default:
 		break;
@@ -5427,6 +5454,7 @@ static int cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv)
 			 FW_V2_FILE_NAME);
 		break;
 	case QCA6490_DEVICE_ID:
+	case KIWI_DEVICE_ID:
 		switch (plat_priv->device_version.major_version) {
 		case FW_V2_NUMBER:
 			cnss_pci_add_fw_prefix_name(pci_priv,
