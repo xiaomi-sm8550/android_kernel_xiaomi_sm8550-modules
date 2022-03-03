@@ -888,8 +888,8 @@ retry:
 			goto retry;
 		}
 		cnss_plat_ipc_err("Failed to init QMI handle after %d ms * %d, err = %d\n",
-				  ret, QMI_INIT_RETRY_DELAY_MS,
-				  QMI_INIT_RETRY_MAX_TIMES);
+				  QMI_INIT_RETRY_DELAY_MS,
+				  QMI_INIT_RETRY_MAX_TIMES, ret);
 		goto free_svc_hdl;
 	}
 

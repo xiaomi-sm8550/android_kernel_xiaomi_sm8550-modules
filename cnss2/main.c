@@ -3133,8 +3133,8 @@ static int cnss_register_bus_scale(struct cnss_plat_data *plat_priv)
 				   "qcom,icc-path-count",
 				   &plat_priv->icc.path_count);
 	if (ret) {
-		cnss_pr_err("Platform Bus Interconnect path not configured\n");
-		return -EINVAL;
+		cnss_pr_dbg("Platform Bus Interconnect path not configured\n");
+		return 0;
 	}
 	ret = of_property_read_u32(plat_priv->plat_dev->dev.of_node,
 				   "qcom,bus-bw-cfg-count",
@@ -3680,8 +3680,10 @@ static bool cnss_use_fw_path_with_prefix(struct cnss_plat_data *plat_priv)
 {
 	return (of_property_read_bool(plat_priv->plat_dev->dev.of_node,
 				      "qcom,converged-dt") ||
-	       of_property_read_bool(plat_priv->plat_dev->dev.of_node,
-				     "qcom,same-dt-multi-dev"));
+		of_property_read_bool(plat_priv->plat_dev->dev.of_node,
+				      "qcom,same-dt-multi-dev") ||
+		of_property_read_bool(plat_priv->plat_dev->dev.of_node,
+				      "qcom,multi-wlan-exchg"));
 }
 
 static const struct platform_device_id cnss_platform_id_table[] = {
