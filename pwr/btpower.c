@@ -139,16 +139,16 @@ static struct bt_power_vreg_data bt_vregs_info_qca6xx0[] = {
 
 // Regulator structure for kiwi BT SoC series
 static struct bt_power_vreg_data bt_vregs_info_kiwi[] = {
-	{NULL, "qcom,bt-vdd-io",      1800000, 1800000, 0, false, true,
+	{NULL, "qcom,bt-vdd18-aon",      1800000, 1800000, 0, false, true,
 		{BT_VDD_IO_LDO, BT_VDD_IO_LDO_CURRENT}},
 	{NULL, "qcom,bt-vdd-aon",     950000,  950000,  0, false, true,
 		{BT_VDD_AON_LDO, BT_VDD_AON_LDO_CURRENT}},
-	{NULL, "qcom,bt-vdd-rfacmn",  950000,  950000,  0, false, true,
+	{NULL, "qcom,bt-vdd-rfaOp8",  950000,  950000,  0, false, true,
 		{BT_VDD_RFACMN, BT_VDD_RFACMN_CURRENT}},
 	/* BT_CX_MX */
 	{NULL, "qcom,bt-vdd-dig",      950000,  950000,  0, false, true,
 		{BT_VDD_DIG_LDO, BT_VDD_DIG_LDO_CURRENT}},
-	{NULL, "qcom,bt-vdd-rfa-0p8",  950000,  952000,  0, false, true,
+	{NULL, "qcom,bt-vdd-rfaOp8",  950000,  952000,  0, false, true,
 		{BT_VDD_RFA_0p8, BT_VDD_RFA_0p8_CURRENT}},
 	{NULL, "qcom,bt-vdd-rfa1",     1350000, 1350000, 0, false, true,
 		{BT_VDD_RFA1_LDO, BT_VDD_RFA1_LDO_CURRENT}},
