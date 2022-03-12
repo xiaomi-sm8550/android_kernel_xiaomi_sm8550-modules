@@ -10,7 +10,11 @@
 #include <linux/kobject.h>
 #include <linux/platform_device.h>
 #include <linux/ipc_logging.h>
+#ifdef CONFIG_CNSS_OUT_OF_TREE
+#include "icnss2.h"
+#else
 #include <soc/qcom/icnss2.h>
+#endif
 #include "wlan_firmware_service_v01.h"
 #include <linux/mailbox_client.h>
 
