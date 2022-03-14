@@ -325,7 +325,7 @@ wait:
 			dprintk(CVP_WARN, "Unprocessed frame %d\n",
 				frame->pkt_type);
 		mutex_unlock(&inst->frames.lock);
-		cvp_dump_fence_queue(inst);
+		inst->core->synx_ftbl->cvp_dump_fence_queue(inst);
 	}
 
 	if (cvp_release_arp_buffers(inst))
@@ -382,7 +382,7 @@ int msm_cvp_destroy(struct msm_cvp_inst *inst)
 
 	__deinit_session_queue(inst);
 	__deinit_fence_queue(inst);
-	cvp_sess_deinit_synx(inst);
+	core->synx_ftbl->cvp_sess_deinit_synx(inst);
 
 	pr_info(CVP_DBG_TAG "Closed cvp instance: %pK session_id = %d\n",
 		"sess", inst, hash32_ptr(inst->session));

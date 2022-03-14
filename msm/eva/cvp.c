@@ -415,6 +415,8 @@ static int msm_probe_cvp_device(struct platform_device *pdev)
 		goto err_hfi_initialize;
 	}
 
+	cvp_synx_ftbl_init(core);
+
 	mutex_lock(&cvp_driver->lock);
 	list_add_tail(&core->list, &cvp_driver->cores);
 	mutex_unlock(&cvp_driver->lock);

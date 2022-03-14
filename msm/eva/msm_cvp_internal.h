@@ -352,6 +352,7 @@ struct msm_cvp_core {
 	struct device *dev;
 	struct cvp_hfi_device *device;
 	struct msm_cvp_platform_data *platform_data;
+	struct msm_cvp_synx_ops *synx_ftbl;
 	struct list_head instances;
 	struct dentry *debugfs_root;
 	enum cvp_core_state state;
