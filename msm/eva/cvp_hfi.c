@@ -3903,7 +3903,7 @@ static int __iris_power_on(struct iris_hfi_device *device)
 	enable_irq(device->cvp_hal_data->irq);
 	__write_register(device,
 		CVP_WRAPPER_DEBUG_BRIDGE_LPI_CONTROL, 0x7);
-	pr_info(CVP_DBG_TAG "cvp (eva) powered on\n", "pwr");
+	pr_info_ratelimited(CVP_DBG_TAG "cvp (eva) powered on\n", "pwr");
 	return 0;
 
 fail_enable_core:
@@ -4229,7 +4229,7 @@ static void power_off_iris2(struct iris_hfi_device *device)
 
 	/*Do not access registers after this point!*/
 	device->power_enabled = false;
-	pr_info(CVP_DBG_TAG "cvp (eva) power collapsed\n", "pwr");
+	pr_info_ratelimited(CVP_DBG_TAG "cvp (eva) power collapsed\n", "pwr");
 }
 
 static inline int __resume(struct iris_hfi_device *device)
