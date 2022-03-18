@@ -10,7 +10,7 @@
 #include "msm_cvp_dsp.h"
 
 #ifdef CVP_SYNX_ENABLED
-int cvp_sess_init_synx(struct msm_cvp_inst *inst)
+static int cvp_sess_init_synx_v1(struct msm_cvp_inst *inst)
 {
 	struct synx_initialization_params params;
 
@@ -23,7 +23,7 @@ int cvp_sess_init_synx(struct msm_cvp_inst *inst)
 	return 0;
 }
 
-int cvp_sess_deinit_synx(struct msm_cvp_inst *inst)
+static int cvp_sess_deinit_synx(struct msm_cvp_inst *inst)
 {
 	if (!inst) {
 		dprintk(CVP_ERR, "Used invalid sess in deinit_synx\n");
@@ -33,7 +33,7 @@ int cvp_sess_deinit_synx(struct msm_cvp_inst *inst)
 	return 0;
 }
 
-void cvp_dump_fence_queue(struct msm_cvp_inst *inst)
+static void cvp_dump_fence_queue_v1(struct msm_cvp_inst *inst)
 {
 	struct cvp_fence_queue *q;
 	struct cvp_fence_command *f;
@@ -68,7 +68,7 @@ void cvp_dump_fence_queue(struct msm_cvp_inst *inst)
 	mutex_unlock(&q->lock);
 }
 
-int cvp_import_synx(struct msm_cvp_inst *inst, struct cvp_fence_command *fc,
+static int cvp_import_synx_v1(struct msm_cvp_inst *inst, struct cvp_fence_command *fc,
 		u32 *fence)
 {
 	int rc = 0, rr = 0;
@@ -107,7 +107,7 @@ int cvp_import_synx(struct msm_cvp_inst *inst, struct cvp_fence_command *fc,
 	return rr;
 }
 
-int cvp_release_synx(struct msm_cvp_inst *inst, struct cvp_fence_command *fc)
+static int cvp_release_synx_v1(struct msm_cvp_inst *inst, struct cvp_fence_command *fc)
 {
 	int rc = 0;
 	int i;
@@ -175,7 +175,7 @@ static int cvp_cancel_synx_impl(struct msm_cvp_inst *inst,
 
 }
 
-int cvp_cancel_synx(struct msm_cvp_inst *inst, enum cvp_synx_type type,
+static int cvp_cancel_synx(struct msm_cvp_inst *inst, enum cvp_synx_type type,
 		struct cvp_fence_command *fc, int synx_state)
 {
 	if (fc->signature != 0xFEEDFACE) {
@@ -242,7 +242,7 @@ static int cvp_signal_synx(struct synx_session ssid, u32 *synx, u32 num_synx,
 	return rc;
 }
 
-int cvp_synx_ops(struct msm_cvp_inst *inst, enum cvp_synx_type type,
+static int cvp_synx_ops_v1(struct msm_cvp_inst *inst, enum cvp_synx_type type,
 		struct cvp_fence_command *fc, u32 *synx_state)
 {
 	struct synx_session ssid;
@@ -267,3 +267,22 @@ int cvp_synx_ops(struct msm_cvp_inst *inst, enum cvp_synx_type type,
 	}
 }
 #endif
+
+struct msm_cvp_synx_ops cvp_synx_v1 = {
+	.cvp_sess_init_synx = cvp_sess_init_synx_v1,
+	.cvp_sess_deinit_synx = cvp_sess_deinit_synx,
+	.cvp_release_synx = cvp_release_synx_v1,
+	.cvp_import_synx = cvp_import_synx_v1,
+	.cvp_synx_ops = cvp_synx_ops_v1,
+	.cvp_cancel_synx = cvp_cancel_synx,
+	.cvp_dump_fence_queue = cvp_dump_fence_queue_v1,
+};
+
+void cvp_synx_ftbl_init(struct msm_cvp_core *core)
+{
+	if (!core)
+		return;
+
+	/* Synx API version check below if needed */
+	core->synx_ftbl = &cvp_synx_v1;
+}
