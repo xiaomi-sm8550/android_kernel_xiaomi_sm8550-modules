@@ -22,7 +22,7 @@
 #include <linux/completion.h>
 #include <linux/errno.h>
 #include <linux/kthread.h>
-#include "linux/hdcp_qseecom.h"
+#include <linux/hdcp_qseecom.h>
 #include "misc/qseecom_kernel.h"
 
 #define HDCP2P2_APP_NAME      "hdcp2p2"

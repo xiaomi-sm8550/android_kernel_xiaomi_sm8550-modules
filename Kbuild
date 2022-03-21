@@ -5,9 +5,8 @@ include $(SSG_MODULE_ROOT)/config/sec-kernel_defconfig.conf
 endif
 
 LINUXINCLUDE += -I$(SSG_MODULE_ROOT)/ \
-                -I$(SSG_MODULE_ROOT)/linux/
-
-KBUILD_CPPFLAGS += -DCONFIG_HDCP_QSEECOM
+                -I$(SSG_MODULE_ROOT)/linux/ \
+                -include $(SSG_MODULE_ROOT)/config/sec-kernel_defconfig.h
 
 obj-$(CONFIG_QCOM_SMCINVOKE) += smcinvoke_dlkm.o
 smcinvoke_dlkm-objs := smcinvoke/smcinvoke_kernel.o smcinvoke/smcinvoke.o
