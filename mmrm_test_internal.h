@@ -21,6 +21,8 @@
 #define MMRM_TEST_LAHAINA_NUM_CLK_CLIENTS 23
 #define MMRM_TEST_WAIPIO 1
 #define MMRM_TEST_WAIPIO_NUM_CLK_CLIENTS 28
+#define MMRM_TEST_KAILUA 2
+#define MMRM_TEST_KAILUA_NUM_CLK_CLIENTS 32
 
 struct mmrm_test_desc {
 	struct mmrm_test_clk_client  *clk_client;
