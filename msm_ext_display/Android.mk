@@ -20,6 +20,16 @@ KBUILD_OPTIONS += BOARD_PLATFORM=$(TARGET_BOARD_PLATFORM)
 
 ###########################################################
 include $(CLEAR_VARS)
+# For incremental compilation
+LOCAL_SRC_FILES           := $(wildcard $(LOCAL_PATH)/**/*) $(wildcard $(LOCAL_PATH)/*)
+LOCAL_MODULE              := msm-ext-disp-module-symvers
+LOCAL_MODULE_STEM         := Module.symvers
+LOCAL_MODULE_KBUILD_NAME  := Module.symvers
+LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
+
+include $(DLKM_DIR)/Build_external_kernelmodule.mk
+###########################################################
+include $(CLEAR_VARS)
 LOCAL_SRC_FILES   := $(wildcard $(LOCAL_PATH)/**/*) $(wildcard $(LOCAL_PATH)/*)
 LOCAL_MODULE              := msm_ext_display.ko
 LOCAL_MODULE_KBUILD_NAME  := msm_ext_display.ko
