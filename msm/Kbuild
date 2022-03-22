@@ -28,6 +28,10 @@ KBUILD_CPPFLAGS += -DCONFIG_EVA_KALAMA=1
 ccflags-y += -DCONFIG_EVA_KALAMA=1
 endif
 
+ifeq ($(CONFIG_EVA_LE), 1)
+ccflags-y += -DCONFIG_EVA_LE=1
+endif
+
 msm-eva-objs := eva/cvp.o \
         eva/msm_cvp_ioctl.o \
         eva/msm_cvp_platform.o \
@@ -46,6 +50,7 @@ msm-eva-objs := eva/cvp.o \
         eva/msm_cvp_dsp.o \
         eva/msm_cvp_buf.o \
         eva/msm_cvp_synx.o \
-		eva/cvp_fw_load.o
+	eva/cvp_fw_load.o \
+	eva/msm_cvp_vm.o
 obj-m += msm-eva.o
 

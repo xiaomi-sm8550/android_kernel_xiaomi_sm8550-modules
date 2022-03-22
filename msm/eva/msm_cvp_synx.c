@@ -68,7 +68,8 @@ static void cvp_dump_fence_queue_v1(struct msm_cvp_inst *inst)
 	mutex_unlock(&q->lock);
 }
 
-static int cvp_import_synx_v1(struct msm_cvp_inst *inst, struct cvp_fence_command *fc,
+static int cvp_import_synx_v1(struct msm_cvp_inst *inst,
+		struct cvp_fence_command *fc,
 		u32 *fence)
 {
 	int rc = 0, rr = 0;
@@ -107,7 +108,8 @@ static int cvp_import_synx_v1(struct msm_cvp_inst *inst, struct cvp_fence_comman
 	return rr;
 }
 
-static int cvp_release_synx_v1(struct msm_cvp_inst *inst, struct cvp_fence_command *fc)
+static int cvp_release_synx_v1(struct msm_cvp_inst *inst,
+		struct cvp_fence_command *fc)
 {
 	int rc = 0;
 	int i;
@@ -265,6 +267,45 @@ static int cvp_synx_ops_v1(struct msm_cvp_inst *inst, enum cvp_synx_type type,
 		dprintk(CVP_ERR, "%s Incorrect SYNX type\n", __func__);
 		return -EINVAL;
 	}
+}
+#else
+static int cvp_sess_init_synx_v1(struct msm_cvp_inst *inst)
+{
+	return 0;
+}
+
+static int cvp_sess_deinit_synx(struct msm_cvp_inst *inst)
+{
+	return 0;
+}
+
+static int cvp_release_synx_v1(struct msm_cvp_inst *inst,
+		struct cvp_fence_command *fc)
+{
+	return 0;
+}
+
+static int cvp_import_synx_v1(struct msm_cvp_inst *inst,
+		struct cvp_fence_command *fc,
+		u32 *fence)
+{
+	return 0;
+}
+
+static int cvp_synx_ops_v1(struct msm_cvp_inst *inst, enum cvp_synx_type type,
+		struct cvp_fence_command *fc, u32 *synx_state)
+{
+	return 0;
+}
+
+static int cvp_cancel_synx(struct msm_cvp_inst *inst, enum cvp_synx_type type,
+		struct cvp_fence_command *fc, int synx_state)
+{
+	return 0;
+}
+
+static void cvp_dump_fence_queue_v1(struct msm_cvp_inst *inst)
+{
 }
 #endif
 

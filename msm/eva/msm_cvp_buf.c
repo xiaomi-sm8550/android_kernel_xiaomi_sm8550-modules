@@ -1104,7 +1104,9 @@ static int msm_cvp_session_add_smem(struct msm_cvp_inst *inst,
 			smem->bitmap_index = i;
 			SET_USE_BITMAP(i, inst);
 		} else {
-			dprintk(CVP_WARN, "%s: not enough memory\n", __func__);
+			dprintk(CVP_WARN,
+			"%s: reached limit, fallback to frame mapping list\n"
+			, __func__);
 			mutex_unlock(&inst->dma_cache.lock);
 			return -ENOMEM;
 		}
