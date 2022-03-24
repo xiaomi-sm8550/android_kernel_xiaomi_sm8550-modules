@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved. */
+
 
 #include <linux/err.h>
 #include <linux/seq_file.h>
@@ -133,6 +135,9 @@ static int cnss_stats_show_state(struct seq_file *s,
 			continue;
 		case CNSS_PCI_PROBE_DONE:
 			seq_puts(s, "PCI PROBE DONE");
+			continue;
+		case CNSS_DRIVER_REGISTER:
+			seq_puts(s, "DRIVER REGISTERED");
 			continue;
 		}
 

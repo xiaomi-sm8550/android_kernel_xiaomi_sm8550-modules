@@ -1899,7 +1899,7 @@ EXPORT_SYMBOL(cnss_qmi_send);
 static int cnss_cold_boot_cal_start_hdlr(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
-	u32 retry = 0;
+	u32 retry = 0, timeout;
 
 	if (test_bit(CNSS_COLD_BOOT_CAL_DONE, &plat_priv->driver_state)) {
 		cnss_pr_dbg("Calibration complete. Ignore calibration req\n");
@@ -1931,6 +1931,15 @@ static int cnss_cold_boot_cal_start_hdlr(struct cnss_plat_data *plat_priv)
 	}
 
 	set_bit(CNSS_IN_COLD_BOOT_CAL, &plat_priv->driver_state);
+	if (test_bit(CNSS_DRIVER_REGISTER, &plat_priv->driver_state)) {
+		timeout = cnss_get_timeout(plat_priv,
+					   CNSS_TIMEOUT_CALIBRATION);
+		cnss_pr_dbg("Restarting calibration %ds timeout\n",
+			    timeout / 1000);
+		if (cancel_delayed_work_sync(&plat_priv->wlan_reg_driver_work))
+			schedule_delayed_work(&plat_priv->wlan_reg_driver_work,
+					      msecs_to_jiffies(timeout));
+	}
 	reinit_completion(&plat_priv->cal_complete);
 	ret = cnss_bus_dev_powerup(plat_priv);
 mark_cal_fail:
@@ -1984,12 +1993,13 @@ static int cnss_cold_boot_cal_done_hdlr(struct cnss_plat_data *plat_priv,
 
 	if (cal_info->cal_status == CNSS_CAL_DONE) {
 		cnss_cal_mem_upload_to_file(plat_priv);
-		if (cancel_delayed_work_sync(&plat_priv->wlan_reg_driver_work)
-		   ) {
-			cnss_pr_dbg("Schedule WLAN driver load\n");
+		if (!test_bit(CNSS_DRIVER_REGISTER, &plat_priv->driver_state))
+			goto out;
+
+		cnss_pr_dbg("Schedule WLAN driver load\n");
+		if (cancel_delayed_work_sync(&plat_priv->wlan_reg_driver_work))
 			schedule_delayed_work(&plat_priv->wlan_reg_driver_work,
 					      0);
-		}
 	}
 out:
 	kfree(data);
