@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _CNSS_MAIN_H
@@ -529,6 +529,7 @@ struct cnss_plat_data {
 	struct cnss_dms_data dms;
 	int power_up_error;
 	u32 hw_trc_override;
+	u8 charger_mode;
 	struct mbox_client mbox_client_data;
 	struct mbox_chan *mbox_chan;
 	const char *vreg_ol_cpr, *vreg_ipa;
