@@ -66,6 +66,13 @@ int nfc_parse_dt(struct device *dev, struct platform_configs *nfc_configs,
 		pr_warn("%s: nfc dwl_req gpio invalid %d\n", __func__,
 			nfc_gpio->dwl_req);
 
+	if (of_property_read_string(np, DTS_CLKSRC_GPIO_STR, &nfc_configs->clk_src_name)) {
+		nfc_configs->clk_pin_voting = false;
+	}
+	else {
+		nfc_configs->clk_pin_voting = true;
+	}
+
 	pr_info("%s: irq %d, ven %d, dwl %d\n", __func__, nfc_gpio->irq, nfc_gpio->ven,
 		nfc_gpio->dwl_req);
 
@@ -329,14 +336,22 @@ static int nfc_ioctl_power_states(struct nfc_dev *nfc_dev, unsigned long arg)
 		nfc_dev->nfc_state = NFC_STATE_NCI;
 
 	} else if (arg == NFC_ENABLE) {
-		/*
-		 * Setting flag true when NFC is enabled
-		 */
+		if(nfc_dev->configs.clk_pin_voting) {
+			/* Enabling nfc clock */
+			ret = nfc_clock_select(nfc_dev);
+			if (ret)
+				pr_err("%s unable to select clock\n", __func__);
+		}
+		/* Setting flag true when NFC is enabled */
 		nfc_dev->cold_reset.is_nfc_enabled = true;
 	} else if (arg == NFC_DISABLE) {
-		/*
-		 * Setting flag true when NFC is disabled
-		 */
+		if(nfc_dev->configs.clk_pin_voting) {
+			/* Disabling nfc clock */
+			ret = nfc_clock_deselect(nfc_dev);
+			if (ret)
+				pr_err("%s unable to disable clock\n", __func__);
+		}
+		/* Setting flag true when NFC is disabled */
 		nfc_dev->cold_reset.is_nfc_enabled = false;
 	}  else {
 		pr_err("%s bad arg %lu\n", __func__, arg);
