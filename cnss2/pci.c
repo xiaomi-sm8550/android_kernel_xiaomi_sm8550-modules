@@ -177,6 +177,64 @@ static const struct mhi_channel_config cnss_mhi_channels[] = {
 		.doorbell_mode_switch = false,
 		.auto_queue = true,
 	},
+#if IS_ENABLED(CONFIG_MHI_SATELLITE)
+	{
+		.num = 50,
+		.name = "ADSP_0",
+		.num_elements = 64,
+		.event_ring = 3,
+		.dir = DMA_BIDIRECTIONAL,
+		.ee_mask = 0x4,
+		.pollcfg = 0,
+		.doorbell = MHI_DB_BRST_DISABLE,
+		.lpm_notify = false,
+		.offload_channel = true,
+		.doorbell_mode_switch = false,
+		.auto_queue = false,
+	},
+	{
+		.num = 51,
+		.name = "ADSP_1",
+		.num_elements = 64,
+		.event_ring = 3,
+		.dir = DMA_BIDIRECTIONAL,
+		.ee_mask = 0x4,
+		.pollcfg = 0,
+		.doorbell = MHI_DB_BRST_DISABLE,
+		.lpm_notify = false,
+		.offload_channel = true,
+		.doorbell_mode_switch = false,
+		.auto_queue = false,
+	},
+	{
+		.num = 70,
+		.name = "ADSP_2",
+		.num_elements = 64,
+		.event_ring = 3,
+		.dir = DMA_BIDIRECTIONAL,
+		.ee_mask = 0x4,
+		.pollcfg = 0,
+		.doorbell = MHI_DB_BRST_DISABLE,
+		.lpm_notify = false,
+		.offload_channel = true,
+		.doorbell_mode_switch = false,
+		.auto_queue = false,
+	},
+	{
+		.num = 71,
+		.name = "ADSP_3",
+		.num_elements = 64,
+		.event_ring = 3,
+		.dir = DMA_BIDIRECTIONAL,
+		.ee_mask = 0x4,
+		.pollcfg = 0,
+		.doorbell = MHI_DB_BRST_DISABLE,
+		.lpm_notify = false,
+		.offload_channel = true,
+		.doorbell_mode_switch = false,
+		.auto_queue = false,
+	},
+#endif
 };
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0))
@@ -218,10 +276,27 @@ static const struct mhi_event_config cnss_mhi_events[] = {
 		.offload_channel = false,
 	},
 #endif
+#if IS_ENABLED(CONFIG_MHI_SATELLITE)
+	{
+		.num_elements = 256,
+		.irq_moderation_ms = 0,
+		.irq = 2,
+		.mode = MHI_DB_BRST_DISABLE,
+		.data_type = MHI_ER_DATA,
+		.priority = 1,
+		.hardware_event = false,
+		.client_managed = true,
+		.offload_channel = true,
+	},
+#endif
 };
 
 static const struct mhi_controller_config cnss_mhi_config = {
+#if IS_ENABLED(CONFIG_MHI_SATELLITE)
+	.max_channels = 72,
+#else
 	.max_channels = 32,
+#endif
 	.timeout_ms = 10000,
 	.use_bounce_buf = false,
 	.buf_len = 0x8000,
@@ -840,6 +915,12 @@ static int cnss_mhi_force_reset(struct cnss_pci_data *pci_priv)
 {
 	return mhi_force_reset(pci_priv->mhi_ctrl);
 }
+
+static void cnss_mhi_controller_set_base(struct cnss_pci_data *pci_priv,
+					 phys_addr_t base)
+{
+	return mhi_controller_set_base(pci_priv->mhi_ctrl, base);
+}
 #else
 static void cnss_mhi_debug_reg_dump(struct cnss_pci_data *pci_priv)
 {
@@ -888,6 +969,11 @@ cnss_mhi_controller_set_bw_scale_cb(struct cnss_pci_data *pci_priv,
 static int cnss_mhi_force_reset(struct cnss_pci_data *pci_priv)
 {
 	return -EOPNOTSUPP;
+}
+
+static void cnss_mhi_controller_set_base(struct cnss_pci_data *pci_priv,
+					 phys_addr_t base)
+{
 }
 #endif /* CONFIG_MHI_BUS_MISC */
 
@@ -5514,19 +5600,27 @@ static void cnss_dev_rddm_timeout_hdlr(struct timer_list *t)
 {
 	struct cnss_pci_data *pci_priv =
 		from_timer(pci_priv, t, dev_rddm_timer);
+	enum mhi_ee_type mhi_ee;
 
 	if (!pci_priv)
 		return;
 
 	cnss_fatal_err("Timeout waiting for RDDM notification\n");
 
-	if (mhi_get_exec_env(pci_priv->mhi_ctrl) == MHI_EE_PBL)
+	mhi_ee = mhi_get_exec_env(pci_priv->mhi_ctrl);
+	if (mhi_ee == MHI_EE_PBL)
 		cnss_pr_err("Unable to collect ramdumps due to abrupt reset\n");
 
-	cnss_mhi_debug_reg_dump(pci_priv);
-	cnss_pci_soc_scratch_reg_dump(pci_priv);
-
-	cnss_schedule_recovery(&pci_priv->pci_dev->dev, CNSS_REASON_TIMEOUT);
+	if (mhi_ee == MHI_EE_RDDM) {
+		cnss_pr_info("Device MHI EE is RDDM, try to collect dump\n");
+		cnss_schedule_recovery(&pci_priv->pci_dev->dev,
+				       CNSS_REASON_RDDM);
+	} else {
+		cnss_mhi_debug_reg_dump(pci_priv);
+		cnss_pci_soc_scratch_reg_dump(pci_priv);
+		cnss_schedule_recovery(&pci_priv->pci_dev->dev,
+				       CNSS_REASON_TIMEOUT);
+	}
 }
 
 static void cnss_boot_debug_timeout_hdlr(struct timer_list *t)
@@ -5713,6 +5807,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	struct mhi_controller *mhi_ctrl;
+	phys_addr_t bar_start;
 
 	if (pci_priv->device_id == QCA6174_DEVICE_ID)
 		return 0;
@@ -5733,9 +5828,9 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 
 	mhi_ctrl->regs = pci_priv->bar;
 	mhi_ctrl->reg_len = pci_resource_len(pci_priv->pci_dev, PCI_BAR_NUM);
+	bar_start = pci_resource_start(pci_priv->pci_dev, PCI_BAR_NUM);
 	cnss_pr_dbg("BAR starts at %pa, length is %x\n",
-		    &pci_resource_start(pci_priv->pci_dev, PCI_BAR_NUM),
-		    mhi_ctrl->reg_len);
+		    &bar_start, mhi_ctrl->reg_len);
 
 	ret = cnss_pci_get_mhi_msi(pci_priv);
 	if (ret) {
@@ -5770,6 +5865,10 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 		cnss_pr_err("Failed to register to MHI bus, err = %d\n", ret);
 		goto free_mhi_irq;
 	}
+
+	/* MHI satellite driver only needs to connect when DRV is supported */
+	if (cnss_pci_is_drv_supported(pci_priv))
+		cnss_mhi_controller_set_base(pci_priv, bar_start);
 
 	/* BW scale CB needs to be set after registering MHI per requirement */
 	cnss_mhi_controller_set_bw_scale_cb(pci_priv, cnss_mhi_bw_scale);

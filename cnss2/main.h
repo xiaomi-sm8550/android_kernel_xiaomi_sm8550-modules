@@ -27,7 +27,7 @@
 #else
 #include <net/cnss2.h>
 #endif
-#if IS_ENABLED(CONFIG_QCOM_MEMORY_DUMP_V2)
+#if IS_ENABLED(CONFIG_QCOM_MEMORY_DUMP_V2) || IS_ENABLED(CONFIG_QCOM_MINIDUMP)
 #include <soc/qcom/memory_dump.h>
 #endif
 #if IS_ENABLED(CONFIG_MSM_SUBSYSTEM_RESTART) || \
