@@ -59,15 +59,9 @@
 // FW DNLD packet details
 #define FW_MSG_CMD_RSP              0x00
 #define DL_HDR_LEN			(2)
-#define FW_PAYLOAD_LEN_IDX          1
 #define DL_CRC_LEN			(2)
 
 #define NCI_RSP_PKT_TYPE		(0x40)
-#define FW_MIN_PAYLOAD_LEN          4
-#define MIN_NFC_DL_FRAME_SIZE       3
-
-#define GET_VERSION_CMD_LEN			8
-#define GET_SESSION_STATE_CMD_LEN			8
 #define MAX_NCI_PAYLOAD_LEN		(255)
 #define MAX_NCI_BUFFER_SIZE		(NCI_HDR_LEN + MAX_NCI_PAYLOAD_LEN)
 /*
@@ -100,9 +94,9 @@
 // Ioctls
 // The type should be aligned with MW HAL definitions
 
-#define NFC_SET_PWR		_IOW(NFC_MAGIC, 0x01, unsigned int)
-#define ESE_SET_PWR		_IOW(NFC_MAGIC, 0x02, unsigned int)
-#define ESE_GET_PWR		_IOR(NFC_MAGIC, 0x03, unsigned int)
+#define NFC_SET_PWR		_IOW(NFC_MAGIC, 0x01, uint32_t)
+#define ESE_SET_PWR		_IOW(NFC_MAGIC, 0x02, uint32_t)
+#define ESE_GET_PWR		_IOR(NFC_MAGIC, 0x03, uint32_t)
 
 #define DTS_IRQ_GPIO_STR	"qcom,sn-irq"
 #define DTS_VEN_GPIO_STR	"qcom,sn-ven"
