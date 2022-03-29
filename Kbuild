@@ -1,4 +1,8 @@
+ifeq ($(CONFIG_ARCH_QTI_VM), y)
+include $(SSG_MODULE_ROOT)/config/sec-kernel_defconfig_tvm.conf
+else
 include $(SSG_MODULE_ROOT)/config/sec-kernel_defconfig.conf
+endif
 
 LINUXINCLUDE += -I$(SSG_MODULE_ROOT)/ \
                 -I$(SSG_MODULE_ROOT)/linux/
