@@ -1397,6 +1397,7 @@ fail_dma_alloc:
 
 static void __interface_queues_release(struct iris_hfi_device *device)
 {
+#ifdef CONFIG_EVA_LE
 	int i;
 	struct cvp_hfi_mem_map_table *qdss;
 	struct cvp_hfi_mem_map *mem_map;
@@ -1452,7 +1453,7 @@ static void __interface_queues_release(struct iris_hfi_device *device)
 
 	device->mem_addr.align_virtual_addr = NULL;
 	device->mem_addr.align_device_addr = 0;
-
+#endif
 	__interface_dsp_queues_release(device);
 }
 
@@ -1526,82 +1527,30 @@ static void __setup_ucregion_memory_map(struct iris_hfi_device *device)
 	call_iris_op(device, setup_dsp_uc_memmap, device);
 }
 
-static int __interface_queues_init(struct iris_hfi_device *dev)
+static void __hfi_queue_init(struct iris_hfi_device *dev)
 {
+	int i, offset = 0;
 	struct cvp_hfi_queue_table_header *q_tbl_hdr;
-	struct cvp_hfi_queue_header *q_hdr;
-	u32 i;
-	int rc = 0;
-	struct cvp_hfi_mem_map_table *qdss;
-	struct cvp_hfi_mem_map *mem_map;
 	struct cvp_iface_q_info *iface_q;
-	struct cvp_hfi_sfr_struct *vsfr;
-	struct cvp_mem_addr *mem_addr;
-	int offset = 0;
-	int num_entries = dev->res->qdss_addr_set.count;
-	phys_addr_t fw_bias = 0;
-	size_t q_size;
-	unsigned long mem_map_table_base_addr;
-	struct context_bank_info *cb;
+	struct cvp_hfi_queue_header *q_hdr;
 
-	q_size = SHARED_QSIZE - ALIGNED_SFR_SIZE - ALIGNED_QDSS_SIZE;
-	mem_addr = &dev->mem_addr;
-	if (!is_iommu_present(dev->res))
-		fw_bias = dev->cvp_hal_data->firmware_base;
-	rc = __smem_alloc(dev, mem_addr, q_size, 1, SMEM_UNCACHED);
-	if (rc) {
-		dprintk(CVP_ERR, "iface_q_table_alloc_fail\n");
-		goto fail_alloc_queue;
-	}
+	if (!dev)
+		return;
 
-	dev->iface_q_table.align_virtual_addr = mem_addr->align_virtual_addr;
-	dev->iface_q_table.align_device_addr = mem_addr->align_device_addr -
-					fw_bias;
-	dev->iface_q_table.mem_size = CVP_IFACEQ_TABLE_SIZE;
-	dev->iface_q_table.mem_data = mem_addr->mem_data;
 	offset += dev->iface_q_table.mem_size;
 
 	for (i = 0; i < CVP_IFACEQ_NUMQ; i++) {
 		iface_q = &dev->iface_queues[i];
-		iface_q->q_array.align_device_addr = mem_addr->align_device_addr
-			+ offset - fw_bias;
+		iface_q->q_array.align_device_addr =
+			dev->iface_q_table.align_device_addr + offset;
 		iface_q->q_array.align_virtual_addr =
-			mem_addr->align_virtual_addr + offset;
+			dev->iface_q_table.align_virtual_addr + offset;
 		iface_q->q_array.mem_size = CVP_IFACEQ_QUEUE_SIZE;
 		offset += iface_q->q_array.mem_size;
 		iface_q->q_hdr = CVP_IFACEQ_GET_QHDR_START_ADDR(
 				dev->iface_q_table.align_virtual_addr, i);
 		__set_queue_hdr_defaults(iface_q->q_hdr);
 		spin_lock_init(&iface_q->hfi_lock);
-	}
-
-	if ((msm_cvp_fw_debug_mode & HFI_DEBUG_MODE_QDSS) && num_entries) {
-		rc = __smem_alloc(dev, mem_addr, ALIGNED_QDSS_SIZE, 1,
-				SMEM_UNCACHED);
-		if (rc) {
-			dprintk(CVP_WARN,
-				"qdss_alloc_fail: QDSS messages logging will not work\n");
-			dev->qdss.align_device_addr = 0;
-		} else {
-			dev->qdss.align_device_addr =
-				mem_addr->align_device_addr - fw_bias;
-			dev->qdss.align_virtual_addr =
-				mem_addr->align_virtual_addr;
-			dev->qdss.mem_size = ALIGNED_QDSS_SIZE;
-			dev->qdss.mem_data = mem_addr->mem_data;
-		}
-	}
-
-	rc = __smem_alloc(dev, mem_addr, ALIGNED_SFR_SIZE, 1, SMEM_UNCACHED);
-	if (rc) {
-		dprintk(CVP_WARN, "sfr_alloc_fail: SFR not will work\n");
-		dev->sfr.align_device_addr = 0;
-	} else {
-		dev->sfr.align_device_addr = mem_addr->align_device_addr -
-					fw_bias;
-		dev->sfr.align_virtual_addr = mem_addr->align_virtual_addr;
-		dev->sfr.mem_size = ALIGNED_SFR_SIZE;
-		dev->sfr.mem_data = mem_addr->mem_data;
 	}
 
 	q_tbl_hdr = (struct cvp_hfi_queue_table_header *)
@@ -1636,6 +1585,98 @@ static int __interface_queues_init(struct iris_hfi_device *dev)
 	 */
 	q_hdr->qhdr_rx_req = 0;
 
+}
+
+static void __sfr_init(struct iris_hfi_device *dev)
+{
+	struct cvp_hfi_sfr_struct *vsfr;
+
+	if (!dev)
+		return;
+
+	vsfr = (struct cvp_hfi_sfr_struct *) dev->sfr.align_virtual_addr;
+	if (vsfr)
+		vsfr->bufSize = ALIGNED_SFR_SIZE;
+
+}
+
+static int __interface_queues_init(struct iris_hfi_device *dev)
+{
+	int rc = 0;
+	struct cvp_hfi_mem_map_table *qdss;
+	struct cvp_hfi_mem_map *mem_map;
+	struct cvp_mem_addr *mem_addr;
+	int num_entries = dev->res->qdss_addr_set.count;
+	phys_addr_t fw_bias = 0;
+	size_t q_size;
+	unsigned long mem_map_table_base_addr;
+	struct context_bank_info *cb;
+
+	q_size = SHARED_QSIZE - ALIGNED_SFR_SIZE - ALIGNED_QDSS_SIZE;
+	mem_addr = &dev->mem_addr;
+	if (!is_iommu_present(dev->res))
+		fw_bias = dev->cvp_hal_data->firmware_base;
+
+	if (dev->iface_q_table.align_virtual_addr) {
+		memset((void *)dev->iface_q_table.align_virtual_addr,
+				0, q_size);
+		goto hfi_queue_init;
+	}
+	rc = __smem_alloc(dev, mem_addr, q_size, 1, SMEM_UNCACHED);
+	if (rc) {
+		dprintk(CVP_ERR, "iface_q_table_alloc_fail\n");
+		goto fail_alloc_queue;
+	}
+
+	dev->iface_q_table.align_virtual_addr = mem_addr->align_virtual_addr;
+	dev->iface_q_table.align_device_addr = mem_addr->align_device_addr -
+					fw_bias;
+	dev->iface_q_table.mem_size = CVP_IFACEQ_TABLE_SIZE;
+	dev->iface_q_table.mem_data = mem_addr->mem_data;
+
+hfi_queue_init:
+	__hfi_queue_init(dev);
+
+	if (dev->sfr.align_virtual_addr) {
+		memset((void *)dev->sfr.align_virtual_addr,
+				0, ALIGNED_SFR_SIZE);
+		goto sfr_init;
+	}
+	rc = __smem_alloc(dev, mem_addr, ALIGNED_SFR_SIZE, 1, SMEM_UNCACHED);
+	if (rc) {
+		dprintk(CVP_WARN, "sfr_alloc_fail: SFR not will work\n");
+		dev->sfr.align_device_addr = 0;
+	} else {
+		dev->sfr.align_device_addr = mem_addr->align_device_addr -
+					fw_bias;
+		dev->sfr.align_virtual_addr = mem_addr->align_virtual_addr;
+		dev->sfr.mem_size = ALIGNED_SFR_SIZE;
+		dev->sfr.mem_data = mem_addr->mem_data;
+	}
+sfr_init:
+	__sfr_init(dev);
+
+	if (dev->qdss.align_virtual_addr)
+		goto dsp_hfi_queue_init;
+
+	if ((msm_cvp_fw_debug_mode & HFI_DEBUG_MODE_QDSS) && num_entries) {
+		rc = __smem_alloc(dev, mem_addr, ALIGNED_QDSS_SIZE, 1,
+				SMEM_UNCACHED);
+		if (rc) {
+			dprintk(CVP_WARN,
+				"qdss_alloc_fail: QDSS messages logging will not work\n");
+			dev->qdss.align_device_addr = 0;
+		} else {
+			dev->qdss.align_device_addr =
+				mem_addr->align_device_addr - fw_bias;
+			dev->qdss.align_virtual_addr =
+				mem_addr->align_virtual_addr;
+			dev->qdss.mem_size = ALIGNED_QDSS_SIZE;
+			dev->qdss.mem_data = mem_addr->mem_data;
+		}
+	}
+
+
 	if (dev->qdss.align_virtual_addr) {
 		qdss =
 		(struct cvp_hfi_mem_map_table *)dev->qdss.align_virtual_addr;
@@ -1662,10 +1703,7 @@ static int __interface_queues_init(struct iris_hfi_device *dev)
 		}
 	}
 
-	vsfr = (struct cvp_hfi_sfr_struct *) dev->sfr.align_virtual_addr;
-	if (vsfr)
-		vsfr->bufSize = ALIGNED_SFR_SIZE;
-
+dsp_hfi_queue_init:
 	rc = __interface_dsp_queues_init(dev);
 	if (rc) {
 		dprintk(CVP_ERR, "dsp_queues_init failed\n");
