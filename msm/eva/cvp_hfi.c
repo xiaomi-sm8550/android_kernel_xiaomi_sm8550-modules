@@ -8,7 +8,6 @@
 #include <linux/delay.h>
 #include <linux/devfreq.h>
 #include <linux/hash.h>
-#include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/iommu.h>
 #include <linux/iopoll.h>
@@ -31,9 +30,9 @@
 #include "cvp_hfi_io.h"
 #include "msm_cvp_dsp.h"
 #include "msm_cvp_clocks.h"
+#include "msm_cvp_vm.h"
 #include "cvp_dump.h"
 
-#define FIRMWARE_SIZE			0X00A00000
 #define REG_ADDR_OFFSET_BITMASK	0x000FFFFF
 #define QDSS_IOVA_START 0x80001000
 #define MIN_PAYLOAD_SIZE 3
@@ -2399,48 +2398,6 @@ static int iris_hfi_session_flush(void *sess)
 	return rc;
 }
 
-static int __check_core_registered(struct iris_hfi_device *device,
-		phys_addr_t fw_addr, u8 *reg_addr, u32 reg_size,
-		phys_addr_t irq)
-{
-	struct cvp_hal_data *cvp_hal_data;
-
-	if (!device) {
-		dprintk(CVP_INFO, "no device Registered\n");
-		return -EINVAL;
-	}
-
-	cvp_hal_data = device->cvp_hal_data;
-	if (!cvp_hal_data)
-		return -EINVAL;
-
-	if (cvp_hal_data->irq == irq &&
-		(CONTAINS(cvp_hal_data->firmware_base,
-				FIRMWARE_SIZE, fw_addr) ||
-		CONTAINS(fw_addr, FIRMWARE_SIZE,
-				cvp_hal_data->firmware_base) ||
-		CONTAINS(cvp_hal_data->register_base,
-				reg_size, reg_addr) ||
-		CONTAINS(reg_addr, reg_size,
-				cvp_hal_data->register_base) ||
-		OVERLAPS(cvp_hal_data->register_base,
-				reg_size, reg_addr, reg_size) ||
-		OVERLAPS(reg_addr, reg_size,
-				cvp_hal_data->register_base,
-				reg_size) ||
-		OVERLAPS(cvp_hal_data->firmware_base,
-				FIRMWARE_SIZE, fw_addr,
-				FIRMWARE_SIZE) ||
-		OVERLAPS(fw_addr, FIRMWARE_SIZE,
-				cvp_hal_data->firmware_base,
-				FIRMWARE_SIZE))) {
-		return 0;
-	}
-
-	dprintk(CVP_INFO, "Device not registered\n");
-	return -EINVAL;
-}
-
 static void __process_fatal_error(
 		struct iris_hfi_device *device)
 {
@@ -3049,79 +3006,13 @@ err_no_work:
 
 static DECLARE_WORK(iris_hfi_work, iris_hfi_core_work_handler);
 
-static irqreturn_t iris_hfi_isr(int irq, void *dev)
+irqreturn_t cvp_hfi_isr(int irq, void *dev)
 {
 	struct iris_hfi_device *device = dev;
 
 	disable_irq_nosync(irq);
 	queue_work(device->cvp_workq, &iris_hfi_work);
 	return IRQ_HANDLED;
-}
-
-static int __init_regs_and_interrupts(struct iris_hfi_device *device,
-		struct msm_cvp_platform_resources *res)
-{
-	struct cvp_hal_data *hal = NULL;
-	int rc = 0;
-
-	rc = __check_core_registered(device, res->firmware_base,
-			(u8 *)(uintptr_t)res->register_base,
-			res->register_size, res->irq);
-	if (!rc) {
-		dprintk(CVP_ERR, "Core present/Already added\n");
-		rc = -EEXIST;
-		goto err_core_init;
-	}
-
-	hal = kzalloc(sizeof(*hal), GFP_KERNEL);
-	if (!hal) {
-		dprintk(CVP_ERR, "Failed to alloc\n");
-		rc = -ENOMEM;
-		goto err_core_init;
-	}
-
-	hal->irq = res->irq;
-	hal->firmware_base = res->firmware_base;
-	hal->register_base = devm_ioremap(&res->pdev->dev,
-			res->register_base, res->register_size);
-	hal->register_size = res->register_size;
-	if (!hal->register_base) {
-		dprintk(CVP_ERR,
-			"could not map reg addr %pa of size %d\n",
-			&res->register_base, res->register_size);
-		goto error_irq_fail;
-	}
-
-	if (res->gcc_reg_base) {
-		hal->gcc_reg_base = devm_ioremap(&res->pdev->dev,
-				res->gcc_reg_base, res->gcc_reg_size);
-		hal->gcc_reg_size = res->gcc_reg_size;
-		if (!hal->gcc_reg_base)
-			dprintk(CVP_ERR,
-				"could not map gcc reg addr %pa of size %d\n",
-				&res->gcc_reg_base, res->gcc_reg_size);
-	}
-
-	device->cvp_hal_data = hal;
-	rc = request_irq(res->irq, iris_hfi_isr, IRQF_TRIGGER_HIGH,
-			"msm_cvp", device);
-	if (unlikely(rc)) {
-		dprintk(CVP_ERR, "() :request_irq failed\n");
-		goto error_irq_fail;
-	}
-
-	disable_irq_nosync(res->irq);
-	dprintk(CVP_INFO,
-		"firmware_base = %pa, register_base = %pa, register_size = %d\n",
-		&res->firmware_base, &res->register_base,
-		res->register_size);
-	return rc;
-
-error_irq_fail:
-	kfree(hal);
-err_core_init:
-	return rc;
-
 }
 
 static int __handle_reset_clk(struct msm_cvp_platform_resources *res,
@@ -4657,7 +4548,7 @@ static struct iris_hfi_device *__add_device(u32 device_id,
 		goto err_cleanup;
 	}
 
-	rc = __init_regs_and_interrupts(hdevice, res);
+	rc = vm_manager.vm_ops->vm_init_reg_and_irq(hdevice, res);
 	if (rc)
 		goto err_cleanup;
 
