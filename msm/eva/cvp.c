@@ -26,6 +26,7 @@
 #include "msm_cvp_clocks.h"
 #include "msm_cvp_dsp.h"
 #include "msm_cvp.h"
+#include "msm_cvp_vm.h"
 
 #define CLASS_NAME              "cvp"
 #define DRIVER_NAME             "cvp"
@@ -399,6 +400,9 @@ static int msm_probe_cvp_device(struct platform_device *pdev)
 				"Failed to create attributes\n");
 		goto err_cores_exceeded;
 	}
+
+	/* VM manager shall be started before HFI init */
+	vm_manager.vm_ops->vm_start(core);
 
 	core->device = cvp_hfi_initialize(core->hfi_type, core->id,
 				&core->resources, &cvp_handle_cmd_response);

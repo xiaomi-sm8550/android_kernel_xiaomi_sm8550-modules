@@ -1155,8 +1155,6 @@ int msm_cvp_comm_suspend(int core_id)
 	}
 
 	rc = call_hfi_op(hdev, suspend, hdev->hfi_device_data);
-	if (rc)
-		dprintk(CVP_WARN, "Failed to suspend\n");
 
 	return rc;
 }
