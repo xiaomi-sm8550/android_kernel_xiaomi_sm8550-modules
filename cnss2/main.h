@@ -57,6 +57,7 @@
 #define FW_V2_NUMBER                    2
 #define POWER_ON_RETRY_MAX_TIMES        3
 #define POWER_ON_RETRY_DELAY_MS         500
+#define WLFW_MAX_HANG_EVENT_DATA_SIZE   384
 
 #define CNSS_EVENT_SYNC   BIT(0)
 #define CNSS_EVENT_UNINTERRUPTIBLE BIT(1)
@@ -541,6 +542,8 @@ struct cnss_plat_data {
 	bool adsp_pc_enabled;
 	u64 feature_list;
 	u32 is_converged_dt;
+	u16 hang_event_data_len;
+	u32 hang_data_addr_offset;
 };
 
 #if IS_ENABLED(CONFIG_ARCH_QCOM)
