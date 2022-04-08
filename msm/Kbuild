@@ -4,7 +4,7 @@ LINUXINCLUDE    += -I$(EVA_ROOT)/include \
 
 #srctree is /kernel_platform/common/
 
-ccflags-y += -I$(srctree)/techpack/eva/msm/eva/ \
+ccflags-y += -I$(EVA_ROOT)/msm/eva/ \
     -I$(srctree)/drivers/media/platform/msm/synx/
 
 # add flag to compile mmrm actual implementatio instead of stub version.
@@ -29,7 +29,7 @@ ccflags-y += -DCONFIG_EVA_KALAMA=1
 endif
 
 ifeq ($(CONFIG_EVA_LE), 1)
-ccflags-y += -DCONFIG_EVA_LE=1
+ccflags-y += -DCONFIG_EVA_TVM=1
 endif
 
 msm-eva-objs := eva/cvp.o \
@@ -38,7 +38,7 @@ msm-eva-objs := eva/cvp.o \
         eva/msm_cvp_common.o \
         eva/msm_cvp_core.o \
         eva/msm_cvp.o \
-        eva/msm_smem.o \
+        eva/cvp_smem.o \
         eva/msm_cvp_debug.o \
         eva/msm_cvp_res_parse.o \
         eva/cvp_dump.o \
@@ -51,6 +51,8 @@ msm-eva-objs := eva/cvp.o \
         eva/msm_cvp_buf.o \
         eva/msm_cvp_synx.o \
 	eva/cvp_fw_load.o \
-	eva/msm_cvp_vm.o
+	eva/vm/cvp_vm_main.o \
+	eva/vm/cvp_vm_msgq.o \
+	eva/vm/cvp_vm_resource.o
 obj-m += msm-eva.o
 

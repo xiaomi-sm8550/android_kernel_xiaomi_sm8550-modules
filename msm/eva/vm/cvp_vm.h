@@ -3,14 +3,16 @@
  * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#ifndef _MSM_CVP_VM_H_
-#define _MSM_CVP_VM_H_
+#ifndef _CVP_VM_H_
+#define _CVP_VM_H_
 
 #include <linux/types.h>
 #include "cvp_comm_def.h"
 #include "msm_cvp_core.h"
 #include "msm_cvp_internal.h"
 #include "cvp_core_hfi.h"
+#include "cvp_vm_msgq.h"
+#include "cvp_vm_resource.h"
 
 enum cvp_vm_id {
 	VM_PRIMARY = 1,
@@ -34,6 +36,8 @@ struct msm_cvp_vm_ops {
 struct msm_cvp_vm_manager {
 	enum cvp_vm_state vm_state;
 	enum cvp_vm_id vm_id;
+	struct cvp_msgq_drv *msgq_drv;
+	struct cvp_vm_resource *vm_rm;
 	struct msm_cvp_vm_ops *vm_ops;
 };
 

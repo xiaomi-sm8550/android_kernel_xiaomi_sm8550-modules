@@ -26,7 +26,7 @@
 #include "msm_cvp_clocks.h"
 #include "msm_cvp_dsp.h"
 #include "msm_cvp.h"
-#include "msm_cvp_vm.h"
+#include "vm/cvp_vm.h"
 
 #define CLASS_NAME              "cvp"
 #define DRIVER_NAME             "cvp"

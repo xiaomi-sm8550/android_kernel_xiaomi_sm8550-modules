@@ -30,7 +30,7 @@
 #include "msm_cvp_dsp.h"
 #include "msm_cvp_clocks.h"
 #include "cvp_dump.h"
-#include "msm_cvp_vm.h"
+#include "cvp_vm.h"
 
 #define FIRMWARE_SIZE			0X00A00000
 
@@ -44,6 +44,8 @@ static struct msm_cvp_vm_ops vm_ops = {
 };
 
 struct msm_cvp_vm_manager vm_manager = {
+	.msgq_drv = &cvp_ipc_msgq,
+	.vm_rm = &cvp_vm_rm,
 	.vm_ops = &vm_ops,
 };
 

@@ -7,6 +7,7 @@
 #define _MSM_COMM_DEF_H_
 
 #include <linux/types.h>
+#include <linux/gunyah/gh_rm_drv.h>
 
 enum op_mode {
 	OP_NORMAL,
@@ -23,7 +24,7 @@ enum queue_state {
 	QUEUE_INVALID,
 };
 
-#ifdef CONFIG_EVA_LE
+#ifdef CONFIG_EVA_TVM
 
 #else	/* LA target starts here */
 
@@ -35,6 +36,6 @@ enum queue_state {
 #define CVP_MINIDUMP_ENABLED 1
 #endif
 
-#endif	/* End CONFIG_EVA_LE */
+#endif	/* End CONFIG_EVA_TVM */
 
 #endif
