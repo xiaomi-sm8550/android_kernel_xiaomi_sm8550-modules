@@ -375,12 +375,7 @@ int nfc_i2c_dev_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	nfc_dev->nfc_write = i2c_write;
 	nfc_dev->nfc_enable_intr = i2c_enable_irq;
 	nfc_dev->nfc_disable_intr = i2c_disable_irq;
-	ret = configure_gpio(nfc_gpio->ven, GPIO_OUTPUT);
-	if (ret) {
-		pr_err("%s: unable to request nfc reset gpio [%d]\n", __func__,
-		       nfc_gpio->ven);
-		goto err_free_write_kbuf;
-	}
+
 	ret = configure_gpio(nfc_gpio->irq, GPIO_IRQ);
 	if (ret <= 0) {
 		pr_err("%s: unable to request nfc irq gpio [%d]\n", __func__,
@@ -388,11 +383,7 @@ int nfc_i2c_dev_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		goto err_free_gpio;
 	}
 	client->irq = ret;
-	ret = configure_gpio(nfc_gpio->dwl_req, GPIO_OUTPUT);
-	if (ret) {
-		pr_err("%s: unable to request nfc firm downl gpio [%d]\n",
-		       __func__, nfc_gpio->dwl_req);
-	}
+
 	/* init mutex and queues */
 	init_waitqueue_head(&nfc_dev->read_wq);
 	mutex_init(&nfc_dev->read_mutex);
@@ -421,20 +412,13 @@ int nfc_i2c_dev_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		pr_err("LDO config failed\n");
 		goto err_ldo_config_failed;
 	}
-	ret = nfcc_hw_check(nfc_dev);
-	if (ret || nfc_dev->nfc_state == NFC_STATE_UNKNOWN) {
-		pr_err("nfc hw check failed ret %d\n", ret);
-		goto err_nfcc_hw_check;
-	}
 
 	if(nfc_dev->configs.clk_pin_voting)
 		nfc_dev->clk_run = false;
 	else
 		nfc_dev->clk_run = true;
 
-	gpio_set_ven(nfc_dev, 1);
-	gpio_set_ven(nfc_dev, 0);
-	gpio_set_ven(nfc_dev, 1);
+
 	device_init_wakeup(&client->dev, true);
 	i2c_set_clientdata(client, nfc_dev);
 	i2c_dev->irq_wake_up = false;
@@ -443,11 +427,7 @@ int nfc_i2c_dev_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	pr_info("%s: probing nfc i2c successfully\n", __func__);
 	return 0;
 
-err_nfcc_hw_check:
-	if (nfc_dev->reg) {
-		nfc_ldo_unvote(nfc_dev);
-		regulator_put(nfc_dev->reg);
-	}
+
 err_ldo_config_failed:
 	free_irq(client->irq, nfc_dev);
 err_nfc_misc_unregister:
@@ -458,7 +438,6 @@ err_mutex_destroy:
 	mutex_destroy(&nfc_dev->write_mutex);
 err_free_gpio:
 	gpio_free_all(nfc_dev);
-err_free_write_kbuf:
 	kfree(nfc_dev->write_kbuf);
 err_free_read_kbuf:
 	kfree(nfc_dev->read_kbuf);

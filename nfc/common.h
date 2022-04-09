@@ -98,6 +98,7 @@
 #define NFC_SET_PWR		_IOW(NFC_MAGIC, 0x01, uint32_t)
 #define ESE_SET_PWR		_IOW(NFC_MAGIC, 0x02, uint32_t)
 #define ESE_GET_PWR		_IOR(NFC_MAGIC, 0x03, uint32_t)
+#define NFC_SECURE_ZONE		_IOW(NFC_MAGIC, 0x0A, uint32_t)
 
 #define DTS_IRQ_GPIO_STR	"qcom,sn-irq"
 #define DTS_VEN_GPIO_STR	"qcom,sn-ven"
@@ -129,6 +130,9 @@ do { \
 			pr_err(x); \
 	} \
 } while (0)
+
+static struct semaphore sem_eSE_pwr_off;
+static chk_eSE_pwr_off;
 
 enum ese_ioctl_request {
 	/* eSE POWER ON */
@@ -297,4 +301,6 @@ int is_nfc_data_available_for_read(struct nfc_dev *nfc_dev);
 int validate_nfc_state_nci(struct nfc_dev *nfc_dev);
 int nfc_clock_select(struct nfc_dev *nfc_dev);
 int nfc_clock_deselect(struct nfc_dev *nfc_dev);
+int nfc_post_init(struct nfc_dev *nfc_dev);
+int nfc_dynamic_protection_ioctl(struct nfc_dev *nfc_dev, unsigned long sec_zone_trans);
 #endif /* _COMMON_H_ */

@@ -27,6 +27,8 @@
 
 #include "common.h"
 
+static int secure_zone = 1;
+
 int nfc_parse_dt(struct device *dev, struct platform_configs *nfc_configs,
 		 uint8_t interface)
 {
@@ -386,6 +388,120 @@ long nfc_dev_compat_ioctl(struct file *pfile, unsigned int cmd,
 #endif
 
 /**
+ * nfc_post_init() - Configuraing Ven GPIO and hardware check
+ * @nfc_dev:    nfc device data structure
+ *
+ * Configure GPIOs post notification from TZ, ensuring it's a non-secure zone.
+ *
+ * Return: 0 if Success(or no issue) and error ret code otherwise
+ */
+int nfc_post_init(struct nfc_dev *nfc_dev)
+{
+	int ret=0;
+	struct platform_configs nfc_configs;
+	struct platform_gpio *nfc_gpio;
+
+	if (!nfc_dev)
+		return -ENODEV;
+
+	memcpy(&nfc_configs, &nfc_dev->configs, sizeof(struct platform_configs));
+	nfc_gpio = &nfc_configs.gpio;
+
+	ret = configure_gpio(nfc_gpio->ven, GPIO_OUTPUT);
+	if (ret) {
+		pr_err("%s: unable to request nfc reset gpio [%d]\n",
+			__func__, nfc_gpio->ven);
+		return ret;
+	}
+
+	ret = configure_gpio(nfc_gpio->dwl_req, GPIO_OUTPUT);
+	if (ret) {
+		pr_err("%s: unable to request nfc firm downl gpio [%d]\n",
+			__func__, nfc_gpio->dwl_req);
+	}
+
+	ret = nfcc_hw_check(nfc_dev);
+	if (ret || nfc_dev->nfc_state == NFC_STATE_UNKNOWN) {
+		pr_err("nfc hw check failed ret %d\n", ret);
+		gpio_free(nfc_gpio->dwl_req);
+		gpio_free(nfc_gpio->ven);
+		return ret;
+	}
+
+	/*Initialising sempahore to disbale NFC Ven GPIO only after eSE is power off flag is set */
+	sema_init(&sem_eSE_pwr_off,0);
+
+	pr_info("%s success\n", __func__);
+	return 0;
+
+
+}
+
+/**
+ * nfc_dynamic_protection_ioctl() - dynamic protection control
+ * @nfc_dev:    nfc device data structure
+ * @sec_zone_trans:    mode that we want to move to
+ * If sec_zone_trans = 1; transition from non-secure zone to secure zone
+ * If sec_zone_trans = 0; transition from secure zone to non - secure zone
+ *
+ * nfc  periheral  dynamic protection control. Depending on the sec_zone_trans value, device moves to
+ * secure zone and non-secure  zone
+ *
+ * Return: -ENOIOCTLCMD if sec_zone_trans val is not supported, 0 if Success(or no issue)
+ * and error ret code otherwise
+ */
+int nfc_dynamic_protection_ioctl(struct nfc_dev *nfc_dev, unsigned long sec_zone_trans)
+{
+	int ret = 0;
+
+	static int init_flag=1;
+
+	struct platform_gpio *nfc_gpio = &nfc_dev->configs.gpio;
+
+	if(sec_zone_trans == 1) {
+		/*check NFC is disabled, only then set Ven GPIO low*/
+		if(nfc_dev->cold_reset.is_nfc_enabled == false) {
+			pr_debug("%s: value %d\n", __func__, gpio_get_value(nfc_gpio->ven));
+
+			chk_eSE_pwr_off = 1;
+			/*check if eSE is active, if yes, wait max of 1sec, until it's inactive  */
+			if(nfc_dev->is_ese_session_active == true) {
+				if(down_timeout(&sem_eSE_pwr_off, msecs_to_jiffies(1000))) {
+					/*waited for 1sec yet eSE not turned off, so, ignoring eSE power off*/
+					pr_info("Forcefull shutdown of eSE\n");
+				}
+			}
+			ret = nfc_ioctl_power_states(nfc_dev, 0);
+			/*set driver as secure zone, such that no ioctl calls are allowed*/
+			secure_zone=1;
+			pr_info("Driver Secure flag set successful\n");
+		} else {
+			ret = -1;
+		}
+	}
+	else if(sec_zone_trans == 0) {
+		chk_eSE_pwr_off = 0;
+		secure_zone=0;
+
+		if(init_flag) {
+			/*Initialize once,only during the  first non-secure entry*/
+			ret = nfc_post_init(nfc_dev);
+			if(ret == 0)
+				init_flag=0;
+		}
+		else {
+			ret = nfc_ioctl_power_states(nfc_dev, 1);
+		}
+		pr_info("Func Driver Secure flag clear successful\n");
+	} else {
+		pr_info("INVALID ARG\n");
+		ret = -ENOIOCTLCMD;
+	}
+
+	return ret;
+}
+
+/**
  * nfc_dev_ioctl - used to set or get data from upper layer.
  * @pfile   file node for opened device.
  * @cmd     ioctl type from upper layer.
@@ -406,6 +522,14 @@ long nfc_dev_ioctl(struct file *pfile, unsigned int cmd, unsigned long arg)
 	if (!nfc_dev)
 		return -ENODEV;
 
+	/*Avoiding ioctl call in secure zone*/
+	if(secure_zone) {
+		if(cmd!=NFC_SECURE_ZONE) {
+			pr_debug("nfc_dev_ioctl failed\n");
+			return -1;
+		}
+	}
+
 	pr_debug("%s: cmd = %x arg = %zx\n", __func__, cmd, arg);
 	switch (cmd) {
 	case NFC_SET_PWR:
@@ -423,6 +547,9 @@ long nfc_dev_ioctl(struct file *pfile, unsigned int cmd, unsigned long arg)
 	case ESE_COLD_RESET:
 		pr_debug("nfc ese cold reset ioctl\n");
 		ret = ese_cold_reset_ioctl(nfc_dev, arg);
+		break;
+	case NFC_SECURE_ZONE:
+		ret = nfc_dynamic_protection_ioctl(nfc_dev, arg);
 		break;
 	default:
 		pr_err("%s: bad cmd %lu\n", __func__, arg);
