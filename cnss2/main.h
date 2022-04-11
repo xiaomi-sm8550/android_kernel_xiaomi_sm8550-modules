@@ -111,6 +111,7 @@ struct cnss_pinctrl_info {
 	struct pinctrl_state *wlan_en_sleep;
 	int bt_en_gpio;
 	int xo_clk_gpio; /*qca6490 only */
+	int wlan_sw_ctrl_gpio;
 };
 
 #if IS_ENABLED(CONFIG_MSM_SUBSYSTEM_RESTART)
@@ -536,6 +537,7 @@ struct cnss_plat_data {
 	const char *vreg_ol_cpr, *vreg_ipa;
 	bool adsp_pc_enabled;
 	u64 feature_list;
+	u32 is_converged_dt;
 };
 
 #if IS_ENABLED(CONFIG_ARCH_QCOM)
@@ -577,6 +579,7 @@ void cnss_put_clk(struct cnss_plat_data *plat_priv);
 int cnss_vreg_unvote_type(struct cnss_plat_data *plat_priv,
 			  enum cnss_vreg_type type);
 int cnss_get_pinctrl(struct cnss_plat_data *plat_priv);
+int cnss_get_wlan_sw_ctrl(struct cnss_plat_data *plat_priv);
 int cnss_power_on_device(struct cnss_plat_data *plat_priv);
 void cnss_power_off_device(struct cnss_plat_data *plat_priv);
 bool cnss_is_device_powered_on(struct cnss_plat_data *plat_priv);

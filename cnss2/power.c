@@ -65,6 +65,7 @@ static struct cnss_clk_cfg cnss_clk_list[] = {
 #define WLAN_EN_GPIO			"wlan-en-gpio"
 #define BT_EN_GPIO			"qcom,bt-en-gpio"
 #define XO_CLK_GPIO			"qcom,xo-clk-gpio"
+#define WLAN_SW_CTRL_GPIO		"qcom,wlan-sw-ctrl-gpio"
 #define WLAN_EN_ACTIVE			"wlan_en_active"
 #define WLAN_EN_SLEEP			"wlan_en_sleep"
 
@@ -787,6 +788,27 @@ int cnss_get_pinctrl(struct cnss_plat_data *plat_priv)
 	return 0;
 out:
 	return ret;
+}
+
+int cnss_get_wlan_sw_ctrl(struct cnss_plat_data *plat_priv)
+{
+	struct device *dev;
+	struct cnss_pinctrl_info *pinctrl_info;
+
+	dev = &plat_priv->plat_dev->dev;
+	pinctrl_info = &plat_priv->pinctrl_info;
+
+	if (of_find_property(dev->of_node, WLAN_SW_CTRL_GPIO, NULL)) {
+		pinctrl_info->wlan_sw_ctrl_gpio = of_get_named_gpio(dev->of_node,
+								    WLAN_SW_CTRL_GPIO,
+								    0);
+		cnss_pr_dbg("WLAN Switch control GPIO: %d\n",
+			    pinctrl_info->wlan_sw_ctrl_gpio);
+	} else {
+		pinctrl_info->wlan_sw_ctrl_gpio = -EINVAL;
+	}
+
+	return 0;
 }
 
 #define CNSS_XO_CLK_RETRY_COUNT_MAX 5
