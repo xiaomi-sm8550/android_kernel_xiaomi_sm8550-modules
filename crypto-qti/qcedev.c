@@ -476,7 +476,7 @@ static int start_cipher_req(struct qcedev_control *podev,
 	ret = qce_ablk_cipher_req(podev->qce, &creq);
 	*current_req_info = creq.current_req_info;
 unsupported:
-	qcedev_areq->err = ret ? -ENXIO : 0
+	qcedev_areq->err = ret ? -ENXIO : 0;
 
 	return ret;
 };
@@ -584,7 +584,7 @@ static int start_offload_cipher_req(struct qcedev_control *podev,
 	ret = qce_ablk_cipher_req(podev->qce, &creq);
 
 	*current_req_info = creq.current_req_info;
-	qcedev_areq->err = ret ? -ENXIO : 0
+	qcedev_areq->err = ret ? -ENXIO : 0;
 
 	return ret;
 }
@@ -660,7 +660,7 @@ static int start_sha_req(struct qcedev_control *podev,
 	ret = qce_process_sha_req(podev->qce, &sreq);
 
 	*current_req_info = sreq.current_req_info;
-	qcedev_areq->err = ret ? -ENXIO : 0
+	qcedev_areq->err = ret ? -ENXIO : 0;
 
 	return ret;
 };
