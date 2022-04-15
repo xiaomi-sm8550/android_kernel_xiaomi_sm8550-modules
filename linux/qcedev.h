@@ -58,12 +58,14 @@ enum qcedev_offload_oper_enum {
  *qcedev_offload_err_enum: Offload error conditions
  * @QCEDEV_OFFLOAD_NO_ERROR:        Successful crypto operation.
  * @QCEDEV_OFFLOAD_GENERIC_ERROR:   Generic error in crypto status.
- * @QCEDEV_OFFLOAD_TIMER_ERROR:     Pipe key timer errors in crypto status.
+ * @QCEDEV_OFFLOAD_TIMER_EXPIRED_ERROR:     Pipe key timer expired.
+ * @QCEDEV_OFFLOAD_KEY_PAUSE_ERROR:     Pipe key pause (means GPCE is paused).
  */
 enum qcedev_offload_err_enum {
 	QCEDEV_OFFLOAD_NO_ERROR = 0,
 	QCEDEV_OFFLOAD_GENERIC_ERROR = 1,
-	QCEDEV_OFFLOAD_TIMER_ERROR = 2
+	QCEDEV_OFFLOAD_KEY_TIMER_EXPIRED_ERROR = 2,
+	QCEDEV_OFFLOAD_KEY_PAUSE_ERROR = 3
 };
 
 /**
