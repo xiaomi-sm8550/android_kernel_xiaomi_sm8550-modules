@@ -5,3 +5,4 @@
  */
 
 #define CONFIG_MSM_EXT_DISPLAY 1
+#define CONFIG_QCOM_SPEC_SYNC 1
