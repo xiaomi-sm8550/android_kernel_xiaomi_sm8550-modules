@@ -112,6 +112,7 @@ struct cnss_pinctrl_info {
 	struct pinctrl_state *wlan_en_sleep;
 	int bt_en_gpio;
 	int xo_clk_gpio; /*qca6490 only */
+	int sw_ctrl_gpio;
 	int wlan_sw_ctrl_gpio;
 };
 
@@ -630,4 +631,5 @@ int cnss_clear_feature_list(struct cnss_plat_data *plat_priv,
 			    enum cnss_feature_v01 feature);
 int cnss_get_feature_list(struct cnss_plat_data *plat_priv,
 			  u64 *feature_list);
+int cnss_get_input_gpio_value(struct cnss_plat_data *plat_priv, int gpio_num);
 #endif /* _CNSS_MAIN_H */
