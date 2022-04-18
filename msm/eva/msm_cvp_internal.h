@@ -135,6 +135,7 @@ struct msm_cvp_platform_data {
 	unsigned int common_data_length;
 	unsigned int sku_version;
 	uint32_t vpu_ver;
+	unsigned int vm_id;	/* pvm: 1; tvm: 2 */
 	struct msm_cvp_ubwc_config_data *ubwc_config;
 	struct msm_cvp_qos_setting *noc_qos;
 };
@@ -352,6 +353,7 @@ struct msm_cvp_core {
 	struct device *dev;
 	struct cvp_hfi_device *device;
 	struct msm_cvp_platform_data *platform_data;
+	struct msm_cvp_synx_ops *synx_ftbl;
 	struct list_head instances;
 	struct dentry *debugfs_root;
 	enum cvp_core_state state;

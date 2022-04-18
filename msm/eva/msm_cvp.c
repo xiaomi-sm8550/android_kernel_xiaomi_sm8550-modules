@@ -473,7 +473,8 @@ static int cvp_fence_proc(struct msm_cvp_inst *inst,
 	sq = &inst->session_queue_fence;
 	ktid = pkt->client_data.kdata;
 
-	rc = cvp_synx_ops(inst, CVP_INPUT_SYNX, fc, &synx_state);
+	rc = inst->core->synx_ftbl->cvp_synx_ops(inst, CVP_INPUT_SYNX,
+			fc, &synx_state);
 	if (rc) {
 		msm_cvp_unmap_frame(inst, pkt->client_data.kdata);
 		goto exit;
@@ -538,7 +539,8 @@ static int cvp_fence_proc(struct msm_cvp_inst *inst,
 	}
 
 exit:
-	rc = cvp_synx_ops(inst, CVP_OUTPUT_SYNX, fc, &synx_state);
+	rc = inst->core->synx_ftbl->cvp_synx_ops(inst, CVP_OUTPUT_SYNX,
+			fc, &synx_state);
 	if (clock_check)
 		cvp_check_clock(inst,
 			(struct cvp_hfi_msg_session_hdr_ext *)&hdr);
@@ -616,7 +618,7 @@ wait:
 	rc = cvp_fence_proc(inst, f, pkt);
 
 	mutex_lock(&q->lock);
-	cvp_release_synx(inst, f);
+	inst->core->synx_ftbl->cvp_release_synx(inst, f);
 	list_del_init(&f->list);
 	state = q->state;
 	mutex_unlock(&q->lock);
@@ -733,7 +735,7 @@ static int msm_cvp_session_process_hfi_fence(struct msm_cvp_inst *inst,
 
 	f->pkt->client_data.kdata |= FENCE_BIT;
 
-	rc = cvp_import_synx(inst, f, fence);
+	rc = inst->core->synx_ftbl->cvp_import_synx(inst, f, fence);
 	if (rc) {
 		kfree(f);
 		goto exit;
@@ -1054,7 +1056,7 @@ int msm_cvp_session_create(struct msm_cvp_inst *inst)
 		goto fail_init;
 	}
 
-	cvp_sess_init_synx(inst);
+	inst->core->synx_ftbl->cvp_sess_init_synx(inst);
 	sq = &inst->session_queue;
 	spin_lock(&sq->lock);
 	sq->state = QUEUE_ACTIVE;
@@ -1195,7 +1197,7 @@ static int msm_cvp_session_stop(struct msm_cvp_inst *inst,
 	}
 	sq->state = QUEUE_STOP;
 
-	pr_info(CVP_DBG_TAG "Stop session: %pK session_id = %d\n",
+	pr_info_ratelimited(CVP_DBG_TAG "Stop session: %pK session_id = %d\n",
 		"sess", inst, hash32_ptr(inst->session));
 	spin_unlock(&sq->lock);
 
@@ -1571,8 +1573,9 @@ static void cvp_clean_fence_queue(struct msm_cvp_inst *inst, int synx_state)
 
 		list_del_init(&f->list);
 		msm_cvp_unmap_frame(inst, f->pkt->client_data.kdata);
-		cvp_cancel_synx(inst, CVP_OUTPUT_SYNX, f, synx_state);
-		cvp_release_synx(inst, f);
+		inst->core->synx_ftbl->cvp_cancel_synx(inst, CVP_OUTPUT_SYNX,
+			f, synx_state);
+		inst->core->synx_ftbl->cvp_release_synx(inst, f);
 		cvp_free_fence_data(f);
 	}
 
@@ -1581,7 +1584,8 @@ static void cvp_clean_fence_queue(struct msm_cvp_inst *inst, int synx_state)
 
 		dprintk(CVP_SYNX, "%s: (%#x)flush frame %llu %llu sched_list\n",
 			__func__, hash32_ptr(inst->session), ktid, f->frame_id);
-		cvp_cancel_synx(inst, CVP_INPUT_SYNX, f, synx_state);
+		inst->core->synx_ftbl->cvp_cancel_synx(inst, CVP_INPUT_SYNX,
+			f, synx_state);
 	}
 
 	mutex_unlock(&q->lock);

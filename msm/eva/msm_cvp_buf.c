@@ -307,10 +307,9 @@ int msm_cvp_map_buf_dsp(struct msm_cvp_inst *inst, struct eva_kmd_buffer *buf)
 exit:
 	fput(file);
 	if (smem) {
-		if (smem->device_addr) {
+		if (smem->device_addr)
 			msm_cvp_unmap_smem(inst, smem, "unmap dsp");
-			msm_cvp_smem_put_dma_buf(smem->dma_buf);
-		}
+		msm_cvp_smem_put_dma_buf(smem->dma_buf);
 		kmem_cache_free(cvp_driver->smem_cache, smem);
 	}
 	if (cbuf)
@@ -473,6 +472,10 @@ int msm_cvp_map_buf_wncc(struct msm_cvp_inst *inst,
 				sizeof(struct msm_cvp_wncc_buffer) *
 				EVA_KMD_WNCC_MAX_SRC_BUFS,
 				GFP_KERNEL);
+		if (!inst->cvpwnccbufs_table) {
+			mutex_unlock(&inst->cvpwnccbufs.lock);
+			goto exit;
+		}
 	}
 
 	list_add_tail(&cbuf->list, &inst->cvpwnccbufs.list);
@@ -509,10 +512,9 @@ int msm_cvp_map_buf_wncc(struct msm_cvp_inst *inst,
 	return rc;
 
 exit:
-	if (smem->device_addr) {
+	if (smem->device_addr)
 		msm_cvp_unmap_smem(inst, smem, "unmap wncc");
-		msm_cvp_smem_put_dma_buf(smem->dma_buf);
-	}
+	msm_cvp_smem_put_dma_buf(smem->dma_buf);
 	kmem_cache_free(cvp_driver->buf_cache, cbuf);
 	cbuf = NULL;
 	kmem_cache_free(cvp_driver->smem_cache, smem);
@@ -1102,7 +1104,9 @@ static int msm_cvp_session_add_smem(struct msm_cvp_inst *inst,
 			smem->bitmap_index = i;
 			SET_USE_BITMAP(i, inst);
 		} else {
-			dprintk(CVP_WARN, "%s: not enough memory\n", __func__);
+			dprintk(CVP_WARN,
+			"%s: reached limit, fallback to frame mapping list\n"
+			, __func__);
 			mutex_unlock(&inst->dma_cache.lock);
 			return -ENOMEM;
 		}

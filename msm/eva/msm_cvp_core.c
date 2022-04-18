@@ -168,7 +168,8 @@ void *msm_cvp_open(int core_id, int session_type)
 		goto err_invalid_core;
 	}
 
-	pr_info(CVP_DBG_TAG "Opening cvp instance: %pK\n", "sess", inst);
+	pr_info_ratelimited(
+		CVP_DBG_TAG "Opening cvp instance: %pK\n", "sess", inst);
 	mutex_init(&inst->sync_lock);
 	mutex_init(&inst->lock);
 	spin_lock_init(&inst->event_handler.lock);
@@ -325,7 +326,7 @@ wait:
 			dprintk(CVP_WARN, "Unprocessed frame %d\n",
 				frame->pkt_type);
 		mutex_unlock(&inst->frames.lock);
-		cvp_dump_fence_queue(inst);
+		inst->core->synx_ftbl->cvp_dump_fence_queue(inst);
 	}
 
 	if (cvp_release_arp_buffers(inst))
@@ -382,9 +383,10 @@ int msm_cvp_destroy(struct msm_cvp_inst *inst)
 
 	__deinit_session_queue(inst);
 	__deinit_fence_queue(inst);
-	cvp_sess_deinit_synx(inst);
+	core->synx_ftbl->cvp_sess_deinit_synx(inst);
 
-	pr_info(CVP_DBG_TAG "Closed cvp instance: %pK session_id = %d\n",
+	pr_info_ratelimited(
+		CVP_DBG_TAG "Closed cvp instance: %pK session_id = %d\n",
 		"sess", inst, hash32_ptr(inst->session));
 	inst->session = (void *)0xdeadbeef;
 	kfree(inst);

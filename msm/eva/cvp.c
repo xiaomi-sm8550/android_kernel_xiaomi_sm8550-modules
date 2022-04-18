@@ -26,6 +26,7 @@
 #include "msm_cvp_clocks.h"
 #include "msm_cvp_dsp.h"
 #include "msm_cvp.h"
+#include "msm_cvp_vm.h"
 
 #define CLASS_NAME              "cvp"
 #define DRIVER_NAME             "cvp"
@@ -400,6 +401,9 @@ static int msm_probe_cvp_device(struct platform_device *pdev)
 		goto err_cores_exceeded;
 	}
 
+	/* VM manager shall be started before HFI init */
+	vm_manager.vm_ops->vm_start(core);
+
 	core->device = cvp_hfi_initialize(core->hfi_type, core->id,
 				&core->resources, &cvp_handle_cmd_response);
 	if (IS_ERR_OR_NULL(core->device)) {
@@ -414,6 +418,8 @@ static int msm_probe_cvp_device(struct platform_device *pdev)
 			dprintk(CVP_CORE, "msm_cvp: request probe defer\n");
 		goto err_hfi_initialize;
 	}
+
+	cvp_synx_ftbl_init(core);
 
 	mutex_lock(&cvp_driver->lock);
 	list_add_tail(&core->list, &cvp_driver->cores);

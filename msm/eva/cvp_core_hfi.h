@@ -12,6 +12,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_qos.h>
 #include <linux/spinlock.h>
+#include <linux/interrupt.h>
 #include <linux/soc/qcom/msm_mmrm.h>
 #include "cvp_hfi_api.h"
 #include "cvp_hfi_helper.h"
@@ -267,6 +268,7 @@ struct iris_hfi_device {
 	struct iris_hfi_vpu_ops *vpu_ops;
 };
 
+irqreturn_t cvp_hfi_isr(int irq, void *dev);
 void cvp_iris_hfi_delete_device(void *device);
 
 int cvp_iris_hfi_initialize(struct cvp_hfi_device *hdev, u32 device_id,
