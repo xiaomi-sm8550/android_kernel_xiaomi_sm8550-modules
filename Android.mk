@@ -29,7 +29,6 @@ KBUILD_OPTIONS := BT_KERNEL_ROOT=$(BT_BLD_DIR)
 KBUILD_OPTIONS += $(foreach bt_select, \
        $(BT_SELECT), \
        $(bt_select))
-
 BT_SRC_FILES := \
 	$(wildcard $(LOCAL_PATH)/*) \
 	$(wildcard $(LOCAL_PATH)/*/*) \
@@ -45,6 +44,8 @@ LOCAL_MODULE              := bt-kernel-module-symvers
 LOCAL_MODULE_STEM         := Module.symvers
 LOCAL_MODULE_KBUILD_NAME  := Module.symvers
 LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
+LOCAL_REQUIRED_MODULES := wlan-platform-module-symvers
+LOCAL_ADDITIONAL_DEPENDENCIES += $(call intermediates-dir-for,DLKM,wlan-platform-module-symvers)/Module.symvers
 include $(DLKM_DIR)/Build_external_kernelmodule.mk
 
 # Below are for Android build system to recognize each module name, so
