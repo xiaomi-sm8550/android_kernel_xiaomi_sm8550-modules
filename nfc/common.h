@@ -1,6 +1,6 @@
 /******************************************************************************
  * Copyright (C) 2015, The Linux Foundation. All rights reserved.
- * Copyright (C) 2019-2021 NXP
+ * Copyright (C) 2019-2022 NXP
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -60,15 +60,9 @@
 // FW DNLD packet details
 #define FW_MSG_CMD_RSP              0x00
 #define DL_HDR_LEN			(2)
-#define FW_PAYLOAD_LEN_IDX          1
 #define DL_CRC_LEN			(2)
 
 #define NCI_RSP_PKT_TYPE		(0x40)
-#define FW_MIN_PAYLOAD_LEN          4
-#define MIN_NFC_DL_FRAME_SIZE       3
-
-#define GET_VERSION_CMD_LEN			8
-#define GET_SESSION_STATE_CMD_LEN			8
 #define MAX_NCI_PAYLOAD_LEN		(255)
 #define MAX_NCI_BUFFER_SIZE		(NCI_HDR_LEN + MAX_NCI_PAYLOAD_LEN)
 /*
@@ -92,12 +86,8 @@
 #define NCI_CMD_RSP_TIMEOUT_MS		(2000)
 /* Time to wait for NFCC to be ready again after any change in the GPIO */
 #define NFC_GPIO_SET_WAIT_TIME_US	(10000)
-/*Time to wait after soft reset via any NCI/DL cmd*/
-#define NFC_SOFT_RESET_WAIT_TIME_USEC   (5000)
-/* Time to wait for IRQ low during write 5*3ms */
-#define NFC_WRITE_IRQ_WAIT_TIME_US	(3000)
-/* Time to wait before retrying i2c/I3C writes */
-#define WRITE_RETRY_WAIT_TIME_US	(1000)
+/* Time to wait before retrying writes */
+#define WRITE_RETRY_WAIT_TIME_US	(3000)
 /* Time to wait before retrying read for some specific usecases */
 #define READ_RETRY_WAIT_TIME_US		(3500)
 #define NFC_MAGIC			(0xE9)
@@ -105,9 +95,9 @@
 // Ioctls
 // The type should be aligned with MW HAL definitions
 
-#define NFC_SET_PWR		_IOW(NFC_MAGIC, 0x01, unsigned int)
-#define ESE_SET_PWR		_IOW(NFC_MAGIC, 0x02, unsigned int)
-#define ESE_GET_PWR		_IOR(NFC_MAGIC, 0x03, unsigned int)
+#define NFC_SET_PWR		_IOW(NFC_MAGIC, 0x01, uint32_t)
+#define ESE_SET_PWR		_IOW(NFC_MAGIC, 0x02, uint32_t)
+#define ESE_GET_PWR		_IOR(NFC_MAGIC, 0x03, uint32_t)
 
 #define DTS_IRQ_GPIO_STR	"qcom,sn-irq"
 #define DTS_VEN_GPIO_STR	"qcom,sn-ven"
