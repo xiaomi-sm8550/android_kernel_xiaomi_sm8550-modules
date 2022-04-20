@@ -6,13 +6,10 @@
 #ifndef __MAIN_H__
 #define __MAIN_H__
 
-#include <linux/adc-tm-clients.h>
-#include <linux/iio/consumer.h>
 #include <linux/irqreturn.h>
 #include <linux/kobject.h>
 #include <linux/platform_device.h>
 #include <linux/ipc_logging.h>
-#include <dt-bindings/iio/qcom,spmi-vadc.h>
 #include <soc/qcom/icnss2.h>
 #include "wlan_firmware_service_v01.h"
 #include <linux/mailbox_client.h>
@@ -36,7 +33,6 @@ enum icnss_bdf_type {
 	ICNSS_BDF_BIN,
 	ICNSS_BDF_ELF,
 	ICNSS_BDF_REGDB = 4,
-	ICNSS_BDF_DUMMY = 255,
 };
 
 struct icnss_control_params {
@@ -255,9 +251,6 @@ struct icnss_stats {
 	uint32_t rejuvenate_ack_req;
 	uint32_t rejuvenate_ack_resp;
 	uint32_t rejuvenate_ack_err;
-	uint32_t vbatt_req;
-	uint32_t vbatt_resp;
-	uint32_t vbatt_req_err;
 	uint32_t device_info_req;
 	uint32_t device_info_resp;
 	uint32_t device_info_err;
@@ -445,11 +438,6 @@ struct icnss_priv {
 	uint32_t fw_early_crash_irq;
 	struct smp2p_out_info smp2p_info[ICNSS_SMP2P_OUT_MAX];
 	struct completion unblock_shutdown;
-	struct adc_tm_param vph_monitor_params;
-	struct adc_tm_chip *adc_tm_dev;
-	struct iio_channel *channel;
-	uint64_t vph_pwr;
-	bool vbatt_supported;
 	char function_name[WLFW_FUNCTION_NAME_LEN + 1];
 	bool is_ssr;
 	bool smmu_s1_enable;
@@ -484,6 +472,7 @@ struct icnss_priv {
 	uint32_t fw_soc_wake_ack_irq;
 	char foundry_name;
 	bool bdf_download_support;
+	unsigned long device_config;
 };
 
 struct icnss_reg_info {
