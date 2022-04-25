@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
-PRODUCT_PACKAGES += msm_ext_display.ko msm_hw_fence.ko
+PRODUCT_PACKAGES += msm_ext_display.ko
 
 ifneq ($(TARGET_BOARD_PLATFORM), taro)
-PRODUCT_PACKAGES += sync_fence.ko
+PRODUCT_PACKAGES += sync_fence.ko msm_hw_fence.ko
 endif
