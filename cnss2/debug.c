@@ -653,6 +653,44 @@ static const struct file_operations cnss_runtime_pm_debug_fops = {
 	.llseek		= seq_lseek,
 };
 
+static int process_drv(struct cnss_plat_data *plat_priv, bool enabled)
+{
+	if (test_bit(CNSS_QMI_WLFW_CONNECTED, &plat_priv->driver_state)) {
+		cnss_pr_err("DRV cmd must be used before QMI ready\n");
+		return -EINVAL;
+	}
+
+	enabled ? cnss_set_feature_list(plat_priv, CNSS_DRV_SUPPORT_V01) :
+		  cnss_clear_feature_list(plat_priv, CNSS_DRV_SUPPORT_V01);
+
+	cnss_pr_info("%s DRV suspend\n", enabled ? "enable" : "disable");
+	return 0;
+}
+
+static int process_quirks(struct cnss_plat_data *plat_priv, u32 val)
+{
+	enum cnss_debug_quirks i;
+	int ret = 0;
+	unsigned long state;
+	unsigned long quirks = 0;
+
+	for (i = 0, state = val; i < QUIRK_MAX_VALUE; state >>= 1, i++) {
+		switch (i) {
+		case DISABLE_DRV:
+			ret = process_drv(plat_priv, !(state & 0x1));
+			if (!ret)
+				quirks |= (state & 0x1) << i;
+			continue;
+		default:
+			quirks |= (state & 0x1) << i;
+			continue;
+		}
+	}
+
+	plat_priv->ctrl_params.quirks = quirks;
+	return 0;
+}
+
 static ssize_t cnss_control_params_debug_write(struct file *fp,
 					       const char __user *user_buf,
 					       size_t count, loff_t *off)
@@ -690,7 +728,7 @@ static ssize_t cnss_control_params_debug_write(struct file *fp,
 		return -EINVAL;
 
 	if (strcmp(cmd, "quirks") == 0)
-		plat_priv->ctrl_params.quirks = val;
+		process_quirks(plat_priv, val);
 	else if (strcmp(cmd, "mhi_timeout") == 0)
 		plat_priv->ctrl_params.mhi_timeout = val;
 	else if (strcmp(cmd, "mhi_m2_timeout") == 0)
@@ -762,9 +800,9 @@ static int cnss_show_quirks_state(struct seq_file *s,
 		case DISABLE_TIME_SYNC:
 			seq_puts(s, "DISABLE_TIME_SYNC");
 			continue;
+		default:
+			continue;
 		}
-
-		seq_printf(s, "UNKNOWN-%d", i);
 	}
 	seq_puts(s, ")\n");
 	return 0;

@@ -189,6 +189,16 @@ int cnss_set_feature_list(struct cnss_plat_data *plat_priv,
 	return 0;
 }
 
+int cnss_clear_feature_list(struct cnss_plat_data *plat_priv,
+			    enum cnss_feature_v01 feature)
+{
+	if (unlikely(!plat_priv || feature >= CNSS_MAX_FEATURE_V01))
+		return -EINVAL;
+
+	plat_priv->feature_list &= ~(1 << feature);
+	return 0;
+}
+
 int cnss_get_feature_list(struct cnss_plat_data *plat_priv,
 			  u64 *feature_list)
 {

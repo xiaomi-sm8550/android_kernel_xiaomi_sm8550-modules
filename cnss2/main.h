@@ -355,6 +355,7 @@ enum cnss_debug_quirks {
 	DISABLE_IO_COHERENCY,
 	IGNORE_PCI_LINK_FAILURE,
 	DISABLE_TIME_SYNC,
+	QUIRK_MAX_VALUE
 };
 
 enum cnss_bdf_type {
@@ -622,6 +623,8 @@ int cnss_request_firmware_direct(struct cnss_plat_data *plat_priv,
 				 const char *filename);
 int cnss_set_feature_list(struct cnss_plat_data *plat_priv,
 			  enum cnss_feature_v01 feature);
+int cnss_clear_feature_list(struct cnss_plat_data *plat_priv,
+			    enum cnss_feature_v01 feature);
 int cnss_get_feature_list(struct cnss_plat_data *plat_priv,
 			  u64 *feature_list);
 #endif /* _CNSS_MAIN_H */
