@@ -280,7 +280,7 @@ static int get_root_obj(struct Object *rootObj)
  * Get a client environment using CBOR encoded credentials
  * with UID of SYSTEM_UID (1000)
  */
-static int32_t get_client_env_object(struct Object *clientEnvObj)
+int32_t get_client_env_object(struct Object *clientEnvObj)
 {
 	int32_t  ret = OBJECT_ERROR;
 	struct Object rootObj = Object_NULL;
@@ -310,6 +310,7 @@ static int32_t get_client_env_object(struct Object *clientEnvObj)
 	Object_release(rootObj);
 	return ret;
 }
+EXPORT_SYMBOL(get_client_env_object);
 
 static int load_app(struct qseecom_compat_context *cxt, const char *app_name)
 {

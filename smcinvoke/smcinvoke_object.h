@@ -194,4 +194,6 @@ int process_invoke_request_from_kernel_client(
 
 char *firmware_request_from_smcinvoke(const char *appname, size_t *fw_size, struct qtee_shm *shm);
 
+int32_t get_client_env_object(struct Object *clientEnvObj);
+
 #endif /* __SMCINVOKE_OBJECT_H */
