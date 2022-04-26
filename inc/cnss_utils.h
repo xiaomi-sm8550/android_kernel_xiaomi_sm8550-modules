@@ -14,12 +14,21 @@ enum cnss_utils_cc_src {
 	CNSS_UTILS_SOURCE_USER
 };
 
+enum cnss_utils_device_type {
+	CNSS_UNSUPPORETD_DEVICE_TYPE = -1,
+	CNSS_HMT_DEVICE_TYPE,
+	CNSS_HSP_DEVICE_TYPE
+};
+
 extern int cnss_utils_set_wlan_unsafe_channel(struct device *dev,
 					      u16 *unsafe_ch_list,
 					      u16 ch_count);
 extern int cnss_utils_get_wlan_unsafe_channel(struct device *dev,
 					      u16 *unsafe_ch_list,
 					      u16 *ch_count, u16 buf_len);
+extern enum cnss_utils_device_type cnss_utils_update_device_type(
+				enum cnss_utils_device_type device_type);
+
 extern int cnss_utils_wlan_set_dfs_nol(struct device *dev,
 				       const void *info, u16 info_len);
 extern int cnss_utils_wlan_get_dfs_nol(struct device *dev,

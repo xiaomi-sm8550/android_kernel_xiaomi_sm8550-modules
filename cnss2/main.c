@@ -26,6 +26,7 @@
 #endif
 
 #include "cnss_plat_ipc_qmi.h"
+#include "cnss_utils.h"
 #include "main.h"
 #include "bus.h"
 #include "debug.h"
@@ -3764,12 +3765,14 @@ static int cnss_get_dev_cfg_node(struct cnss_plat_data *plat_priv)
 			if (gpio_value && id == QCA6490_DEVICE_ID) {
 				plat_priv->plat_dev->dev.of_node = child;
 				plat_priv->device_id = QCA6490_DEVICE_ID;
+				cnss_utils_update_device_type(CNSS_HSP_DEVICE_TYPE);
 				cnss_pr_dbg("got node[%s@%d] for device[0x%x]\n",
 					    child->name, i, id);
 				return 0;
 			} else if (!gpio_value && id == KIWI_DEVICE_ID) {
 				plat_priv->plat_dev->dev.of_node = child;
 				plat_priv->device_id = KIWI_DEVICE_ID;
+				cnss_utils_update_device_type(CNSS_HMT_DEVICE_TYPE);
 				cnss_pr_dbg("got node[%s@%d] for device[0x%x]\n",
 					    child->name, i, id);
 				return 0;
