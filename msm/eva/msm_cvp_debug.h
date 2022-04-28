@@ -127,6 +127,8 @@ static inline char *get_debug_level_str(int level)
 		return "sess";
 	case CVP_HFI:
 		return "hfi";
+	case CVP_VM:
+		return "vm";
 	default:
 		return "???";
 	}
