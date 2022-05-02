@@ -1,3 +1,4 @@
+ifneq ($(TARGET_BOARD_PLATFORM ), taro)
 ifeq ($(CONFIG_ARCH_QTI_VM), y)
 include $(SSG_MODULE_ROOT)/config/sec-kernel_defconfig_tvm.conf
 else
@@ -28,3 +29,4 @@ hdcp_qseecom_dlkm-objs := hdcp/hdcp_qseecom.o
 
 obj-$(CONFIG_HW_RANDOM_MSM_LEGACY) += qrng_dlkm.o
 qrng_dlkm-objs := qrng/msm_rng.o
+endif
