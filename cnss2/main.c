@@ -3692,6 +3692,7 @@ static const struct platform_device_id cnss_platform_id_table[] = {
 	{ .name = "qca6390", .driver_data = QCA6390_DEVICE_ID, },
 	{ .name = "qca6490", .driver_data = QCA6490_DEVICE_ID, },
 	{ .name = "kiwi", .driver_data = KIWI_DEVICE_ID, },
+	{ .name = "qcaconv", .driver_data = 0, },
 	{ },
 };
 
@@ -3711,6 +3712,9 @@ static const struct of_device_id cnss_of_match_table[] = {
 	{
 		.compatible = "qcom,cnss-kiwi",
 		.data = (void *)&cnss_platform_id_table[4]},
+	{
+		.compatible = "qcom,cnss-qca-converged",
+		.data = (void *)&cnss_platform_id_table[5]},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, cnss_of_match_table);
@@ -3720,6 +3724,67 @@ cnss_use_nv_mac(struct cnss_plat_data *plat_priv)
 {
 	return of_property_read_bool(plat_priv->plat_dev->dev.of_node,
 				     "use-nv-mac");
+}
+
+static int cnss_get_dev_cfg_node(struct cnss_plat_data *plat_priv)
+{
+	struct device_node *child;
+	u32 id, i;
+	int id_n, ret;
+	int wlan_sw_ctrl_gpio = plat_priv->pinctrl_info.wlan_sw_ctrl_gpio;
+	u8 gpio_value;
+
+
+	if (!plat_priv->is_converged_dt)
+		return 0;
+
+	gpio_value = gpio_get_value(wlan_sw_ctrl_gpio);
+	cnss_pr_dbg("Value of WLAN_SW_CTRL GPIO: %d\n", gpio_value);
+
+	for_each_available_child_of_node(plat_priv->plat_dev->dev.of_node,
+					 child) {
+		if (strcmp(child->name, "chip_cfg"))
+			continue;
+
+		id_n = of_property_count_u32_elems(child, "supported-ids");
+		if (id_n <= 0) {
+			cnss_pr_err("Device id is NOT set\n");
+			return -EINVAL;
+		}
+
+		for (i = 0; i < id_n; i++) {
+			ret = of_property_read_u32_index(child,
+							 "supported-ids",
+							 i, &id);
+			if (ret) {
+				cnss_pr_err("Failed to read supported ids\n");
+				return -EINVAL;
+			}
+
+			if (gpio_value && id == QCA6490_DEVICE_ID) {
+				plat_priv->plat_dev->dev.of_node = child;
+				plat_priv->device_id = QCA6490_DEVICE_ID;
+				cnss_pr_dbg("got node[%s@%d] for device[0x%x]\n",
+					    child->name, i, id);
+				return 0;
+			} else if (!gpio_value && id == KIWI_DEVICE_ID) {
+				plat_priv->plat_dev->dev.of_node = child;
+				plat_priv->device_id = KIWI_DEVICE_ID;
+				cnss_pr_dbg("got node[%s@%d] for device[0x%x]\n",
+					    child->name, i, id);
+				return 0;
+			}
+		}
+	}
+
+	return -EINVAL;
+}
+
+static inline bool
+cnss_is_converged_dt(struct cnss_plat_data *plat_priv)
+{
+	return of_property_read_bool(plat_priv->plat_dev->dev.of_node,
+				     "qcom,converged-dt");
 }
 
 static int cnss_probe(struct platform_device *plat_dev)
@@ -3754,10 +3819,20 @@ static int cnss_probe(struct platform_device *plat_dev)
 
 	plat_priv->plat_dev = plat_dev;
 	plat_priv->device_id = device_id->driver_data;
-	plat_priv->bus_type = cnss_get_bus_type(plat_priv->device_id);
-	plat_priv->use_nv_mac = cnss_use_nv_mac(plat_priv);
+	plat_priv->is_converged_dt = cnss_is_converged_dt(plat_priv);
 	plat_priv->use_fw_path_with_prefix =
 		cnss_use_fw_path_with_prefix(plat_priv);
+
+	cnss_get_wlan_sw_ctrl(plat_priv);
+
+	ret = cnss_get_dev_cfg_node(plat_priv);
+	if (ret) {
+		cnss_pr_err("Failed to get device cfg node, err = %d\n", ret);
+		goto reset_plat_dev;
+	}
+
+	plat_priv->bus_type = cnss_get_bus_type(plat_priv->device_id);
+	plat_priv->use_nv_mac = cnss_use_nv_mac(plat_priv);
 	cnss_set_plat_priv(plat_dev, plat_priv);
 	platform_set_drvdata(plat_dev, plat_priv);
 	INIT_LIST_HEAD(&plat_priv->vreg_list);
@@ -3862,6 +3937,7 @@ free_res:
 	cnss_put_resources(plat_priv);
 reset_ctx:
 	platform_set_drvdata(plat_dev, NULL);
+reset_plat_dev:
 	cnss_set_plat_priv(plat_dev, NULL);
 out:
 	return ret;
