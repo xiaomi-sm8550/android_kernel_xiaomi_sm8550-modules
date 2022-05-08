@@ -465,6 +465,7 @@ struct cnss_plat_data {
 	enum cnss_driver_status driver_status;
 	u32 recovery_count;
 	u8 recovery_enabled;
+	u8 recovery_pcss_enabled;
 	u8 hds_enabled;
 	unsigned long driver_state;
 	struct list_head event_list;

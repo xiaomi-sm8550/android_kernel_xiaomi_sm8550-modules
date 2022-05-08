@@ -86,7 +86,51 @@ static char *cnss_qmi_mode_to_str(enum cnss_driver_mode mode)
 	default:
 		return "UNKNOWN";
 	}
-};
+}
+
+static int qmi_send_wait(struct qmi_handle *qmi, void *req, void *rsp,
+			 struct qmi_elem_info *req_ei,
+			 struct qmi_elem_info *rsp_ei,
+			 int req_id, size_t req_len,
+			 unsigned long timeout)
+{
+	struct qmi_txn txn;
+	int ret;
+	char *err_msg;
+	struct qmi_response_type_v01 *resp = rsp;
+
+	ret = qmi_txn_init(qmi, &txn, rsp_ei, rsp);
+	if (ret < 0) {
+		err_msg = "Qmi fail: fail to init txn,";
+		goto out;
+	}
+
+	ret = qmi_send_request(qmi, NULL, &txn, req_id,
+			       req_len, req_ei, req);
+	if (ret < 0) {
+		qmi_txn_cancel(&txn);
+		err_msg = "Qmi fail: fail to send req,";
+		goto out;
+	}
+
+	ret = qmi_txn_wait(&txn, timeout);
+	if (ret < 0) {
+		err_msg = "Qmi fail: wait timeout,";
+		goto out;
+	} else if (resp->result != QMI_RESULT_SUCCESS_V01) {
+		err_msg = "Qmi fail: request rejected,";
+		cnss_pr_err("Qmi fail: respons with error:%d\n",
+			    resp->error);
+		ret = -resp->result;
+		goto out;
+	}
+
+	cnss_pr_dbg("req %x success\n", req_id);
+	return 0;
+out:
+	cnss_pr_err("%s req %x, ret %d\n", err_msg, req_id, ret);
+	return ret;
+}
 
 static int cnss_wlfw_ind_register_send_sync(struct cnss_plat_data *plat_priv)
 {
@@ -3221,6 +3265,36 @@ int coex_antenna_switch_to_mdm_send_sync_msg(struct cnss_plat_data *plat_priv)
 out:
 	kfree(resp);
 	kfree(req);
+	return ret;
+}
+
+int cnss_send_subsys_restart_level_msg(struct cnss_plat_data *plat_priv)
+{
+	int ret;
+	struct wlfw_subsys_restart_level_req_msg_v01 req;
+	struct wlfw_subsys_restart_level_resp_msg_v01 resp;
+	u8 pcss_enabled;
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	if (!test_bit(CNSS_FW_READY, &plat_priv->driver_state)) {
+		cnss_pr_err("Can't send pcss cmd before fw ready\n");
+		return -EINVAL;
+	}
+
+	pcss_enabled = plat_priv->recovery_pcss_enabled;
+	cnss_pr_dbg("Sending pcss recovery status: %d\n", pcss_enabled);
+
+	req.restart_level_type_valid = 1;
+	req.restart_level_type = pcss_enabled;
+
+	ret = qmi_send_wait(&plat_priv->qmi_wlfw, &req, &resp,
+			    wlfw_subsys_restart_level_req_msg_v01_ei,
+			    wlfw_subsys_restart_level_resp_msg_v01_ei,
+			    QMI_WLFW_SUBSYS_RESTART_LEVEL_REQ_V01,
+			    WLFW_SUBSYS_RESTART_LEVEL_REQ_MSG_V01_MAX_MSG_LEN,
+			    QMI_WLFW_TIMEOUT_JF);
 	return ret;
 }
 

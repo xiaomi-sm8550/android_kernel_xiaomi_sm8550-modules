@@ -70,6 +70,11 @@ enum cnss_cal_db_op {
 	CNSS_CAL_DB_INVALID_OP,
 };
 
+enum cnss_recovery_type {
+	CNSS_WLAN_RECOVERY = 0x1,
+	CNSS_PCSS_RECOVERY = 0x2,
+};
+
 static struct cnss_plat_data *plat_env;
 
 static DECLARE_RWSEM(cnss_pm_sem);
@@ -3303,12 +3308,52 @@ static ssize_t enable_hds_store(struct device *dev,
 	return count;
 }
 
+static ssize_t recovery_show(struct device *dev,
+			     struct device_attribute *attr,
+			     char *buf)
+{
+	struct cnss_plat_data *plat_priv = dev_get_drvdata(dev);
+	u32 buf_size = PAGE_SIZE;
+	u32 curr_len = 0;
+	u32 buf_written = 0;
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	buf_written = scnprintf(buf, buf_size,
+				"Usage: echo [recovery_bitmap] > /sys/kernel/cnss/recovery\n"
+				"BIT0 -- wlan fw recovery\n"
+				"BIT1 -- wlan pcss recovery\n"
+				"---------------------------------\n");
+	curr_len += buf_written;
+
+	buf_written = scnprintf(buf + curr_len, buf_size - curr_len,
+				"WLAN recovery %s[%d]\n",
+				plat_priv->recovery_enabled ? "Enabled" : "Disabled",
+				plat_priv->recovery_enabled);
+	curr_len += buf_written;
+
+	buf_written = scnprintf(buf + curr_len, buf_size - curr_len,
+				"WLAN PCSS recovery %s[%d]\n",
+				plat_priv->recovery_pcss_enabled ? "Enabled" : "Disabled",
+				plat_priv->recovery_pcss_enabled);
+	curr_len += buf_written;
+
+	/*
+	 * Now size of curr_len is not over page size for sure,
+	 * later if new item or none-fixed size item added, need
+	 * add check to make sure curr_len is not over page size.
+	 */
+	return curr_len;
+}
+
 static ssize_t recovery_store(struct device *dev,
 			      struct device_attribute *attr,
 			      const char *buf, size_t count)
 {
 	struct cnss_plat_data *plat_priv = dev_get_drvdata(dev);
 	unsigned int recovery = 0;
+	int ret;
 
 	if (!plat_priv)
 		return -ENODEV;
@@ -3318,13 +3363,20 @@ static ssize_t recovery_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	if (recovery)
-		plat_priv->recovery_enabled = true;
-	else
-		plat_priv->recovery_enabled = false;
+	plat_priv->recovery_enabled = !!(recovery & CNSS_WLAN_RECOVERY);
+	plat_priv->recovery_pcss_enabled = !!(recovery & CNSS_PCSS_RECOVERY);
 
 	cnss_pr_dbg("%s WLAN recovery, count is %zu\n",
 		    plat_priv->recovery_enabled ? "Enable" : "Disable", count);
+	cnss_pr_dbg("%s PCSS recovery, count is %zu\n",
+		    plat_priv->recovery_pcss_enabled ? "Enable" : "Disable", count);
+
+	ret = cnss_send_subsys_restart_level_msg(plat_priv);
+	if (ret < 0) {
+		cnss_pr_err("pcss recovery setting failed with ret %d\n", ret);
+		plat_priv->recovery_pcss_enabled = false;
+		return -EINVAL;
+	}
 
 	return count;
 }
@@ -3460,7 +3512,7 @@ static ssize_t charger_mode_store(struct device *dev,
 
 static DEVICE_ATTR_WO(fs_ready);
 static DEVICE_ATTR_WO(shutdown);
-static DEVICE_ATTR_WO(recovery);
+static DEVICE_ATTR_RW(recovery);
 static DEVICE_ATTR_WO(enable_hds);
 static DEVICE_ATTR_WO(qdss_trace_start);
 static DEVICE_ATTR_WO(qdss_trace_stop);

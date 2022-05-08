@@ -1,5 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2015-2021, The Linux Foundation. All rights reserved. */
+/*
+ * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
 
 #ifndef _CNSS_QMI_H
 #define _CNSS_QMI_H
@@ -84,6 +88,7 @@ int wlfw_qdss_trace_start(struct cnss_plat_data *plat_priv);
 int wlfw_qdss_trace_stop(struct cnss_plat_data *plat_priv, unsigned long long option);
 int cnss_wlfw_cal_report_req_send_sync(struct cnss_plat_data *plat_priv,
 				       u32 cal_file_download_size);
+int cnss_send_subsys_restart_level_msg(struct cnss_plat_data *plat_priv);
 #else
 #define QMI_WLFW_TIMEOUT_MS		10000
 
@@ -296,6 +301,12 @@ int wlfw_qdss_trace_stop(struct cnss_plat_data *plat_priv, unsigned long long op
 static inline
 int cnss_wlfw_cal_report_req_send_sync(struct cnss_plat_data *plat_priv,
 				       u32 cal_file_download_size)
+{
+	return 0;
+}
+
+static inline
+int cnss_send_subsys_restart_level_msg(struct cnss_plat_data *plat_priv)
 {
 	return 0;
 }
