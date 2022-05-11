@@ -149,6 +149,17 @@ static DEFINE_MUTEX(g_smcinvoke_lock);
 #define TAKE_LOCK 1
 #define MUTEX_LOCK(x) { if (x) mutex_lock(&g_smcinvoke_lock); }
 #define MUTEX_UNLOCK(x) { if (x) mutex_unlock(&g_smcinvoke_lock); }
+
+#define POST_KT_SLEEP           0
+#define POST_KT_WAKEUP          1
+#define MAX_CHAR_NAME           50
+
+enum worker_thread_type {
+	SHMB_WORKER_THREAD      = 0,
+	OBJECT_WORKER_THREAD,
+	MAX_THREAD_NUMBER
+};
+
 static DEFINE_HASHTABLE(g_cb_servers, 8);
 static LIST_HEAD(g_mem_objs);
 static uint16_t g_last_cb_server_id = CBOBJ_SERVER_ID_START;
@@ -268,6 +279,55 @@ struct smcinvoke_mem_obj {
 	uint64_t shmbridge_handle;
 };
 
+static LIST_HEAD(g_bridge_postprocess);
+DEFINE_MUTEX(bridge_postprocess_lock);
+
+static LIST_HEAD(g_object_postprocess);
+DEFINE_MUTEX(object_postprocess_lock);
+
+struct bridge_deregister {
+	uint64_t shmbridge_handle;
+	struct dma_buf *dmabuf_to_free;
+};
+
+struct object_release {
+	uint32_t tzhandle;
+	uint32_t context_type;
+};
+
+
+struct smcinvoke_shmbridge_deregister_pending_list {
+	struct list_head list;
+	struct bridge_deregister data;
+};
+
+struct smcinvoke_object_release_pending_list {
+	struct list_head list;
+	struct object_release data;
+};
+
+struct smcinvoke_worker_thread {
+	enum worker_thread_type type;
+	atomic_t postprocess_kthread_state;
+	wait_queue_head_t postprocess_kthread_wq;
+	struct task_struct *postprocess_kthread_task;
+};
+
+struct smcinvoke_worker_thread smcinvoke[MAX_THREAD_NUMBER];
+const char thread_name[MAX_THREAD_NUMBER][MAX_CHAR_NAME] = {
+	"smcinvoke_shmbridge_postprocess", "smcinvoke_object_postprocess"};
+
+static int prepare_send_scm_msg(const uint8_t *in_buf, phys_addr_t in_paddr,
+		size_t in_buf_len,
+		uint8_t *out_buf, phys_addr_t out_paddr,
+		size_t out_buf_len,
+		struct smcinvoke_cmd_req *req,
+		union smcinvoke_arg *args_buf,
+		bool *tz_acked, uint32_t context_type,
+		struct qtee_shm *in_shm, struct qtee_shm *out_shm);
+
+static void process_piggyback_data(void *buf, size_t buf_size);
+
 static void destroy_cb_server(struct kref *kref)
 {
 	struct smcinvoke_server_info *server = container_of(kref,
@@ -370,27 +430,236 @@ static uint32_t next_mem_map_obj_id_locked(void)
 	return g_last_mem_map_obj_id;
 }
 
+static void smcinvoke_shmbridge_post_process(void)
+{
+	struct smcinvoke_shmbridge_deregister_pending_list *entry = NULL;
+	struct list_head *pos;
+	int ret = 0;
+	uint64_t handle = 0;
+	struct dma_buf *dmabuf_to_free = NULL;
+
+	do {
+		mutex_lock(&bridge_postprocess_lock);
+		if (list_empty(&g_bridge_postprocess)) {
+			mutex_unlock(&bridge_postprocess_lock);
+			break;
+		}
+		pos = g_bridge_postprocess.next;
+		entry = list_entry(pos,
+				struct smcinvoke_shmbridge_deregister_pending_list,
+				list);
+		if (entry) {
+			handle = entry->data.shmbridge_handle;
+			dmabuf_to_free = entry->data.dmabuf_to_free;
+		} else {
+			pr_err("entry is NULL, pos:%#llx\n", (uint64_t)pos);
+		}
+		list_del(pos);
+		kfree_sensitive(entry);
+		mutex_unlock(&bridge_postprocess_lock);
+
+		if (entry) {
+			do {
+				ret = qtee_shmbridge_deregister(handle);
+				if (unlikely(ret)) {
+					pr_err("SHM failed: ret:%d ptr:0x%x h:%#llx\n",
+							ret,
+							dmabuf_to_free,
+							handle);
+				} else {
+					pr_debug("SHM deletion: Handle:%#llx\n",
+							handle);
+					dma_buf_put(dmabuf_to_free);
+				}
+			} while (-EBUSY == ret);
+		}
+	} while (1);
+}
+
+static int smcinvoke_object_post_process(void)
+{
+	struct smcinvoke_object_release_pending_list *entry = NULL;
+	struct list_head *pos;
+	int ret = 0;
+	bool release_handles;
+	uint32_t context_type;
+	uint8_t *in_buf = NULL;
+	uint8_t *out_buf = NULL;
+	struct smcinvoke_cmd_req req = {0};
+	struct smcinvoke_msg_hdr hdr = {0};
+	struct qtee_shm in_shm = {0}, out_shm = {0};
+
+	ret = qtee_shmbridge_allocate_shm(SMCINVOKE_TZ_MIN_BUF_SIZE, &in_shm);
+	if (ret) {
+		ret = -ENOMEM;
+		pr_err("shmbridge alloc failed for in msg in object release\n");
+		goto out;
+	}
+
+	ret = qtee_shmbridge_allocate_shm(SMCINVOKE_TZ_MIN_BUF_SIZE, &out_shm);
+	if (ret) {
+		ret = -ENOMEM;
+		pr_err("shmbridge alloc failed for out msg in object release\n");
+		goto out;
+	}
+
+	do {
+		mutex_lock(&object_postprocess_lock);
+		if (list_empty(&g_object_postprocess)) {
+			mutex_unlock(&object_postprocess_lock);
+			break;
+		}
+		pos = g_object_postprocess.next;
+		entry = list_entry(pos, struct smcinvoke_object_release_pending_list, list);
+		if (entry) {
+			in_buf = in_shm.vaddr;
+			out_buf = out_shm.vaddr;
+			hdr.tzhandle = entry->data.tzhandle;
+			hdr.op = OBJECT_OP_RELEASE;
+			hdr.counts = 0;
+			*(struct smcinvoke_msg_hdr *)in_buf = hdr;
+			context_type = entry->data.context_type;
+		} else {
+			pr_err("entry is NULL, pos:%#llx\n", (uint64_t)pos);
+		}
+		list_del(pos);
+		kfree_sensitive(entry);
+		mutex_unlock(&object_postprocess_lock);
+
+		if (entry) {
+			do {
+				ret = prepare_send_scm_msg(in_buf, in_shm.paddr,
+					SMCINVOKE_TZ_MIN_BUF_SIZE, out_buf, out_shm.paddr,
+					SMCINVOKE_TZ_MIN_BUF_SIZE, &req, NULL,
+					&release_handles, context_type, &in_shm, &out_shm);
+				process_piggyback_data(out_buf, SMCINVOKE_TZ_MIN_BUF_SIZE);
+				if (ret) {
+					pr_err("Failed to release object(0x%x), ret:%d\n",
+								hdr.tzhandle, ret);
+				} else {
+					pr_debug("Released object(0x%x) successfully.\n",
+									hdr.tzhandle);
+				}
+			} while (-EBUSY == ret);
+		}
+	} while (1);
+
+out:
+	qtee_shmbridge_free_shm(&in_shm);
+	qtee_shmbridge_free_shm(&out_shm);
+
+	return ret;
+}
+
+static void __wakeup_postprocess_kthread(struct smcinvoke_worker_thread *smcinvoke)
+{
+	if (smcinvoke) {
+		atomic_set(&smcinvoke->postprocess_kthread_state,
+				POST_KT_WAKEUP);
+		wake_up_interruptible(&smcinvoke->postprocess_kthread_wq);
+	} else {
+		pr_err("Invalid smcinvoke pointer.\n");
+	}
+}
+
+
+static int smcinvoke_postprocess_kthread_func(void *data)
+{
+	struct smcinvoke_worker_thread *smcinvoke_wrk_trd = data;
+	const char *tag;
+
+	if (!smcinvoke_wrk_trd) {
+		pr_err("Bad input.\n");
+		return -EINVAL;
+	}
+
+	tag = smcinvoke_wrk_trd->type == SHMB_WORKER_THREAD ? "shmbridge":"object";
+
+	while (!kthread_should_stop()) {
+		wait_event_interruptible(
+			smcinvoke_wrk_trd->postprocess_kthread_wq,
+			kthread_should_stop() ||
+			(atomic_read(&smcinvoke_wrk_trd->postprocess_kthread_state)
+			== POST_KT_WAKEUP));
+		pr_debug("kthread to %s postprocess is called %d\n",
+			tag,
+			atomic_read(&smcinvoke_wrk_trd->postprocess_kthread_state));
+		switch (smcinvoke_wrk_trd->type) {
+		case SHMB_WORKER_THREAD:
+			smcinvoke_shmbridge_post_process();
+			break;
+		case OBJECT_WORKER_THREAD:
+			smcinvoke_object_post_process();
+			break;
+		default:
+			pr_err("Invalid thread type(%d), do nothing.\n",
+					(int)smcinvoke_wrk_trd->type);
+			break;
+		}
+		atomic_set(&smcinvoke_wrk_trd->postprocess_kthread_state,
+			POST_KT_SLEEP);
+	}
+	pr_warn("kthread to %s postprocess stopped\n", tag);
+
+	return 0;
+}
+
+
+static int smcinvoke_create_kthreads(void)
+{
+	int i, rc = 0;
+	const enum worker_thread_type thread_type[MAX_THREAD_NUMBER] = {
+		SHMB_WORKER_THREAD, OBJECT_WORKER_THREAD};
+
+	for (i = 0; i < MAX_THREAD_NUMBER; i++) {
+		init_waitqueue_head(&smcinvoke[i].postprocess_kthread_wq);
+		smcinvoke[i].type = thread_type[i];
+		smcinvoke[i].postprocess_kthread_task = kthread_run(
+				smcinvoke_postprocess_kthread_func,
+				&smcinvoke[i], thread_name[i]);
+		if (IS_ERR(smcinvoke[i].postprocess_kthread_task)) {
+			rc = PTR_ERR(smcinvoke[i].postprocess_kthread_task);
+			pr_err("fail to create kthread to postprocess, rc = %x\n",
+					rc);
+			return rc;
+		}
+		atomic_set(&smcinvoke[i].postprocess_kthread_state,
+				POST_KT_SLEEP);
+	}
+
+	return rc;
+}
+
+static void smcinvoke_destroy_kthreads(void)
+{
+	int i;
+
+	for (i = 0; i < MAX_THREAD_NUMBER; i++)
+		kthread_stop(smcinvoke[i].postprocess_kthread_task);
+}
+
 static inline void free_mem_obj_locked(struct smcinvoke_mem_obj *mem_obj)
 {
-	int ret = 0;
-	bool is_bridge_created = mem_obj->is_smcinvoke_created_shmbridge;
-	struct dma_buf *dmabuf_to_free = mem_obj->dma_buf;
-	uint64_t shmbridge_handle = mem_obj->shmbridge_handle;
+	struct smcinvoke_shmbridge_deregister_pending_list *entry = NULL;
 
+	if (!mem_obj->is_smcinvoke_created_shmbridge) {
+		entry = kzalloc(sizeof(*entry), GFP_KERNEL);
+		if (!entry)
+			return;
+		entry->data.shmbridge_handle = mem_obj->shmbridge_handle;
+		entry->data.dmabuf_to_free = mem_obj->dma_buf;
+		mutex_lock(&bridge_postprocess_lock);
+		list_add_tail(&entry->list, &g_bridge_postprocess);
+		mutex_unlock(&bridge_postprocess_lock);
+		pr_debug("SHMBridge list: added a Handle:%#llx\n",
+				mem_obj->shmbridge_handle);
+		__wakeup_postprocess_kthread(&smcinvoke[SHMB_WORKER_THREAD]);
+	} else {
+		dma_buf_put(mem_obj->dma_buf);
+	}
 	list_del(&mem_obj->list);
 	kfree(mem_obj);
 	mem_obj = NULL;
-	mutex_unlock(&g_smcinvoke_lock);
-
-	if (is_bridge_created)
-		ret = qtee_shmbridge_deregister(shmbridge_handle);
-	if (ret)
-		pr_err("Error:%d delete bridge failed leaking memory 0x%x\n",
-				ret, dmabuf_to_free);
-	else
-		dma_buf_put(dmabuf_to_free);
-
-	mutex_lock(&g_smcinvoke_lock);
 }
 
 static void del_mem_regn_obj_locked(struct kref *kref)
@@ -2299,14 +2568,9 @@ static int release_cb_server(uint16_t server_id)
 int smcinvoke_release_filp(struct file *filp)
 {
 	int ret = 0;
-	bool release_handles;
-	uint8_t *in_buf = NULL;
-	uint8_t *out_buf = NULL;
-	struct smcinvoke_msg_hdr hdr = {0};
 	struct smcinvoke_file_data *file_data = filp->private_data;
-	struct smcinvoke_cmd_req req = {0};
 	uint32_t tzhandle = 0;
-	struct qtee_shm in_shm = {0}, out_shm = {0};
+	struct smcinvoke_object_release_pending_list *entry = NULL;
 
 	trace_smcinvoke_release_filp(current->files, filp,
 			file_count(filp), file_data->context_type);
@@ -2321,38 +2585,23 @@ int smcinvoke_release_filp(struct file *filp)
 	if (!tzhandle || tzhandle == SMCINVOKE_TZ_ROOT_OBJ)
 		goto out;
 
-	ret = qtee_shmbridge_allocate_shm(SMCINVOKE_TZ_MIN_BUF_SIZE, &in_shm);
-	if (ret) {
+	entry = kzalloc(sizeof(*entry), GFP_KERNEL);
+	if (!entry) {
 		ret = -ENOMEM;
-		pr_err("shmbridge alloc failed for in msg in release\n");
 		goto out;
 	}
 
-	ret = qtee_shmbridge_allocate_shm(SMCINVOKE_TZ_MIN_BUF_SIZE, &out_shm);
-	if (ret) {
-		ret = -ENOMEM;
-		pr_err("shmbridge alloc failed for out msg in release\n");
-		goto out;
-	}
+	entry->data.tzhandle = tzhandle;
+	entry->data.context_type = file_data->context_type;
+	mutex_lock(&object_postprocess_lock);
+	list_add_tail(&entry->list, &g_object_postprocess);
+	mutex_unlock(&object_postprocess_lock);
+	pr_debug("Object release list: added a handle:0x%lx\n", tzhandle);
+	__wakeup_postprocess_kthread(&smcinvoke[OBJECT_WORKER_THREAD]);
 
-	in_buf = in_shm.vaddr;
-	out_buf = out_shm.vaddr;
-	hdr.tzhandle = tzhandle;
-	hdr.op = OBJECT_OP_RELEASE;
-	hdr.counts = 0;
-	*(struct smcinvoke_msg_hdr *)in_buf = hdr;
-
-	ret = prepare_send_scm_msg(in_buf, in_shm.paddr,
-			SMCINVOKE_TZ_MIN_BUF_SIZE, out_buf, out_shm.paddr,
-			SMCINVOKE_TZ_MIN_BUF_SIZE, &req, NULL, &release_handles,
-			file_data->context_type, &in_shm, &out_shm);
-
-	process_piggyback_data(out_buf, SMCINVOKE_TZ_MIN_BUF_SIZE);
 out:
 	kfree(filp->private_data);
 	filp->private_data = NULL;
-	qtee_shmbridge_free_shm(&in_shm);
-	qtee_shmbridge_free_shm(&out_shm);
 
 	return ret;
 
@@ -2428,14 +2677,22 @@ static int smcinvoke_probe(struct platform_device *pdev)
 	rc = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
 	if (rc) {
 		pr_err("dma_set_mask_and_coherent failed %d\n", rc);
-		goto exit_destroy_device;
+		goto exit_cv_del;
 	}
 	legacy_smc_call = of_property_read_bool((&pdev->dev)->of_node,
 			"qcom,support-legacy_smc");
 	invoke_cmd = legacy_smc_call ? SMCINVOKE_INVOKE_CMD_LEGACY : SMCINVOKE_INVOKE_CMD;
 
+	rc = smcinvoke_create_kthreads();
+	if (rc) {
+		pr_err("smcinvoke_create_kthreads failed %d\n", rc);
+		goto exit_cv_del;
+	}
+
 	return 0;
 
+exit_cv_del:
+	cdev_del(&smcinvoke_cdev);
 exit_destroy_device:
 	device_destroy(driver_class, smcinvoke_device_no);
 exit_destroy_class:
@@ -2449,6 +2706,7 @@ static int smcinvoke_remove(struct platform_device *pdev)
 {
 	int count = 1;
 
+	smcinvoke_destroy_kthreads();
 	cdev_del(&smcinvoke_cdev);
 	device_destroy(driver_class, smcinvoke_device_no);
 	class_destroy(driver_class);
