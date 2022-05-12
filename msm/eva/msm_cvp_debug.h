@@ -69,20 +69,12 @@ extern bool msm_cvp_mmrm_enabled;
 extern bool msm_cvp_dcvs_disable;
 extern int msm_cvp_minidump_enable;
 
-/* If bit 31 is set: disabling ratelimit use of pr_info */
-#define RATELIMIT_DISABLE_MASK	0x80000000
-
 #define dprintk(__level, __fmt, arg...)	\
 	do { \
-		if ((msm_cvp_debug & __level) \
-			&& (msm_cvp_debug_out == CVP_OUT_PRINTK)) { \
-			if (msm_cvp_debug & RATELIMIT_DISABLE_MASK) { \
+		if (msm_cvp_debug & __level) { \
+			if (msm_cvp_debug_out == CVP_OUT_PRINTK) { \
 				pr_info(CVP_DBG_TAG __fmt, \
-					get_debug_level_str(__level),	\
-					## arg); \
-			} else { \
-				pr_info_ratelimited(CVP_DBG_TAG __fmt, \
-					get_debug_level_str(__level),	\
+					get_debug_level_str(__level),   \
 					## arg); \
 			} \
 		} \
