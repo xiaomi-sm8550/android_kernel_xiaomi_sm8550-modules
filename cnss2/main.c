@@ -31,6 +31,7 @@
 #include "bus.h"
 #include "debug.h"
 #include "genl.h"
+#include "reg.h"
 
 #define CNSS_DUMP_FORMAT_VER		0x11
 #define CNSS_DUMP_FORMAT_VER_V2		0x22
@@ -3627,6 +3628,8 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 		cnss_pr_err("QMI IPC connection call back register failed, err = %d\n",
 			    ret);
 
+	plat_priv->sram_dump = kcalloc(SRAM_DUMP_SIZE, 1, GFP_KERNEL);
+
 	return 0;
 }
 
@@ -3645,6 +3648,7 @@ static void cnss_misc_deinit(struct cnss_plat_data *plat_priv)
 	del_timer(&plat_priv->fw_boot_timer);
 	wakeup_source_unregister(plat_priv->recovery_ws);
 	cnss_deinit_sol_gpio(plat_priv);
+	kfree(plat_priv->sram_dump);
 }
 
 static void cnss_init_control_params(struct cnss_plat_data *plat_priv)
