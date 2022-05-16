@@ -3745,16 +3745,24 @@ static int cnss_get_dev_cfg_node(struct cnss_plat_data *plat_priv)
 {
 	struct device_node *child;
 	u32 id, i;
-	int id_n, ret;
-	int wlan_sw_ctrl_gpio = plat_priv->pinctrl_info.wlan_sw_ctrl_gpio;
+	int id_n,  device_identifier_gpio, ret;
 	u8 gpio_value;
 
 
 	if (!plat_priv->is_converged_dt)
 		return 0;
 
-	gpio_value = gpio_get_value(wlan_sw_ctrl_gpio);
-	cnss_pr_dbg("Value of WLAN_SW_CTRL GPIO: %d\n", gpio_value);
+	/* Parses the wlan_sw_ctrl gpio which is used to identify device */
+	ret = cnss_get_wlan_sw_ctrl(plat_priv);
+	if (ret) {
+		cnss_pr_dbg("Failed to parse wlan_sw_ctrl gpio, error:%d", ret);
+		return ret;
+	}
+
+	device_identifier_gpio = plat_priv->pinctrl_info.wlan_sw_ctrl_gpio;
+
+	gpio_value = gpio_get_value(device_identifier_gpio);
+	cnss_pr_dbg("Value of Device Identifier GPIO: %d\n", gpio_value);
 
 	for_each_available_child_of_node(plat_priv->plat_dev->dev.of_node,
 					 child) {
@@ -3839,8 +3847,6 @@ static int cnss_probe(struct platform_device *plat_dev)
 	plat_priv->is_converged_dt = cnss_is_converged_dt(plat_priv);
 	plat_priv->use_fw_path_with_prefix =
 		cnss_use_fw_path_with_prefix(plat_priv);
-
-	cnss_get_wlan_sw_ctrl(plat_priv);
 
 	ret = cnss_get_dev_cfg_node(plat_priv);
 	if (ret) {
