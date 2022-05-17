@@ -30,7 +30,7 @@
 #include "cvp_hfi_io.h"
 #include "msm_cvp_dsp.h"
 #include "msm_cvp_clocks.h"
-#include "msm_cvp_vm.h"
+#include "vm/cvp_vm.h"
 #include "cvp_dump.h"
 
 #define REG_ADDR_OFFSET_BITMASK	0x000FFFFF
@@ -1397,7 +1397,7 @@ fail_dma_alloc:
 
 static void __interface_queues_release(struct iris_hfi_device *device)
 {
-#ifdef CONFIG_EVA_LE
+#ifdef CONFIG_EVA_TVM
 	int i;
 	struct cvp_hfi_mem_map_table *qdss;
 	struct cvp_hfi_mem_map *mem_map;

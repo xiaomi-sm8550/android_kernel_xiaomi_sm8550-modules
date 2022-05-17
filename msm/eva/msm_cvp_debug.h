@@ -37,8 +37,9 @@ enum cvp_msg_prio {
 	CVP_FW   = 0x001000,
 	CVP_SESS = 0x002000,
 	CVP_HFI  = 0x004000,
+	CVP_VM   = 0x008000,
 	CVP_DBG  = CVP_MEM | CVP_SYNX | CVP_CORE | CVP_REG |
-		CVP_PWR | CVP_DSP | CVP_SESS | CVP_HFI | CVP_PKT,
+		CVP_PWR | CVP_DSP | CVP_SESS | CVP_HFI | CVP_PKT | CVP_VM,
 };
 
 enum cvp_msg_out {
@@ -72,8 +73,8 @@ extern int msm_cvp_minidump_enable;
 	do { \
 		if (msm_cvp_debug & __level) { \
 			if (msm_cvp_debug_out == CVP_OUT_PRINTK) { \
-				pr_info_ratelimited(CVP_DBG_TAG __fmt, \
-					get_debug_level_str(__level),	\
+				pr_info(CVP_DBG_TAG __fmt, \
+					get_debug_level_str(__level),   \
 					## arg); \
 			} \
 		} \
