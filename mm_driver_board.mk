@@ -7,9 +7,12 @@ ifneq ($(TARGET_BOARD_AUTO),true)
 		BOARD_VENDOR_RAMDISK_RECOVERY_KERNEL_MODULES_LOAD += $(KERNEL_MODULES_OUT)/msm_ext_display.ko
 
 		ifneq ($(TARGET_BOARD_PLATFORM), taro)
-		BOARD_VENDOR_KERNEL_MODULES += $(KERNEL_MODULES_OUT)/sync_fence.ko
-		BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(KERNEL_MODULES_OUT)/sync_fence.ko
-		BOARD_VENDOR_RAMDISK_RECOVERY_KERNEL_MODULES_LOAD += $(KERNEL_MODULES_OUT)/sync_fence.ko
+		BOARD_VENDOR_KERNEL_MODULES += $(KERNEL_MODULES_OUT)/sync_fence.ko \
+					       $(KERNEL_MODULES_OUT)/msm_hw_fence.ko
+		BOARD_VENDOR_RAMDISK_KERNEL_MODULES += $(KERNEL_MODULES_OUT)/sync_fence.ko \
+						       $(KERNEL_MODULES_OUT)/msm_hw_fence.ko
+		BOARD_VENDOR_RAMDISK_RECOVERY_KERNEL_MODULES_LOAD += $(KERNEL_MODULES_OUT)/sync_fence.ko \
+					                             $(KERNEL_MODULES_OUT)/msm_hw_fence.ko
 		endif
 	endif
 endif
