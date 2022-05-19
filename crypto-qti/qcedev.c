@@ -57,8 +57,16 @@ static uint8_t _std_init_vector_sha256_uint8[] = {
 #define QCEDEV_CTX_USE_HW_KEY		0x00000001
 #define QCEDEV_CTX_USE_PIPE_KEY		0x00000002
 
-#define QCEDEV_PIPE_KEY_TIMER1_EXPIRED_VEC_MASK 0x000000FF
-#define QCEDEV_PIPE_KEY_TIMER2_EXPIRED_VEC_MASK 0x00000003
+// Key timer expiry for pipes 1-15 (Status3)
+#define PIPE_KEY_TIMER_EXPIRED_STATUS3_MASK	0x000000FF
+// Key timer expiry for pipes 16-19 (Status6)
+#define PIPE_KEY_TIMER_EXPIRED_STATUS6_MASK	0x00000003
+// Key pause for pipes 1-15 (Status3)
+#define PIPE_KEY_PAUSE_STATUS3_MASK	0xFF0000
+// Key pause for pipes 16-19 (Status6)
+#define PIPE_KEY_PAUSE_STATUS6_MASK	0x30000
+
+#define QCEDEV_STATUS1_ERR_INTR_MASK	0x10
 
 static DEFINE_MUTEX(send_cmd_lock);
 static DEFINE_MUTEX(qcedev_sent_bw_req);
@@ -678,16 +686,39 @@ static void qcedev_check_crypto_status(
 		pr_err("%s: sts = 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n", __func__,
 			s1, s2, s3, s4, s5, s6);
 	}
-	if ((s6 & QCEDEV_PIPE_KEY_TIMER2_EXPIRED_VEC_MASK) ||
-		(s3 & QCEDEV_PIPE_KEY_TIMER1_EXPIRED_VEC_MASK)) {
+
+	// Check for key timer expiry
+	if ((s6 & PIPE_KEY_TIMER_EXPIRED_STATUS6_MASK) ||
+		(s3 & PIPE_KEY_TIMER_EXPIRED_STATUS3_MASK)) {
 		pr_info("%s: crypto timer expired\n", __func__);
 		pr_info("%s: sts = 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n", __func__,
 			s1, s2, s3, s4, s5, s6);
 		qcedev_areq->offload_cipher_op_req.err =
-					QCEDEV_OFFLOAD_TIMER_ERROR;
+					QCEDEV_OFFLOAD_KEY_TIMER_EXPIRED_ERROR;
+		return;
 	}
 
-	return;
+	// Check for key pause
+	if ((s6 & PIPE_KEY_PAUSE_STATUS6_MASK) ||
+		(s3 & PIPE_KEY_PAUSE_STATUS3_MASK)) {
+		pr_info("%s: crypto key paused\n", __func__);
+		pr_info("%s: sts = 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n", __func__,
+			s1, s2, s3, s4, s5, s6);
+		qcedev_areq->offload_cipher_op_req.err =
+					QCEDEV_OFFLOAD_KEY_PAUSE_ERROR;
+		return;
+	}
+
+	// Check for generic error
+	if (s1 & QCEDEV_STATUS1_ERR_INTR_MASK) {
+		pr_err("%s: generic crypto error\n", __func__);
+		pr_info("%s: sts = 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n", __func__,
+			s1, s2, s3, s4, s5, s6);
+		qcedev_areq->offload_cipher_op_req.err =
+					QCEDEV_OFFLOAD_GENERIC_ERROR;
+		return;
+	}
+
 }
 
 static int submit_req(struct qcedev_async_req *qcedev_areq,
@@ -743,6 +774,9 @@ static int submit_req(struct qcedev_async_req *qcedev_areq,
 		print_sts = true;
 		qcedev_check_crypto_status(qcedev_areq, podev->qce, print_sts);
 		qce_manage_timeout(podev->qce, current_req_info);
+		if (qcedev_areq->offload_cipher_op_req.err !=
+						QCEDEV_OFFLOAD_NO_ERROR)
+			return 0;
 	}
 
 	if (ret)

@@ -85,7 +85,7 @@ static LIST_HEAD(qce50_bam_list);
 #define TOTAL_IOVEC_SPACE_PER_PIPE (QCE_MAX_NUM_DSCR * sizeof(struct sps_iovec))
 
 #define AES_CTR_IV_CTR_SIZE	64
-#define EXPECTED_STATUS1_REG_VAL	0x2000006
+#define STATUS1_ERR_INTR_MASK	0x10
 
 enum qce_owner {
 	QCE_OWNER_NONE   = 0,
@@ -228,7 +228,7 @@ void qce_get_crypto_status(void *handle, unsigned int *s1, unsigned int *s2,
 #ifdef QCE_DEBUG
 	dump_status_regs(*s1, *s2, *s3, *s4, *s5, *s6);
 #else
-	if (*s1 != EXPECTED_STATUS1_REG_VAL)
+	if (*s1 & STATUS1_ERR_INTR_MASK)
 		dump_status_regs(*s1, *s2, *s3, *s4, *s5, *s6);
 #endif
 	return;
