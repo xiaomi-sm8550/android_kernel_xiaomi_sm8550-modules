@@ -22,9 +22,11 @@
 #include <linux/firmware.h>
 #include <linux/soc/qcom/qmi.h>
 #include <linux/platform_device.h>
+#ifdef CONFIG_CNSS_OUT_OF_TREE
+#include "icnss2.h"
+#else
 #include <soc/qcom/icnss2.h>
-#include <soc/qcom/service-locator.h>
-#include <soc/qcom/service-notifier.h>
+#endif
 #include <soc/qcom/of_common.h>
 #include "wlan_firmware_service_v01.h"
 #include "main.h"
@@ -2927,7 +2929,7 @@ static void wlfw_del_server(struct qmi_handle *qmi,
 	struct icnss_priv *priv = container_of(qmi, struct icnss_priv, qmi);
 
 	if (priv && test_bit(ICNSS_DEL_SERVER, &priv->state)) {
-		icnss_pr_info("WLFW server delete in progress, Ignore server delete:  0x%lx\n",
+		icnss_pr_info("WLFW server delete / icnss remove in progress, Ignore server delete:  0x%lx\n",
 			      priv->state);
 		return;
 	}
@@ -2972,6 +2974,7 @@ int icnss_register_fw_service(struct icnss_priv *priv)
 
 void icnss_unregister_fw_service(struct icnss_priv *priv)
 {
+	set_bit(ICNSS_DEL_SERVER, &priv->state);
 	qmi_handle_release(&priv->qmi);
 }
 

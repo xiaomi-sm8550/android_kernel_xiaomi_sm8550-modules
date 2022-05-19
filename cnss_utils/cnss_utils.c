@@ -50,6 +50,9 @@ static struct cnss_utils_priv {
 	struct cnss_wlan_mac_addr wlan_der_mac_addr;
 	enum cnss_utils_cc_src cc_source;
 	struct dentry *root_dentry;
+	/* generic mutex for device_id */
+	struct mutex cnss_device_id_lock;
+	enum cnss_utils_device_type cnss_device_type;
 } *cnss_utils_priv;
 
 int cnss_utils_set_wlan_unsafe_channel(struct device *dev,
@@ -110,6 +113,29 @@ int cnss_utils_get_wlan_unsafe_channel(struct device *dev,
 	return 0;
 }
 EXPORT_SYMBOL(cnss_utils_get_wlan_unsafe_channel);
+
+enum cnss_utils_device_type cnss_utils_update_device_type(
+			enum cnss_utils_device_type  device_type)
+{
+	struct cnss_utils_priv *priv = cnss_utils_priv;
+
+	if (!priv)
+		return -EINVAL;
+
+	mutex_lock(&priv->cnss_device_id_lock);
+	pr_info("cnss_utils: device type:%d\n", device_type);
+	if (priv->cnss_device_type == CNSS_UNSUPPORETD_DEVICE_TYPE) {
+		priv->cnss_device_type = device_type;
+		pr_info("cnss_utils: set device type:%d\n",
+			priv->cnss_device_type);
+	} else {
+		pr_info("cnss_utils: device type already set :%d\n",
+			priv->cnss_device_type);
+	}
+	mutex_unlock(&priv->cnss_device_id_lock);
+	return priv->cnss_device_type;
+}
+EXPORT_SYMBOL(cnss_utils_update_device_type);
 
 int cnss_utils_wlan_set_dfs_nol(struct device *dev,
 				const void *info, u16 info_len)
@@ -482,8 +508,10 @@ static int __init cnss_utils_init(void)
 		return -ENOMEM;
 
 	priv->cc_source = CNSS_UTILS_SOURCE_CORE;
+	priv->cnss_device_type = CNSS_UNSUPPORETD_DEVICE_TYPE;
 
 	mutex_init(&priv->unsafe_channel_list_lock);
+	mutex_init(&priv->cnss_device_id_lock);
 	spin_lock_init(&priv->dfs_nol_info_lock);
 	cnss_utils_debugfs_create(priv);
 	cnss_utils_priv = priv;

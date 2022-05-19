@@ -57,6 +57,7 @@
 #define FW_V2_NUMBER                    2
 #define POWER_ON_RETRY_MAX_TIMES        3
 #define POWER_ON_RETRY_DELAY_MS         500
+#define WLFW_MAX_HANG_EVENT_DATA_SIZE   384
 
 #define CNSS_EVENT_SYNC   BIT(0)
 #define CNSS_EVENT_UNINTERRUPTIBLE BIT(1)
@@ -111,6 +112,8 @@ struct cnss_pinctrl_info {
 	struct pinctrl_state *wlan_en_sleep;
 	int bt_en_gpio;
 	int xo_clk_gpio; /*qca6490 only */
+	int sw_ctrl_gpio;
+	int wlan_sw_ctrl_gpio;
 };
 
 #if IS_ENABLED(CONFIG_MSM_SUBSYSTEM_RESTART)
@@ -354,6 +357,7 @@ enum cnss_debug_quirks {
 	DISABLE_IO_COHERENCY,
 	IGNORE_PCI_LINK_FAILURE,
 	DISABLE_TIME_SYNC,
+	QUIRK_MAX_VALUE
 };
 
 enum cnss_bdf_type {
@@ -534,8 +538,13 @@ struct cnss_plat_data {
 	struct mbox_client mbox_client_data;
 	struct mbox_chan *mbox_chan;
 	const char *vreg_ol_cpr, *vreg_ipa;
+	const char **pdc_init_table, **vreg_pdc_map;
+	int pdc_init_table_len, vreg_pdc_map_len;
 	bool adsp_pc_enabled;
 	u64 feature_list;
+	u32 is_converged_dt;
+	u16 hang_event_data_len;
+	u32 hang_data_addr_offset;
 };
 
 #if IS_ENABLED(CONFIG_ARCH_QCOM)
@@ -577,6 +586,7 @@ void cnss_put_clk(struct cnss_plat_data *plat_priv);
 int cnss_vreg_unvote_type(struct cnss_plat_data *plat_priv,
 			  enum cnss_vreg_type type);
 int cnss_get_pinctrl(struct cnss_plat_data *plat_priv);
+int cnss_get_wlan_sw_ctrl(struct cnss_plat_data *plat_priv);
 int cnss_power_on_device(struct cnss_plat_data *plat_priv);
 void cnss_power_off_device(struct cnss_plat_data *plat_priv);
 bool cnss_is_device_powered_on(struct cnss_plat_data *plat_priv);
@@ -609,11 +619,17 @@ int cnss_get_tcs_info(struct cnss_plat_data *plat_priv);
 unsigned int cnss_get_timeout(struct cnss_plat_data *plat_priv,
 			      enum cnss_timeout_type);
 int cnss_aop_mbox_init(struct cnss_plat_data *plat_priv);
+int cnss_aop_pdc_reconfig(struct cnss_plat_data *plat_priv);
+int cnss_aop_send_msg(struct cnss_plat_data *plat_priv, char *msg);
+void cnss_power_misc_params_init(struct cnss_plat_data *plat_priv);
 int cnss_request_firmware_direct(struct cnss_plat_data *plat_priv,
 				 const struct firmware **fw_entry,
 				 const char *filename);
 int cnss_set_feature_list(struct cnss_plat_data *plat_priv,
 			  enum cnss_feature_v01 feature);
+int cnss_clear_feature_list(struct cnss_plat_data *plat_priv,
+			    enum cnss_feature_v01 feature);
 int cnss_get_feature_list(struct cnss_plat_data *plat_priv,
 			  u64 *feature_list);
+int cnss_get_input_gpio_value(struct cnss_plat_data *plat_priv, int gpio_num);
 #endif /* _CNSS_MAIN_H */
