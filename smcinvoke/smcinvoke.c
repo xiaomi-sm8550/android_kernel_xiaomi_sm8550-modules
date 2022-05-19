@@ -548,7 +548,7 @@ static void release_tzhandles(const int32_t *tzhandles, size_t len)
 	mutex_unlock(&g_smcinvoke_lock);
 }
 
-static void delete_cb_txn(struct kref *kref)
+static void delete_cb_txn_locked(struct kref *kref)
 {
 	struct smcinvoke_cb_txn *cb_txn = container_of(kref,
 			struct smcinvoke_cb_txn, ref_cnt);
@@ -1226,7 +1226,7 @@ out:
 			cb_req->hdr.counts, cb_reqs_inflight);
 
 	memcpy(buf, cb_req, buf_len);
-	kref_put(&cb_txn->ref_cnt, delete_cb_txn);
+	kref_put(&cb_txn->ref_cnt, delete_cb_txn_locked);
 	if (srvr_info)
 		kref_put(&srvr_info->ref_cnt, destroy_cb_server);
 	mutex_unlock(&g_smcinvoke_lock);
@@ -1846,7 +1846,9 @@ static long process_accept_req(struct file *filp, unsigned int cmd,
 			cb_txn->cb_req->result = OBJECT_ERROR_UNAVAIL;
 
 		cb_txn->state = SMCINVOKE_REQ_PROCESSED;
-		kref_put(&cb_txn->ref_cnt, delete_cb_txn);
+		mutex_lock(&g_smcinvoke_lock);
+		kref_put(&cb_txn->ref_cnt, delete_cb_txn_locked);
+		mutex_unlock(&g_smcinvoke_lock);
 		wake_up(&server_info->rsp_wait_q);
 		/*
 		 * if marshal_out fails, we should let userspace release
@@ -1890,14 +1892,16 @@ static long process_accept_req(struct file *filp, unsigned int cmd,
 				pr_err("failed to marshal in the callback request\n");
 				cb_txn->cb_req->result = OBJECT_ERROR_UNAVAIL;
 				cb_txn->state = SMCINVOKE_REQ_PROCESSED;
-				kref_put(&cb_txn->ref_cnt, delete_cb_txn);
+				mutex_lock(&g_smcinvoke_lock);
+				kref_put(&cb_txn->ref_cnt, delete_cb_txn_locked);
+				mutex_unlock(&g_smcinvoke_lock);
 				wake_up_interruptible(&server_info->rsp_wait_q);
 				continue;
 			}
 			mutex_lock(&g_smcinvoke_lock);
 			hash_add(server_info->responses_table, &cb_txn->hash,
 					cb_txn->txn_id);
-			kref_put(&cb_txn->ref_cnt, delete_cb_txn);
+			kref_put(&cb_txn->ref_cnt, delete_cb_txn_locked);
 			mutex_unlock(&g_smcinvoke_lock);
 
 			trace_process_accept_req_placed(current->pid, current->tgid);
