@@ -174,6 +174,7 @@ static const struct mhi_channel_config cnss_mhi_channels[] = {
 		.doorbell_mode_switch = false,
 		.auto_queue = true,
 	},
+/* All MHI satellite config to be at the end of data struct */
 #if IS_ENABLED(CONFIG_MHI_SATELLITE)
 	{
 		.num = 50,
@@ -288,7 +289,15 @@ static const struct mhi_event_config cnss_mhi_events[] = {
 #endif
 };
 
-static const struct mhi_controller_config cnss_mhi_config = {
+#if IS_ENABLED(CONFIG_MHI_SATELLITE)
+#define CNSS_MHI_SATELLITE_CH_CFG_COUNT 4
+#define CNSS_MHI_SATELLITE_EVT_COUNT 1
+#else
+#define CNSS_MHI_SATELLITE_CH_CFG_COUNT 0
+#define CNSS_MHI_SATELLITE_EVT_COUNT 0
+#endif
+
+static const struct mhi_controller_config cnss_mhi_config_default = {
 #if IS_ENABLED(CONFIG_MHI_SATELLITE)
 	.max_channels = 72,
 #else
@@ -300,6 +309,20 @@ static const struct mhi_controller_config cnss_mhi_config = {
 	.num_channels = ARRAY_SIZE(cnss_mhi_channels),
 	.ch_cfg = cnss_mhi_channels,
 	.num_events = ARRAY_SIZE(cnss_mhi_events),
+	.event_cfg = cnss_mhi_events,
+	.m2_no_db = true,
+};
+
+static const struct mhi_controller_config cnss_mhi_config_no_satellite = {
+	.max_channels = 32,
+	.timeout_ms = 10000,
+	.use_bounce_buf = false,
+	.buf_len = 0x8000,
+	.num_channels = ARRAY_SIZE(cnss_mhi_channels) -
+			CNSS_MHI_SATELLITE_CH_CFG_COUNT,
+	.ch_cfg = cnss_mhi_channels,
+	.num_events = ARRAY_SIZE(cnss_mhi_events) -
+			CNSS_MHI_SATELLITE_EVT_COUNT,
 	.event_cfg = cnss_mhi_events,
 	.m2_no_db = true,
 };
@@ -5033,21 +5056,6 @@ void cnss_pci_add_fw_prefix_name(struct cnss_pci_data *pci_priv,
 static int cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
-	struct mhi_controller *mhi_ctrl = pci_priv->mhi_ctrl;
-
-	plat_priv->device_version.family_number = mhi_ctrl->family_number;
-	plat_priv->device_version.device_number = mhi_ctrl->device_number;
-	plat_priv->device_version.major_version = mhi_ctrl->major_version;
-	plat_priv->device_version.minor_version = mhi_ctrl->minor_version;
-
-	cnss_pr_dbg("Get device version info, family number: 0x%x, device number: 0x%x, major version: 0x%x, minor version: 0x%x\n",
-		    plat_priv->device_version.family_number,
-		    plat_priv->device_version.device_number,
-		    plat_priv->device_version.major_version,
-		    plat_priv->device_version.minor_version);
-
-	/* Only keep lower 4 bits as real device major version */
-	plat_priv->device_version.major_version &= DEVICE_MAJOR_VERSION_MASK;
 
 	switch (pci_priv->device_id) {
 	case QCA6390_DEVICE_ID:
@@ -5393,6 +5401,33 @@ static void cnss_mhi_write_reg(struct mhi_controller *mhi_ctrl,
 	writel_relaxed(val, addr);
 }
 
+static int cnss_get_mhi_soc_info(struct cnss_plat_data *plat_priv,
+				 struct mhi_controller *mhi_ctrl)
+{
+	int ret = 0;
+
+	ret = mhi_get_soc_info(mhi_ctrl);
+	if (ret)
+		goto exit;
+
+	plat_priv->device_version.family_number = mhi_ctrl->family_number;
+	plat_priv->device_version.device_number = mhi_ctrl->device_number;
+	plat_priv->device_version.major_version = mhi_ctrl->major_version;
+	plat_priv->device_version.minor_version = mhi_ctrl->minor_version;
+
+	cnss_pr_dbg("Get device version info, family number: 0x%x, device number: 0x%x, major version: 0x%x, minor version: 0x%x\n",
+		    plat_priv->device_version.family_number,
+		    plat_priv->device_version.device_number,
+		    plat_priv->device_version.major_version,
+		    plat_priv->device_version.minor_version);
+
+	/* Only keep lower 4 bits as real device major version */
+	plat_priv->device_version.major_version &= DEVICE_MAJOR_VERSION_MASK;
+
+exit:
+	return ret;
+}
+
 static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -5400,6 +5435,8 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	struct mhi_controller *mhi_ctrl;
 	phys_addr_t bar_start;
+	const struct mhi_controller_config *cnss_mhi_config =
+						&cnss_mhi_config_default;
 
 	if (pci_priv->device_id == QCA6174_DEVICE_ID)
 		return 0;
@@ -5452,7 +5489,17 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	mhi_ctrl->seg_len = SZ_512K;
 	mhi_ctrl->fbc_download = true;
 
-	ret = mhi_register_controller(mhi_ctrl, &cnss_mhi_config);
+	ret = cnss_get_mhi_soc_info(plat_priv, mhi_ctrl);
+	if (ret)
+		goto free_mhi_irq;
+
+	/* Satellite config only supported on KIWI V2 and later chipset */
+	if (plat_priv->device_id <= QCA6490_DEVICE_ID ||
+	    (plat_priv->device_id == KIWI_DEVICE_ID &&
+	     plat_priv->device_version.major_version == 1))
+		cnss_mhi_config = &cnss_mhi_config_no_satellite;
+
+	ret = mhi_register_controller(mhi_ctrl, cnss_mhi_config);
 	if (ret) {
 		cnss_pr_err("Failed to register to MHI bus, err = %d\n", ret);
 		goto free_mhi_irq;
