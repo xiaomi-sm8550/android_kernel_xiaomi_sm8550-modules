@@ -17,6 +17,7 @@
 #include <linux/rfkill.h>
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
+#include <linux/of.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
 #include <linux/regulator/consumer.h>
@@ -29,6 +30,7 @@
 #include "btfm_slim.h"
 #endif
 #include <linux/fs.h>
+#include "cnss_utils.h"
 
 #define PWR_SRC_NOT_AVAILABLE -2
 #define DEFAULT_INVALID_VALUE -1
@@ -198,6 +200,11 @@ static struct bt_power bt_vreg_info_kiwi = {
 	.num_vregs = ARRAY_SIZE(bt_vregs_info_kiwi),
 };
 
+static struct bt_power bt_vreg_info_converged = {
+	.compatible = "qcom,bt-qca-converged",
+	.vregs = bt_vregs_info_kiwi,
+	.num_vregs = ARRAY_SIZE(bt_vregs_info_kiwi),
+};
 
 static struct bt_power bt_vreg_info_wcn6750 = {
 	.compatible = "qcom,wcn6750-bt",
@@ -212,6 +219,7 @@ static const struct of_device_id bt_power_match_table[] = {
 	{	.compatible = "qcom,qca6490", .data = &bt_vreg_info_qca6490},
 	{	.compatible = "qcom,kiwi",    .data = &bt_vreg_info_kiwi},
 	{	.compatible = "qcom,wcn6750-bt", .data = &bt_vreg_info_wcn6750},
+	{	.compatible = "qcom,bt-qca-converged", .data = &bt_vreg_info_converged},
 	{},
 };
 
@@ -965,16 +973,30 @@ static void bt_power_vreg_put(void)
 	}
 }
 
-
 static int bt_power_populate_dt_pinfo(struct platform_device *pdev)
 {
 	int rc;
-
+	struct device_node *child;
 	pr_debug("%s\n", __func__);
 
 	if (!bt_power_pdata)
 		return -ENOMEM;
 
+	if (bt_power_pdata->is_converged_dt) {
+		for_each_available_child_of_node(pdev->dev.of_node, child) {
+			if (bt_power_pdata->bt_device_type == CNSS_HSP_DEVICE_TYPE ) {
+				if (strcmp(child->name, "bt_qca6490"))
+					continue;
+				pr_info("%s: bt_qca6490 device node found", __func__);
+			} else if (bt_power_pdata->bt_device_type == CNSS_HMT_DEVICE_TYPE) {
+				if (strcmp(child->name, "bt_kiwi"))
+					continue;
+				pr_info("%s: bt_kiwi device node found", __func__);
+			}
+			pdev->dev.of_node = child;
+			break;
+		}
+	}
 	if (pdev->dev.of_node) {
 		rc = bt_power_vreg_get(pdev);
 		if (rc)
@@ -1040,9 +1062,35 @@ static int bt_power_populate_dt_pinfo(struct platform_device *pdev)
 	return 0;
 }
 
+static inline bool bt_is_converged_dt(struct platform_device *plat_dev)
+{
+	return of_property_read_bool(plat_dev->dev.of_node, "qcom,converged-dt");
+}
+
+static void bt_power_pdc_init_params (struct btpower_platform_data *pdata)
+{
+	int ret;
+	struct device *dev = &pdata->pdev->dev;
+	pdata->pdc_init_table_len = of_property_count_strings(dev->of_node,
+				"qcom,pdc_init_table");
+	if (pdata->pdc_init_table_len > 0) {
+		pdata->pdc_init_table = kcalloc(pdata->pdc_init_table_len,
+				sizeof(char *), GFP_KERNEL);
+		ret = of_property_read_string_array(dev->of_node, "qcom,pdc_init_table",
+			pdata->pdc_init_table, pdata->pdc_init_table_len);
+		if (ret < 0)
+			pr_err("Failed to get PDC Init Table\n");
+		else
+			pr_info("PDC Init table configured\n");
+	} else {
+		pr_debug("PDC Init Table not configured\n");
+	}
+}
+
 static int bt_power_probe(struct platform_device *pdev)
 {
 	int ret = 0;
+	unsigned int gpio_value;
 	int itr;
 
 	pr_debug("%s\n", __func__);
@@ -1060,6 +1108,27 @@ static int bt_power_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	bt_power_pdata->pdev = pdev;
+        bt_power_pdata->is_converged_dt = bt_is_converged_dt(pdev);
+	if (bt_power_pdata->is_converged_dt) {
+		if (of_find_property(pdev->dev.of_node, WLAN_SW_CTRL_GPIO, NULL)) {
+			bt_power_pdata->wlan_sw_ctrl_gpio =
+				of_get_named_gpio(pdev->dev.of_node, WLAN_SW_CTRL_GPIO,0);
+			pr_debug("WLAN Switch control GPIO: %d\n",
+					bt_power_pdata->wlan_sw_ctrl_gpio);
+		} else {
+			bt_power_pdata->wlan_sw_ctrl_gpio = -EINVAL;
+		}
+		gpio_value = gpio_get_value(bt_power_pdata->wlan_sw_ctrl_gpio);
+		pr_info("%s:WLAN_SW_CNTRL_GPIO value= %d\n", __func__, gpio_value);
+		if(gpio_value) {
+			bt_power_pdata->bt_device_type =
+				cnss_utils_update_device_type(CNSS_HSP_DEVICE_TYPE);
+		} else {
+			bt_power_pdata->bt_device_type =
+				cnss_utils_update_device_type(CNSS_HMT_DEVICE_TYPE);
+		}
+	}
+
 	if (pdev->dev.of_node) {
 		ret = bt_power_populate_dt_pinfo(pdev);
 		if (ret < 0) {
@@ -1083,10 +1152,9 @@ static int bt_power_probe(struct platform_device *pdev)
 		pr_err("%s: Failed to get platform data\n", __func__);
 		goto free_pdata;
 	}
-
 	if (btpower_rfkill_probe(pdev) < 0)
 		goto free_pdata;
-
+        bt_power_pdc_init_params(bt_power_pdata);
 	btpower_aop_mbox_init(bt_power_pdata);
 
 	probe_finished = true;
@@ -1379,6 +1447,51 @@ driver_err:
 	return ret;
 }
 
+/**
+ * bt_aop_send_msg: Sends json message to AOP using QMP
+ * @plat_priv: Pointer to cnss platform data
+ * @msg: String in json format
+ *
+ * AOP accepts JSON message to configure WLAN/BT resources. Format as follows:
+ * To send VReg config: {class: wlan_pdc, ss: <pdc_name>,
+ *                       res: <VReg_name>.<param>, <seq_param>: <value>}
+ * To send PDC Config: {class: wlan_pdc, ss: <pdc_name>, res: pdc,
+ *                      enable: <Value>}
+ * QMP returns timeout error if format not correct or AOP operation fails.
+ *
+ * Return: 0 for success
+ */
+ int bt_aop_send_msg(struct btpower_platform_data *plat_priv, char *mbox_msg)
+ {
+	struct qmp_pkt pkt;
+	int ret = 0;
+	pkt.size = BTPOWER_MBOX_MSG_MAX_LEN;
+	pkt.data = mbox_msg;
+	ret = mbox_send_message(plat_priv->mbox_chan, &pkt);
+	if (ret < 0)
+		pr_err("Failed to send AOP mbox msg: %s\n", mbox_msg);
+	else
+		ret =0;
+	return ret;
+
+ }
+int bt_aop_pdc_reconfig(struct btpower_platform_data *pdata)
+{
+
+	unsigned int i;
+	int ret;
+	if (pdata->pdc_init_table_len <= 0 || !pdata->pdc_init_table)
+		return 0;
+        pr_debug("Setting PDC defaults");
+	for (i = 0; i < pdata->pdc_init_table_len; i++) {
+		ret =bt_aop_send_msg(pdata,(char *)pdata->pdc_init_table[i]);
+		if (ret < 0)
+			break;
+	}
+	return ret;
+}
+
+
 int btpower_aop_mbox_init(struct btpower_platform_data *pdata)
 {
 	struct mbox_client *mbox = &pdata->mbox_client_data;
@@ -1405,6 +1518,10 @@ int btpower_aop_mbox_init(struct btpower_platform_data *pdata)
 		pr_info("%s: vreg for iPA not configured\n", __func__);
 	else
 		pr_info("%s: Mbox channel initialized\n", __func__);
+
+	ret = bt_aop_pdc_reconfig(pdata);
+	if (ret)
+		pr_err("Failed to reconfig BT WLAN PDC, err = %d\n", ret);
 
 	return 0;
 }
