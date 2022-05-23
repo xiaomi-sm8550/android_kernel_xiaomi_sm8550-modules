@@ -89,6 +89,8 @@ int wlfw_qdss_trace_stop(struct cnss_plat_data *plat_priv, unsigned long long op
 int cnss_wlfw_cal_report_req_send_sync(struct cnss_plat_data *plat_priv,
 				       u32 cal_file_download_size);
 int cnss_send_subsys_restart_level_msg(struct cnss_plat_data *plat_priv);
+int cnss_wlfw_ini_file_send_sync(struct cnss_plat_data *plat_priv,
+				 enum wlfw_ini_file_type_v01 file_type);
 #else
 #define QMI_WLFW_TIMEOUT_MS		10000
 
@@ -307,6 +309,12 @@ int cnss_wlfw_cal_report_req_send_sync(struct cnss_plat_data *plat_priv,
 
 static inline
 int cnss_send_subsys_restart_level_msg(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+
+int cnss_wlfw_ini_file_send_sync(struct cnss_plat_data *plat_priv,
+				 enum wlfw_ini_file_type_v01 file_type)
 {
 	return 0;
 }
