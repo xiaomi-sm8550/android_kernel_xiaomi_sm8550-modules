@@ -547,6 +547,7 @@ struct cnss_plat_data {
 	u32 is_converged_dt;
 	u16 hang_event_data_len;
 	u32 hang_data_addr_offset;
+	enum cnss_driver_mode driver_mode;
 };
 
 #if IS_ENABLED(CONFIG_ARCH_QCOM)
