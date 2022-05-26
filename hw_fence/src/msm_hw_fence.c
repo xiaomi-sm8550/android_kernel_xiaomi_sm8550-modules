@@ -98,6 +98,10 @@ void *msm_hw_fence_register(enum hw_fence_client_id client_id,
 		hw_fence_client, hw_fence_client->client_id, hw_fence_client->ipc_signal_id,
 		hw_fence_client->ipc_client_id);
 
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+	init_waitqueue_head(&hw_fence_client->wait_queue);
+#endif /* CONFIG_DEBUG_FS */
+
 	return (void *)hw_fence_client;
 error:
 

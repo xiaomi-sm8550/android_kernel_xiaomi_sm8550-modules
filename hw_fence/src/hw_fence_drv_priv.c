@@ -539,6 +539,17 @@ int hw_fence_init_controller_signal(struct hw_fence_driver_data *drv_data,
 	case HW_FENCE_CLIENT_ID_CTX0:
 		/* nothing to initialize for gpu client */
 		break;
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+	case HW_FENCE_CLIENT_ID_VAL0:
+	case HW_FENCE_CLIENT_ID_VAL1:
+	case HW_FENCE_CLIENT_ID_VAL2:
+	case HW_FENCE_CLIENT_ID_VAL3:
+	case HW_FENCE_CLIENT_ID_VAL4:
+	case HW_FENCE_CLIENT_ID_VAL5:
+	case HW_FENCE_CLIENT_ID_VAL6:
+		/* nothing to initialize for validation clients */
+		break;
+#endif /* CONFIG_DEBUG_FS */
 	case HW_FENCE_CLIENT_ID_CTL0:
 	case HW_FENCE_CLIENT_ID_CTL1:
 	case HW_FENCE_CLIENT_ID_CTL2:
