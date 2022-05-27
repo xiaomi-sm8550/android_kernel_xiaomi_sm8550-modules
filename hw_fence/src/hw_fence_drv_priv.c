@@ -31,7 +31,7 @@ static int init_hw_fences_queues(struct hw_fence_driver_data *drv_data,
 	void *ptr, *qptr;
 	phys_addr_t phys, qphys;
 	u32 size, start_queue_offset;
-	int headers_size, queue_size;
+	int headers_size, queue_size, payload_size;
 	int i, ret = 0;
 
 	HWFNC_DBG_INIT("mem_reserve_id:%d client_id:%d\n", mem_reserve_id, client_id);
@@ -39,10 +39,12 @@ static int init_hw_fences_queues(struct hw_fence_driver_data *drv_data,
 	case HW_FENCE_MEM_RESERVE_CTRL_QUEUE:
 		headers_size = HW_FENCE_HFI_CTRL_HEADERS_SIZE;
 		queue_size = drv_data->hw_fence_ctrl_queue_size;
+		payload_size = HW_FENCE_CTRL_QUEUE_PAYLOAD;
 		break;
 	case HW_FENCE_MEM_RESERVE_CLIENT_QUEUE:
 		headers_size = HW_FENCE_HFI_CLIENT_HEADERS_SIZE;
 		queue_size = drv_data->hw_fence_client_queue_size;
+		payload_size = HW_FENCE_CLIENT_QUEUE_PAYLOAD;
 		break;
 	default:
 		HWFNC_ERR("Unexpected mem reserve id: %d\n", mem_reserve_id);
@@ -101,6 +103,9 @@ static int init_hw_fences_queues(struct hw_fence_driver_data *drv_data,
 
 		/* Set the size of this header */
 		hfi_queue_header->queue_size = queue_size;
+
+		/* Set the payload size */
+		hfi_queue_header->pkt_size = payload_size;
 
 		/* Store Memory info in the Client data */
 		queues[i].va_queue = qptr;
