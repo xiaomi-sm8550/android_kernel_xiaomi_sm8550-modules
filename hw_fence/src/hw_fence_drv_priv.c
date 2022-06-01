@@ -324,6 +324,7 @@ int hw_fence_update_queue(struct hw_fence_driver_data *drv_data,
 	writeq_relaxed(hash, &write_ptr_payload->hash);
 	writeq_relaxed(flags, &write_ptr_payload->flags);
 	writel_relaxed(error, &write_ptr_payload->error);
+	writel_relaxed(hw_fence_get_qtime(drv_data), &write_ptr_payload->timestamp);
 
 	/* update memory for the message */
 	wmb();

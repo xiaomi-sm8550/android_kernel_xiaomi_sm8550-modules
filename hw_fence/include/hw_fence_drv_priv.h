@@ -326,6 +326,7 @@ struct hw_fence_driver_data {
  * @error: error code for this fence, fence controller receives this
  *		  error from the signaling client through the tx queue and
  *		  propagates the error to the waiting client through rx queue
+ * @timestamp: qtime when the payload is written into the queue
  */
 struct msm_hw_fence_queue_payload {
 	u64 ctxt_id;
@@ -333,7 +334,7 @@ struct msm_hw_fence_queue_payload {
 	u64 hash;
 	u64 flags;
 	u32 error;
-	u32 unused; /* align to 64-bit */
+	u32 timestamp;
 };
 
 /**
