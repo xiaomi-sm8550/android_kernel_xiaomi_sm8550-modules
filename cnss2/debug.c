@@ -139,6 +139,12 @@ static int cnss_stats_show_state(struct seq_file *s,
 		case CNSS_DRIVER_REGISTER:
 			seq_puts(s, "DRIVER REGISTERED");
 			continue;
+		case CNSS_WLAN_HW_DISABLED:
+			seq_puts(s, "WLAN HW DISABLED");
+			continue;
+		case CNSS_FS_READY:
+			seq_puts(s, "FS READY");
+			continue;
 		}
 
 		seq_printf(s, "UNKNOWN-%d", i);
@@ -234,6 +240,10 @@ static ssize_t cnss_dev_boot_debug_write(struct file *fp,
 		if (!sptr)
 			return -EINVAL;
 		ret = cnss_aop_send_msg(plat_priv, sptr);
+	} else if (sysfs_streq(cmd, "dev_check")) {
+		cnss_wlan_hw_disable_check(plat_priv);
+	} else if (sysfs_streq(cmd, "dev_enable")) {
+		cnss_wlan_hw_enable();
 	} else {
 		pci_priv = plat_priv->bus_priv;
 		if (!pci_priv)
