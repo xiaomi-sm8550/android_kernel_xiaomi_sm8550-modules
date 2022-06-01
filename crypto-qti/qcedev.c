@@ -273,6 +273,8 @@ static int qcedev_open(struct inode *inode, struct file *file)
 	handle->cntl = podev;
 	file->private_data = handle;
 
+	qcedev_ce_high_bw_req(podev, true);
+
 	mutex_init(&handle->registeredbufs.lock);
 	INIT_LIST_HEAD(&handle->registeredbufs.list);
 	return 0;
@@ -290,6 +292,7 @@ static int qcedev_release(struct inode *inode, struct file *file)
 					__func__, podev);
 	}
 
+	qcedev_ce_high_bw_req(podev, false);
 	if (qcedev_unmap_all_buffers(handle))
 		pr_err("%s: failed to unmap all ion buffers\n", __func__);
 
@@ -719,7 +722,6 @@ static void qcedev_check_crypto_status(
 					QCEDEV_OFFLOAD_GENERIC_ERROR;
 		return;
 	}
-
 }
 
 static int submit_req(struct qcedev_async_req *qcedev_areq,
@@ -735,10 +737,6 @@ static int submit_req(struct qcedev_async_req *qcedev_areq,
 
 	qcedev_areq->err = 0;
 	podev = handle->cntl;
-
-	qcedev_check_crypto_status(qcedev_areq, podev->qce, print_sts);
-	if (qcedev_areq->offload_cipher_op_req.err != QCEDEV_OFFLOAD_NO_ERROR)
-		return 0;
 
 	spin_lock_irqsave(&podev->lock, flags);
 
@@ -782,10 +780,6 @@ static int submit_req(struct qcedev_async_req *qcedev_areq,
 
 	if (ret)
 		qcedev_areq->err = -EIO;
-
-	qcedev_check_crypto_status(qcedev_areq, podev->qce, print_sts);
-	if (qcedev_areq->offload_cipher_op_req.err != QCEDEV_OFFLOAD_NO_ERROR)
-		return 0;
 
 	pstat = &_qcedev_stat;
 	if (qcedev_areq->op_type == QCEDEV_CRYPTO_OPER_CIPHER) {
@@ -2109,10 +2103,6 @@ long qcedev_ioctl(struct file *file,
 	init_completion(&qcedev_areq->complete);
 	pstat = &_qcedev_stat;
 
-	if (cmd != QCEDEV_IOCTL_MAP_BUF_REQ &&
-		cmd != QCEDEV_IOCTL_UNMAP_BUF_REQ)
-		qcedev_ce_high_bw_req(podev, true);
-
 	switch (cmd) {
 	case QCEDEV_IOCTL_ENC_REQ:
 	case QCEDEV_IOCTL_DEC_REQ:
@@ -2148,7 +2138,6 @@ long qcedev_ioctl(struct file *file,
 			err = -EFAULT;
 			goto exit_free_qcedev_areq;
 		}
-
 		qcedev_areq->op_type = QCEDEV_CRYPTO_OPER_OFFLOAD_CIPHER;
 		if (qcedev_check_offload_cipher_params(
 				&qcedev_areq->offload_cipher_op_req, podev)) {
@@ -2428,9 +2417,6 @@ long qcedev_ioctl(struct file *file,
 	}
 
 exit_free_qcedev_areq:
-	if (cmd != QCEDEV_IOCTL_MAP_BUF_REQ &&
-		cmd != QCEDEV_IOCTL_UNMAP_BUF_REQ && podev != NULL)
-		qcedev_ce_high_bw_req(podev, false);
 	kfree(qcedev_areq);
 	return err;
 }
