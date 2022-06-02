@@ -138,9 +138,9 @@ static int ipa_get_generic_stats(unsigned long arg)
 	struct holb_discard_stats *holb_disc_stats_ptr;
 	struct holb_monitor_stats *holb_mon_stats_ptr;
 
-	if(ipa_lnx_agent_ctx.log_type_mask == 0) {
-		IPA_STATS_ERR("log_type_mask is not defined");
-		return -EPERM;
+	if(!(ipa_lnx_agent_ctx.log_type_mask & TLPD_IPA_LOG_TYPE_GENERIC_STATS)) {
+		IPA_STATS_ERR("Log type GENERIC mask not set\n");
+		return -EFAULT;
 	}
 
 	alloc_size = sizeof(struct ipa_lnx_generic_stats) +
@@ -298,9 +298,9 @@ static int ipa_get_clock_stats(unsigned long arg)
 	int alloc_size;
 	struct pm_client_stats *pm_stats_ptr;
 
-	if(ipa_lnx_agent_ctx.log_type_mask == 0) {
-		IPA_STATS_ERR("log_type_mask is not defined");
-		return -EPERM;
+	if(!(ipa_lnx_agent_ctx.log_type_mask & TLPD_IPA_LOG_TYPE_CLOCK_STATS)) {
+		IPA_STATS_ERR("Log type CLOCK mask not set\n");
+		return -EFAULT;
 	}
 
 	alloc_size = sizeof(struct ipa_lnx_clock_stats) +
@@ -615,9 +615,9 @@ static int ipa_get_wlan_inst_stats(unsigned long arg)
 	struct wlan_instance_info *instance_ptr = NULL;
 	struct ipa_uc_dbg_ring_stats stats;
 
-	if(ipa_lnx_agent_ctx.log_type_mask == 0) {
-		IPA_STATS_ERR("log_type_mask is not defined");
-		return -EPERM;
+	if(!(ipa_lnx_agent_ctx.log_type_mask & TLPD_IPA_LOG_TYPE_WLAN_STATS)) {
+		IPA_STATS_ERR("Log type WLAN mask not set\n");
+		return -EFAULT;
 	}
 
 	alloc_size = sizeof(struct ipa_lnx_wlan_inst_stats) +
@@ -800,9 +800,9 @@ static int ipa_get_eth_inst_stats(unsigned long arg)
 	struct eth_instance_info *instance_ptr = NULL;
 	struct ipa_uc_dbg_ring_stats stats;
 
-	if(ipa_lnx_agent_ctx.log_type_mask == 0) {
-		IPA_STATS_ERR("log_type_mask is not defined");
-		return -EPERM;
+	if(!(ipa_lnx_agent_ctx.log_type_mask & TLPD_IPA_LOG_TYPE_ETH_STATS)) {
+		IPA_STATS_ERR("Log type ETH mask not set\n");
+		return -EFAULT;
 	}
 
 	alloc_size = sizeof(struct ipa_lnx_eth_inst_stats) +
@@ -1112,9 +1112,9 @@ static int ipa_get_usb_inst_stats(unsigned long arg)
 	struct usb_instance_info *instance_ptr = NULL;
 	struct ipa_uc_dbg_ring_stats stats;
 
-	if(ipa_lnx_agent_ctx.log_type_mask == 0) {
-		IPA_STATS_ERR("log_type_mask is not defined");
-		return -EPERM;
+	if(!(ipa_lnx_agent_ctx.log_type_mask & TLPD_IPA_LOG_TYPE_USB_STATS)) {
+		IPA_STATS_ERR("Log type USB mask not set\n");
+		return -EFAULT;
 	}
 
 	alloc_size = sizeof(struct ipa_lnx_usb_inst_stats) +
@@ -1292,9 +1292,9 @@ static int ipa_get_mhip_inst_stats(unsigned long arg)
 	struct mhip_instance_info *instance_ptr = NULL;
 	struct ipa_uc_dbg_ring_stats stats;
 
-	if(ipa_lnx_agent_ctx.log_type_mask == 0) {
-		IPA_STATS_ERR("log_type_mask is not defined");
-		return -EPERM;
+	if(!(ipa_lnx_agent_ctx.log_type_mask & TLPD_IPA_LOG_TYPE_MHIP_STATS)) {
+		IPA_STATS_ERR("Log type MHIP mask not set\n");
+		return -EFAULT;
 	}
 
 	alloc_size = sizeof(struct ipa_lnx_mhip_inst_stats) +
