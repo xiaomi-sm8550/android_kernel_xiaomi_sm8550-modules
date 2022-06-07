@@ -103,6 +103,7 @@
 #define DTS_IRQ_GPIO_STR	"qcom,sn-irq"
 #define DTS_VEN_GPIO_STR	"qcom,sn-ven"
 #define DTS_FWDN_GPIO_STR	"qcom,sn-firm"
+#define DTS_CLKREQ_GPIO_STR     "qcom,sn-clkreq"
 #define DTS_CLKSRC_GPIO_STR	"qcom,clk-src"
 #define NFC_LDO_SUPPLY_DT_NAME		"qcom,sn-vdd-1p8"
 #define NFC_LDO_SUPPLY_NAME		"qcom,sn-vdd-1p8-supply"
@@ -204,6 +205,7 @@ enum gpio_values {
 struct platform_gpio {
 	unsigned int irq;
 	unsigned int ven;
+	unsigned int clkreq;
 	unsigned int dwl_req;
 };
 

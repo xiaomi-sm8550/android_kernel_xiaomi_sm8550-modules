@@ -45,6 +45,7 @@ int nfc_parse_dt(struct device *dev, struct platform_configs *nfc_configs,
 	nfc_gpio->irq = -EINVAL;
 	nfc_gpio->dwl_req = -EINVAL;
 	nfc_gpio->ven = -EINVAL;
+	nfc_gpio->clkreq = -EINVAL;
 
 	/* irq required for i2c based chips only */
 	if (interface == PLATFORM_IF_I2C) {
@@ -67,16 +68,21 @@ int nfc_parse_dt(struct device *dev, struct platform_configs *nfc_configs,
 	if ((!gpio_is_valid(nfc_gpio->dwl_req)))
 		pr_warn("%s: nfc dwl_req gpio invalid %d\n", __func__,
 			nfc_gpio->dwl_req);
-
+        /* Read clock request gpio configuration if MGPIO configurations are not preasent */
 	if (of_property_read_string(np, DTS_CLKSRC_GPIO_STR, &nfc_configs->clk_src_name)) {
 		nfc_configs->clk_pin_voting = false;
+	        nfc_gpio->clkreq = of_get_named_gpio(np, DTS_CLKREQ_GPIO_STR, 0);
+	        if (!gpio_is_valid(nfc_gpio->clkreq)) {
+		   dev_err(dev, "clkreq gpio invalid %d\n", nfc_gpio->clkreq);
+		   return -EINVAL;
+	        }
 	}
 	else {
 		nfc_configs->clk_pin_voting = true;
 	}
 
-	pr_info("%s: irq %d, ven %d, dwl %d\n", __func__, nfc_gpio->irq, nfc_gpio->ven,
-		nfc_gpio->dwl_req);
+	pr_info("%s: irq %d, ven %d, dwl %d, clkreq %d, clk_pin_voting %d \n", __func__, nfc_gpio->irq, nfc_gpio->ven,
+		nfc_gpio->dwl_req, nfc_gpio->clkreq, nfc_configs->clk_pin_voting);
 
 	/* optional property */
 	ret = of_property_read_u32_array(np, NFC_LDO_VOL_DT_NAME,
@@ -187,6 +193,9 @@ int configure_gpio(unsigned int gpio, int flag)
 void gpio_free_all(struct nfc_dev *nfc_dev)
 {
 	struct platform_gpio *nfc_gpio = &nfc_dev->configs.gpio;
+
+	if (gpio_is_valid(nfc_gpio->clkreq))
+		gpio_free(nfc_gpio->clkreq);
 
 	if (gpio_is_valid(nfc_gpio->dwl_req))
 		gpio_free(nfc_gpio->dwl_req);
@@ -419,6 +428,15 @@ int nfc_post_init(struct nfc_dev *nfc_dev)
 		pr_err("%s: unable to request nfc firm downl gpio [%d]\n",
 			__func__, nfc_gpio->dwl_req);
 	}
+
+        if(!(nfc_configs.clk_pin_voting)){
+                ret = configure_gpio(nfc_gpio->clkreq, GPIO_INPUT);
+                if (ret) {
+                        pr_err("%s: unable to request nfc clkreq gpio [%d]\n",
+                              __func__, nfc_gpio->clkreq);
+                        return ret;
+                }
+        }
 
 	ret = nfcc_hw_check(nfc_dev);
 	if (ret || nfc_dev->nfc_state == NFC_STATE_UNKNOWN) {
