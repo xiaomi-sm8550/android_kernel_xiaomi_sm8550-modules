@@ -1,9 +1,16 @@
-# Android makefile for audio kernel modules
+# Android makefile for securemsm kernel modules
 
-#Target based of taro does not need these DLKM's as they are present as kernel drivers
-#But the project is mapped for DEV SP due to dependency on smcinvoke_kernel_headers
-#Hence preventing the DLKM's to be part of the taro based DEV SP
-ifneq ($(TARGET_BOARD_PLATFORM), taro)
+ENABLE_SECUREMSM_DLKM := false
+ifeq ($(TARGET_KERNEL_DLKM_DISABLE), true)
+ifeq ($(TARGET_KERNEL_DLKM_SECURE_MSM_OVERRIDE), true)
+ENABLE_SECUREMSM_DLKM := true
+endif
+else
+ENABLE_SECUREMSM_DLKM := true
+endif
+
+ifeq ($(ENABLE_SECUREMSM_DLKM), true)
+
 LOCAL_PATH := $(call my-dir)
 DLKM_DIR := $(TOP)/device/qcom/common/dlkm
 
@@ -115,4 +122,4 @@ LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
 include $(DLKM_DIR)/Build_external_kernelmodule.mk
 endif #TARGET_BOARD_AUTO
 ###################################################
-endif
+endif #COMPILE_SECUREMSM_DLKM check
