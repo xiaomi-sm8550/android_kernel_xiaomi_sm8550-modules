@@ -195,6 +195,7 @@ int btfm_slim_disable_ch(struct btfmslim *btfmslim, struct btfmslim_ch *ch,
 {
 	int ret = -1;
 	int i = 0;
+	int chipset_ver = 0;
 	if (!btfmslim || !ch)
 		return -EINVAL;
 
@@ -206,10 +207,30 @@ int btfm_slim_disable_ch(struct btfmslim *btfmslim, struct btfmslim_ch *ch,
 
 	btfm_is_port_opening_delayed = false;
 
+	if (rxport && (btfmslim->sample_rate == 44100 ||
+		btfmslim->sample_rate == 88200)) {
+		BTFMSLIM_INFO("disconnecting the ports, removing the channel");
+		/* disconnect the ports of the stream */
+		ret = slim_stream_unprepare_disconnect_port(ch->dai.sruntime,
+				true, false);
+		if (ret != 0)
+			BTFMSLIM_ERR("slim_stream_unprepare failed %d", ret);
+	}
+
 	ret = slim_stream_disable(ch->dai.sruntime);
-	if (ret != 0)
+	if (ret != 0) {
 		BTFMSLIM_ERR("slim_stream_disable failed returned val = %d", ret);
-	ret = slim_stream_unprepare(ch->dai.sruntime);
+		if ((btfmslim->sample_rate != 44100) && (btfmslim->sample_rate != 88200)) {
+			/* disconnect the ports of the stream */
+			ret = slim_stream_unprepare_disconnect_port(ch->dai.sruntime,
+					true, false);
+			if (ret != 0)
+				BTFMSLIM_ERR("slim_stream_unprepare failed %d", ret);
+		}
+	}
+
+	/* free the ports allocated to the stream */
+	ret = slim_stream_unprepare_disconnect_port(ch->dai.sruntime, false, true);
 	if (ret != 0)
 		BTFMSLIM_ERR("slim_stream_unprepare failed returned val = %d", ret);
 
@@ -234,6 +255,20 @@ int btfm_slim_disable_ch(struct btfmslim *btfmslim, struct btfmslim_ch *ch,
 	ch->dai.sruntime = NULL;
 
 	BTFMSLIM_INFO("btfm_num_ports_open: %d", btfm_num_ports_open);
+
+	chipset_ver = btpower_get_chipset_version();
+
+	if (btfm_num_ports_open == 0 && (chipset_ver == QCA_HSP_SOC_ID_0200 ||
+		chipset_ver == QCA_HSP_SOC_ID_0210 ||
+		chipset_ver == QCA_HSP_SOC_ID_1201 ||
+		chipset_ver == QCA_HSP_SOC_ID_1211 ||
+		chipset_ver == QCA_HAMILTON_SOC_ID_0100 ||
+		chipset_ver == QCA_HAMILTON_SOC_ID_0101 ||
+		chipset_ver == QCA_HAMILTON_SOC_ID_0200 )) {
+		BTFMSLIM_INFO("SB reset needed after all ports disabled, sleeping");
+		msleep(DELAY_FOR_PORT_OPEN_MS);
+	}
+
 	return ret;
 }
 
@@ -385,6 +420,35 @@ int btfm_slim_hw_init(struct btfmslim *btfmslim)
 		slim_ifd->e_addr.dev_index = 0x0;
 		slim_ifd->e_addr.instance = 0x0;
 		slim_ifd->laddr = 0x0;
+	} else if (chipset_ver == QCA_CHEROKEE_SOC_ID_0200 ||
+		chipset_ver ==  QCA_CHEROKEE_SOC_ID_0201  ||
+		chipset_ver ==  QCA_CHEROKEE_SOC_ID_0210  ||
+		chipset_ver ==  QCA_CHEROKEE_SOC_ID_0211  ||
+		chipset_ver ==  QCA_CHEROKEE_SOC_ID_0310  ||
+		chipset_ver ==  QCA_CHEROKEE_SOC_ID_0320  ||
+		chipset_ver ==  QCA_CHEROKEE_SOC_ID_0320_UMC  ||
+		chipset_ver ==  QCA_APACHE_SOC_ID_0100  ||
+		chipset_ver ==  QCA_APACHE_SOC_ID_0110  ||
+		chipset_ver ==  QCA_APACHE_SOC_ID_0120 ||
+		chipset_ver ==  QCA_APACHE_SOC_ID_0121) {
+		BTFMSLIM_INFO("chipset is Chk/Apache, overwriting EA");
+		slim->is_laddr_valid = false;
+		slim->e_addr.manf_id = SLIM_MANF_ID_QCOM;
+		slim->e_addr.prod_code = 0x220;
+		slim->e_addr.dev_index = 0x01;
+		slim->e_addr.instance = 0x0;
+		/* we are doing this to indicate that this is not a child node
+		 * (doesn't have call back functions). Needed only for querying
+		 * logical address.
+		 */
+		slim_ifd->dev.driver = NULL;
+		slim_ifd->ctrl = btfmslim->slim_pgd->ctrl; //slimbus controller structure.
+		slim_ifd->is_laddr_valid = false;
+		slim_ifd->e_addr.manf_id = SLIM_MANF_ID_QCOM;
+		slim_ifd->e_addr.prod_code = 0x220;
+		slim_ifd->e_addr.dev_index = 0x0;
+		slim_ifd->e_addr.instance = 0x0;
+		slim_ifd->laddr = 0x0;
 	}
 		BTFMSLIM_INFO(
 			"PGD Enum Addr: manu id:%.02x prod code:%.02x dev idx:%.02x instance:%.02x",
@@ -395,14 +459,6 @@ int btfm_slim_hw_init(struct btfmslim *btfmslim)
 			"IFD Enum Addr: manu id:%.02x prod code:%.02x dev idx:%.02x instance:%.02x",
 			slim_ifd->e_addr.manf_id, slim_ifd->e_addr.prod_code,
 			slim_ifd->e_addr.dev_index, slim_ifd->e_addr.instance);
-
-	if (btfm_num_ports_open == 0 && (chipset_ver == QCA_HSP_SOC_ID_0200 ||
-		chipset_ver == QCA_HSP_SOC_ID_0210 ||
-		chipset_ver == QCA_HSP_SOC_ID_1201 ||
-		chipset_ver == QCA_HSP_SOC_ID_1211)) {
-		BTFMSLIM_INFO("SB reset needed before getting LA, sleeping");
-		msleep(DELAY_FOR_PORT_OPEN_MS);
-	}
 
 	/* Assign Logical Address for PGD (Ported Generic Device)
 	 * enumeration address
