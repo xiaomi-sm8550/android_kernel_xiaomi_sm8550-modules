@@ -235,12 +235,16 @@ void qce_get_crypto_status(void *handle, unsigned int *s1, unsigned int *s2,
 }
 EXPORT_SYMBOL(qce_get_crypto_status);
 
-static void qce_set_offload_config(struct qce_device *pce_dev,
-		struct qce_req *creq)
+static int qce_crypto_config(struct qce_device *pce_dev,
+		enum qce_offload_op_enum offload_op)
 {
-	uint32_t config_be = pce_dev->reg.crypto_cfg_be;
+	uint32_t config_be = 0;
 
-	switch (creq->offload_op) {
+	switch (offload_op) {
+	case QCE_OFFLOAD_NONE:
+		config_be = qce_get_config_be(pce_dev,
+		pce_dev->ce_bam_info.pipe_pair_index[QCE_OFFLOAD_NONE]);
+		break;
 	case QCE_OFFLOAD_HLOS_HLOS:
 		config_be = qce_get_config_be(pce_dev,
 		pce_dev->ce_bam_info.pipe_pair_index[QCE_OFFLOAD_HLOS_HLOS]);
@@ -254,13 +258,15 @@ static void qce_set_offload_config(struct qce_device *pce_dev,
 		pce_dev->ce_bam_info.pipe_pair_index[QCE_OFFLOAD_CPB_HLOS]);
 		break;
 	default:
-		break;
+		pr_err("%s: Valid pipe config not set, offload op = %d\n",
+					__func__, offload_op);
+		return -EINVAL;
 	}
 
 	pce_dev->reg.crypto_cfg_be = config_be;
 	pce_dev->reg.crypto_cfg_le = (config_be |
 					CRYPTO_LITTLE_ENDIAN_MASK);
-	return;
+	return 0;
 }
 
 /*
@@ -462,6 +468,15 @@ static int _ce_setup_hash(struct qce_device *pce_dev,
 	bool use_pipe_key = false;
 	uint32_t authk_size_in_word = sreq->authklen/sizeof(uint32_t);
 	uint32_t auth_cfg;
+
+	if (qce_crypto_config(pce_dev, QCE_OFFLOAD_NONE))
+		return -EINVAL;
+
+	pce = cmdlistinfo->crypto_cfg;
+	pce->data = pce_dev->reg.crypto_cfg_be;
+
+	pce = cmdlistinfo->crypto_cfg_le;
+	pce->data = pce_dev->reg.crypto_cfg_le;
 
 	if ((sreq->alg == QCE_HASH_SHA1_HMAC) ||
 			(sreq->alg == QCE_HASH_SHA256_HMAC) ||
@@ -673,6 +688,15 @@ static int _ce_setup_aead(struct qce_device *pce_dev, struct qce_req *q_req,
 	key_size = q_req->encklen;
 	enck_size_in_word = key_size/sizeof(uint32_t);
 
+	if (qce_crypto_config(pce_dev, q_req->offload_op))
+		return -EINVAL;
+
+	pce = cmdlistinfo->crypto_cfg;
+	pce->data = pce_dev->reg.crypto_cfg_be;
+
+	pce = cmdlistinfo->crypto_cfg_le;
+	pce->data = pce_dev->reg.crypto_cfg_le;
+
 	switch (q_req->alg) {
 	case CIPHER_ALG_DES:
 		enciv_in_word = 2;
@@ -843,7 +867,8 @@ static int _ce_setup_cipher(struct qce_device *pce_dev, struct qce_req *creq,
 	else
 		key_size = creq->encklen;
 
-	qce_set_offload_config(pce_dev, creq);
+	if (qce_crypto_config(pce_dev, creq->offload_op))
+		return -EINVAL;
 
 	pce = cmdlistinfo->crypto_cfg;
 	pce->data = pce_dev->reg.crypto_cfg_be;
@@ -1174,6 +1199,15 @@ static int _ce_f9_setup(struct qce_device *pce_dev, struct qce_f9_req *req,
 		break;
 	}
 
+	if (qce_crypto_config(pce_dev, QCE_OFFLOAD_NONE))
+		return -EINVAL;
+
+	pce = cmdlistinfo->crypto_cfg;
+	pce->data = pce_dev->reg.crypto_cfg_be;
+
+	pce = cmdlistinfo->crypto_cfg_le;
+	pce->data = pce_dev->reg.crypto_cfg_le;
+
 	/* write key in CRYPTO_AUTH_IV0-3_REG */
 	_byte_stream_to_net_words(ikey32, &req->ikey[0], OTA_KEY_SIZE);
 	pce = cmdlistinfo->auth_iv;
@@ -1236,6 +1270,16 @@ static int _ce_f8_setup(struct qce_device *pce_dev, struct qce_f8_req *req,
 		cfg = pce_dev->reg.encr_cfg_snow3g;
 		break;
 	}
+
+	if (qce_crypto_config(pce_dev, QCE_OFFLOAD_NONE))
+		return -EINVAL;
+
+	pce = cmdlistinfo->crypto_cfg;
+	pce->data = pce_dev->reg.crypto_cfg_be;
+
+	pce = cmdlistinfo->crypto_cfg_le;
+	pce->data = pce_dev->reg.crypto_cfg_le;
+
 	/* write key */
 	_byte_stream_to_net_words(ckey32, &req->ckey[0], OTA_KEY_SIZE);
 	pce = cmdlistinfo->encr_key;
@@ -1361,6 +1405,8 @@ static int _ce_setup_hash_direct(struct qce_device *pce_dev,
 	/* clear status */
 	QCE_WRITE_REG(0, pce_dev->iobase + CRYPTO_STATUS_REG);
 
+	if (qce_crypto_config(pce_dev, QCE_OFFLOAD_NONE))
+		return -EINVAL;
 	QCE_WRITE_REG(pce_dev->reg.crypto_cfg_be, (pce_dev->iobase +
 							CRYPTO_CONFIG_REG));
 	/*
@@ -1550,6 +1596,8 @@ static int _ce_setup_aead_direct(struct qce_device *pce_dev,
 	/* clear status */
 	QCE_WRITE_REG(0, pce_dev->iobase + CRYPTO_STATUS_REG);
 
+	if (qce_crypto_config(pce_dev, q_req->offload_op))
+		return -EINVAL;
 	QCE_WRITE_REG(pce_dev->reg.crypto_cfg_be, (pce_dev->iobase +
 							CRYPTO_CONFIG_REG));
 	/*
@@ -1727,7 +1775,8 @@ static int _ce_setup_cipher_direct(struct qce_device *pce_dev,
 	/* clear status */
 	QCE_WRITE_REG(0, pce_dev->iobase + CRYPTO_STATUS_REG);
 
-	qce_set_offload_config(pce_dev, creq);
+	if (qce_crypto_config(pce_dev, creq->offload_op))
+		return -EINVAL;
 	QCE_WRITE_REG(pce_dev->reg.crypto_cfg_be,
 			(pce_dev->iobase + CRYPTO_CONFIG_REG));
 	QCE_WRITE_REG(pce_dev->reg.crypto_cfg_le,
@@ -2063,6 +2112,8 @@ static int _ce_f9_setup_direct(struct qce_device *pce_dev,
 		break;
 	}
 
+	if (qce_crypto_config(pce_dev, QCE_OFFLOAD_NONE))
+		return -EINVAL;
 	/* clear status */
 	QCE_WRITE_REG(0, pce_dev->iobase + CRYPTO_STATUS_REG);
 
@@ -2151,6 +2202,8 @@ static int _ce_f8_setup_direct(struct qce_device *pce_dev,
 	/* clear status */
 	QCE_WRITE_REG(0, pce_dev->iobase + CRYPTO_STATUS_REG);
 	/* set big endian configuration */
+	if (qce_crypto_config(pce_dev, QCE_OFFLOAD_NONE))
+		return -EINVAL;
 	QCE_WRITE_REG(pce_dev->reg.crypto_cfg_be, (pce_dev->iobase +
 							CRYPTO_CONFIG_REG));
 	/* write auth seg configuration */
@@ -3218,7 +3271,7 @@ static int qce_sps_init(struct qce_device *pce_dev)
 		pce_dev->ce_bam_info.bam_handle);
 
 	for (i = 0; i < QCE_OFFLOAD_OPER_LAST; i++) {
-		if (i == 0 && !(pce_dev->kernel_pipes_support))
+		if (i == QCE_OFFLOAD_NONE && !(pce_dev->kernel_pipes_support))
 			continue;
 		else if ((i > 0) && !(pce_dev->offload_pipes_support))
 			break;
@@ -3462,7 +3515,7 @@ static void qce_sps_exit(struct qce_device *pce_dev)
 	int i = 0;
 
 	for (i = 0; i < QCE_OFFLOAD_OPER_LAST; i++) {
-		if (i == 0 && !(pce_dev->kernel_pipes_support))
+		if (i == QCE_OFFLOAD_NONE && !(pce_dev->kernel_pipes_support))
 			continue;
 		else if ((i > 0) && !(pce_dev->offload_pipes_support))
 			break;
@@ -4696,7 +4749,8 @@ static int qce_setup_ce_sps_data(struct qce_device *pce_dev)
 
 static int qce_init_ce_cfg_val(struct qce_device *pce_dev)
 {
-	uint32_t pipe_pair = pce_dev->ce_bam_info.pipe_pair_index[0];
+	uint32_t pipe_pair =
+		pce_dev->ce_bam_info.pipe_pair_index[QCE_OFFLOAD_NONE];
 
 	pce_dev->reg.crypto_cfg_be = qce_get_config_be(pce_dev, pipe_pair);
 
@@ -5203,7 +5257,7 @@ static int _qce_suspend(void *handle)
 		return -ENODEV;
 
 	for (i = 0; i < QCE_OFFLOAD_OPER_LAST; i++) {
-		if (i == 0 && !(pce_dev->kernel_pipes_support))
+		if (i == QCE_OFFLOAD_NONE && !(pce_dev->kernel_pipes_support))
 			continue;
 		else if ((i > 0) && !(pce_dev->offload_pipes_support))
 			break;
@@ -5228,7 +5282,7 @@ static int _qce_resume(void *handle)
 		return -ENODEV;
 
 	for (i = 0; i < QCE_OFFLOAD_OPER_LAST; i++) {
-		if (i == 0 && !(pce_dev->kernel_pipes_support))
+		if (i == QCE_OFFLOAD_NONE && !(pce_dev->kernel_pipes_support))
 			continue;
 		else if ((i > 0) && !(pce_dev->offload_pipes_support))
 			break;
@@ -5351,6 +5405,7 @@ int qce_aead_req(void *handle, struct qce_req *q_req)
 	preq_info->qce_cb = q_req->qce_cb;
 	preq_info->dir = q_req->dir;
 	preq_info->asg = NULL;
+	preq_info->offload_op = QCE_OFFLOAD_NONE;
 
 	/* setup xfer type for producer callback handling */
 	preq_info->xfer_type = QCE_XFER_AEAD;
@@ -5646,6 +5701,7 @@ int qce_process_sha_req(void *handle, struct qce_sha_req *sreq)
 
 	preq_info->areq = areq;
 	preq_info->qce_cb = sreq->qce_cb;
+	preq_info->offload_op = QCE_OFFLOAD_NONE;
 
 	/* setup xfer type for producer callback handling */
 	preq_info->xfer_type = QCE_XFER_HASHING;
@@ -5783,6 +5839,7 @@ int qce_f8_req(void *handle, struct qce_f8_req *req,
 	/* setup for callback, and issue command to sps */
 	preq_info->areq = cookie;
 	preq_info->qce_cb = qce_cb;
+	preq_info->offload_op = QCE_OFFLOAD_NONE;
 
 	/* setup xfer type for producer callback handling */
 	preq_info->xfer_type = QCE_XFER_F8;
@@ -5912,6 +5969,7 @@ int qce_f8_multi_pkt_req(void *handle, struct qce_f8_multi_pkt_req *mreq,
 	/* setup for callback, and issue command to sps */
 	preq_info->areq = cookie;
 	preq_info->qce_cb = qce_cb;
+	preq_info->offload_op = QCE_OFFLOAD_NONE;
 
 	/* setup xfer type for producer callback handling */
 	preq_info->xfer_type = QCE_XFER_F8;
@@ -6011,6 +6069,7 @@ int qce_f9_req(void *handle, struct qce_f9_req *req, void *cookie,
 	/* setup for callback, and issue command to sps */
 	preq_info->areq = cookie;
 	preq_info->qce_cb = qce_cb;
+	preq_info->offload_op = QCE_OFFLOAD_NONE;
 
 	/* setup xfer type for producer callback handling */
 	preq_info->xfer_type = QCE_XFER_F9;
@@ -6096,10 +6155,10 @@ static int __qce_get_device_tree_data(struct platform_device *pdev,
 	pce_dev->kernel_pipes_support = true;
 	if (of_property_read_u32((&pdev->dev)->of_node,
 				"qcom,bam-pipe-pair",
-				&pce_dev->ce_bam_info.pipe_pair_index[0])) {
+		&pce_dev->ce_bam_info.pipe_pair_index[QCE_OFFLOAD_NONE])) {
 		pr_warn("Kernel pipes not supported.\n");
 		//Unused pipe, just as failsafe.
-		pce_dev->ce_bam_info.pipe_pair_index[0] = 2;
+		pce_dev->ce_bam_info.pipe_pair_index[QCE_OFFLOAD_NONE] = 2;
 		pce_dev->kernel_pipes_support = false;
 	}
 
