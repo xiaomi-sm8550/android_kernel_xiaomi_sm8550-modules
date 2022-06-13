@@ -551,6 +551,7 @@ struct cnss_plat_data {
 	u16 hang_event_data_len;
 	u32 hang_data_addr_offset;
 	enum cnss_driver_mode driver_mode;
+	uint32_t num_shadow_regs_v3;
 };
 
 #if IS_ENABLED(CONFIG_ARCH_QCOM)
