@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2010-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __KGSL_PWRSCALE_H
@@ -68,6 +69,11 @@ struct kgsl_pwrscale {
 	struct devfreq *bus_devfreq;
 	/** @devfreq_enabled: Whether or not devfreq is enabled */
 	bool devfreq_enabled;
+	/**
+	 * @avoid_ddr_stall: Whether or not to increase IB vote on high
+	 * ddr stall
+	 */
+	bool avoid_ddr_stall;
 };
 
 /**

@@ -1382,6 +1382,8 @@ int gen7_probe_common(struct platform_device *pdev,
 	adreno_dev->hwcg_enabled = true;
 	adreno_dev->uche_client_pf = 1;
 
+	device->pwrscale.avoid_ddr_stall = true;
+
 	if (ADRENO_FEATURE(adreno_dev, ADRENO_PREEMPTION)) {
 		const struct adreno_gen7_core *gen7_core = to_gen7_core(adreno_dev);
 
