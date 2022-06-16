@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef MSM_ADRENO_DEVFREQ_H
@@ -10,9 +10,8 @@
 #include <linux/devfreq.h>
 #include <linux/notifier.h>
 
-#define DEVFREQ_FLAG_WAKEUP_MAXFREQ	0x2
-#define DEVFREQ_FLAG_FAST_HINT		0x4
-#define DEVFREQ_FLAG_SLOW_HINT		0x8
+#define DEVFREQ_FLAG_FAST_HINT		0x1
+#define DEVFREQ_FLAG_SLOW_HINT		0x2
 
 struct device;
 
