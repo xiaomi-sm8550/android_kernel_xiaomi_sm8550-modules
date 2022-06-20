@@ -2937,6 +2937,24 @@ int cnss_wlan_register_driver(struct cnss_wlan_driver *driver_ops)
 		return -EAGAIN;
 	}
 
+	if (test_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state)) {
+		while (id_table && id_table->device) {
+			if (plat_priv->device_id == id_table->device) {
+				if (plat_priv->device_id == KIWI_DEVICE_ID &&
+				    driver_ops->chip_version != 2) {
+					cnss_pr_err("WLAN HW disabled. kiwi_v2 only supported\n");
+					return -ENODEV;
+				}
+				cnss_pr_info("WLAN register driver deferred for device ID: 0x%x due to HW disable\n",
+					     id_table->device);
+				plat_priv->driver_ops = driver_ops;
+				return 0;
+			}
+			id_table++;
+		}
+		return -ENODEV;
+	}
+
 	if (!test_bit(CNSS_PCI_PROBE_DONE, &plat_priv->driver_state)) {
 		cnss_pr_info("pci probe not yet done for register driver\n");
 		return -EAGAIN;

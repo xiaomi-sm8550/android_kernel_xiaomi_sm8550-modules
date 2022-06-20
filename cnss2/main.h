@@ -318,6 +318,8 @@ enum cnss_driver_state {
 	CNSS_DAEMON_CONNECTED,
 	CNSS_PCI_PROBE_DONE,
 	CNSS_DRIVER_REGISTER,
+	CNSS_WLAN_HW_DISABLED,
+	CNSS_FS_READY = 25,
 };
 
 struct cnss_recovery_data {
@@ -502,6 +504,7 @@ struct cnss_plat_data {
 	struct completion cal_complete;
 	struct mutex dev_lock; /* mutex for register access through debugfs */
 	struct mutex driver_ops_lock; /* mutex for external driver ops */
+	struct cnss_wlan_driver *driver_ops;
 	u32 device_freq_hz;
 	u32 diag_reg_read_addr;
 	u32 diag_reg_read_mem_type;
@@ -570,6 +573,8 @@ static inline u64 cnss_get_host_timestamp(struct cnss_plat_data *plat_priv)
 }
 #endif
 
+int cnss_wlan_hw_disable_check(struct cnss_plat_data *plat_priv);
+int cnss_wlan_hw_enable(void);
 struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);
 void cnss_pm_stay_awake(struct cnss_plat_data *plat_priv);
 void cnss_pm_relax(struct cnss_plat_data *plat_priv);

@@ -20,6 +20,8 @@ CNSS_SRC_FILES := \
 	$(wildcard $(LOCAL_PATH)/*) \
 	$(wildcard $(LOCAL_PATH)/*/*) \
 
+KBUILD_OPTIONS += KBUILD_EXTRA_SYMBOLS=$(PWD)/$(call intermediates-dir-for,DLKM,sec-module-symvers)/Module.symvers
+
 # Module.symvers needs to be generated as a intermediate module so that
 # other modules which depend on WLAN platform modules can set local
 # dependencies to it.
@@ -41,6 +43,8 @@ include $(DLKM_DIR)/Build_external_kernelmodule.mk
 
 ################################ cnss2 ################################
 include $(CLEAR_VARS)
+LOCAL_REQUIRED_MODULES := sec-module-symvers
+LOCAL_ADDITIONAL_DEPENDENCIES += $(call intermediates-dir-for,DLKM,sec-module-symvers)/Module.symvers
 LOCAL_SRC_FILES           := $(CNSS_SRC_FILES)
 LOCAL_MODULE              := cnss2.ko
 LOCAL_MODULE_KBUILD_NAME  := cnss2/cnss2.ko
