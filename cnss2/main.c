@@ -3979,6 +3979,9 @@ int cnss_wlan_hw_enable(void)
 	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(NULL);
 	int ret = 0;
 
+	if (test_bit(CNSS_PCI_PROBE_DONE, &plat_priv->driver_state))
+		return 0;
+
 	clear_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state);
 
 	ret = cnss_wlan_device_init(plat_priv);
