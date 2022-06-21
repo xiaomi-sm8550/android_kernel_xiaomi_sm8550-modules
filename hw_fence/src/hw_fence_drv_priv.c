@@ -166,12 +166,12 @@ int hw_fence_read_queue(struct msm_hw_fence_client *hw_fence_client,
 		return -EINVAL;
 	}
 
+	/* Make sure data is ready before read */
+	mb();
+
 	/* Get read and write index */
 	read_idx = readl_relaxed(&hfi_header->read_index);
 	write_idx = readl_relaxed(&hfi_header->write_index);
-
-	/* Make sure we read the values */
-	rmb();
 
 	HWFNC_DBG_Q("read client:%d rd_ptr:0x%pK wr_ptr:0x%pK rd_idx:%d wr_idx:%d queue:0x%pK\n",
 		hw_fence_client->client_id, &hfi_header->read_index, &hfi_header->write_index,
@@ -274,12 +274,12 @@ int hw_fence_update_queue(struct hw_fence_driver_data *drv_data,
 		GLOBAL_ATOMIC_STORE(&drv_data->client_lock_tbl[lock_idx], 1); /* lock */
 	}
 
+	/* Make sure data is ready before read */
+	mb();
+
 	/* Get read and write index */
 	read_idx = readl_relaxed(&hfi_header->read_index);
 	write_idx = readl_relaxed(&hfi_header->write_index);
-
-	/* Make sure we read the values */
-	rmb();
 
 	HWFNC_DBG_Q("wr client:%d rd_ptr:0x%pK wr_ptr:0x%pK rd_idx:%d wr_idx:%d q:0x%pK type:%d\n",
 		hw_fence_client->client_id, &hfi_header->read_index, &hfi_header->write_index,
