@@ -234,11 +234,14 @@ struct cvp_hal_cmd_sys_get_property_packet {
 #define call_hfi_op(q, op, args...)			\
 	(((q) && (q)->op) ? ((q)->op(args)) : 0)
 
+#define PKT_NAME_LEN 32
+
 struct msm_cvp_hfi_defs {
 	unsigned int size;
 	unsigned int type;
 	bool is_config_pkt;
 	enum hal_command_response resp;
+	char name[PKT_NAME_LEN];
 };
 
 struct cvp_hfi_device {

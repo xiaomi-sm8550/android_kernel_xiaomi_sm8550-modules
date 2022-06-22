@@ -626,6 +626,8 @@ static int __smem_alloc(struct iris_hfi_device *dev, struct cvp_mem_addr *mem,
 	mem->mem_size = alloc->size;
 	mem->align_virtual_addr = alloc->kvaddr;
 	mem->align_device_addr = alloc->device_addr;
+	alloc->pkt_type = 0;
+	alloc->buf_idx = 0;
 
 	return rc;
 fail_smem_alloc:

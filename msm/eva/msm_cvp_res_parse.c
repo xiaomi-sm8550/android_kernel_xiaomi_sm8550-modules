@@ -971,6 +971,7 @@ int msm_cvp_smmu_fault_handler(struct iommu_domain *domain,
 	mutex_lock(&core->lock);
 	log = (core->log.snapshot_index > 0)? false : true;
 	list_for_each_entry(inst, &core->instances, list) {
+		cvp_print_inst(CVP_ERR, inst);
 		msm_cvp_print_inst_bufs(inst, log);
 	}
 	hdev = core->device->hfi_device_data;
