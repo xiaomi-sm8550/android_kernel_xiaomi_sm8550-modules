@@ -154,8 +154,7 @@ void *msm_cvp_open(int core_id, int session_type)
 		dprintk(CVP_ERR, "Instance num reached Max, rejecting session");
 		mutex_lock(&core->lock);
 		list_for_each_entry(inst, &core->instances, list)
-			dprintk(CVP_ERR, "inst %pK, id %d\n",
-				inst, hash32_ptr(inst->session));
+			cvp_print_inst(CVP_ERR, inst);
 		mutex_unlock(&core->lock);
 
 		return NULL;

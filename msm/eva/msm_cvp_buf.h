@@ -72,6 +72,8 @@ struct msm_cvp_smem {
 	u32 size;
 	u32 bitmap_index;
 	u32 flags;
+	u32 pkt_type;
+	u32 buf_idx;
 	struct cvp_dma_mapping_info mapping_info;
 };
 
@@ -98,6 +100,8 @@ static inline void INIT_DMAMAP_CACHE(struct cvp_dmamap_cache *cache)
 static inline void DEINIT_DMAMAP_CACHE(struct cvp_dmamap_cache *cache)
 {
 	mutex_destroy(&cache->lock);
+	cache->usage_bitmap = 0;
+	cache->nr = 0;
 }
 
 struct cvp_buf_type {
@@ -200,7 +204,8 @@ void msm_cvp_cache_operations(struct msm_cvp_smem *smem,
 			u32 type, u32 offset, u32 size);
 u32 msm_cvp_map_frame_buf(struct msm_cvp_inst *inst,
 			struct cvp_buf_type *buf,
-			struct msm_cvp_frame *frame);
+			struct msm_cvp_frame *frame,
+			u32 pkt_type, u32 buf_idx);
 int msm_cvp_mark_user_persist(struct msm_cvp_inst *inst,
 			struct eva_kmd_hfi_packet *in_pkt,
 			unsigned int offset, unsigned int buf_num);
