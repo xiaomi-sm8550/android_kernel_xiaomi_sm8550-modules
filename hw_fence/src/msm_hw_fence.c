@@ -142,6 +142,12 @@ int msm_hw_fence_create(void *client_handle,
 		HWFNC_ERR("Invalid input\n");
 		return -EINVAL;
 	}
+
+	if (!hw_fence_drv_data->vm_ready) {
+		HWFNC_DBG_H("VM not ready, cannot create fence\n");
+		return -EAGAIN;
+	}
+
 	hw_fence_client = (struct msm_hw_fence_client *)client_handle;
 	fence = (struct dma_fence *)params->fence;
 
@@ -233,6 +239,12 @@ int msm_hw_fence_wait_update(void *client_handle,
 		HWFNC_ERR("Invalid data\n");
 		return -EINVAL;
 	}
+
+	if (!hw_fence_drv_data->vm_ready) {
+		HWFNC_DBG_H("VM not ready, cannot destroy fence\n");
+		return -EAGAIN;
+	}
+
 	hw_fence_client = (struct msm_hw_fence_client *)client_handle;
 
 	HWFNC_DBG_H("+\n");
@@ -276,6 +288,12 @@ int msm_hw_fence_reset_client(void *client_handle, u32 reset_flags)
 		HWFNC_ERR("Invalid client handle!\n");
 		return -EINVAL;
 	}
+
+	if (!hw_fence_drv_data->vm_ready) {
+		HWFNC_DBG_H("VM not ready, cannot reset client\n");
+		return -EAGAIN;
+	}
+
 	hw_fence_client = (struct msm_hw_fence_client *)client_handle;
 	hw_fences_tbl = hw_fence_drv_data->hw_fences_tbl;
 
@@ -292,8 +310,9 @@ int msm_hw_fence_update_txq(void *client_handle, u64 handle, u64 flags, u32 erro
 {
 	struct msm_hw_fence_client *hw_fence_client;
 
-	if (IS_ERR_OR_NULL(hw_fence_drv_data) || !hw_fence_drv_data->resources_ready) {
-		HWFNC_ERR("hw fence driver not ready\n");
+	if (IS_ERR_OR_NULL(hw_fence_drv_data) || !hw_fence_drv_data->resources_ready ||
+			!hw_fence_drv_data->vm_ready) {
+		HWFNC_ERR("hw fence driver  or vm not ready\n");
 		return -EAGAIN;
 	} else if (IS_ERR_OR_NULL(client_handle) ||
 			(handle >= hw_fence_drv_data->hw_fences_tbl_cnt)) {
@@ -319,8 +338,9 @@ int msm_hw_fence_trigger_signal(void *client_handle,
 {
 	struct msm_hw_fence_client *hw_fence_client;
 
-	if (IS_ERR_OR_NULL(hw_fence_drv_data) || !hw_fence_drv_data->resources_ready) {
-		HWFNC_ERR("hw fence driver not ready\n");
+	if (IS_ERR_OR_NULL(hw_fence_drv_data) || !hw_fence_drv_data->resources_ready
+			|| !hw_fence_drv_data->vm_ready) {
+		HWFNC_ERR("hw fence driver or vm not ready\n");
 		return -EAGAIN;
 	} else if (IS_ERR_OR_NULL(client_handle)) {
 		HWFNC_ERR("Invalid client\n");

@@ -306,6 +306,8 @@ static int hw_fence_rm_cb(struct notifier_block *nb, unsigned long cmd, void *da
 		HWFNC_DBG_INIT("init mem\n");
 		if (hw_fence_gunyah_share_mem(drv_data, self_vmid, peer_vmid))
 			HWFNC_ERR("failed to share memory\n");
+		else
+			drv_data->vm_ready = true;
 		break;
 	case GH_RM_VM_STATUS_RESET:
 		HWFNC_DBG_INIT("reset\n");

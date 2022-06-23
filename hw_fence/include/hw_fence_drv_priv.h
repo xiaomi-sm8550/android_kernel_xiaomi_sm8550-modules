@@ -211,6 +211,7 @@ struct msm_hw_fence_dbg_data {
  * @client_id_mask: bitmask for tracking registered client_ids
  * @clients_mask_lock: lock to synchronize access to the clients mask
  * @msm_hw_fence_client: table with the handles of the registered clients
+ * @vm_ready: flag to indicate if vm has been initialized
  * @ipcc_dpu_initialized: flag to indicate if dpu hw is initialized
  */
 struct hw_fence_driver_data {
@@ -286,6 +287,8 @@ struct hw_fence_driver_data {
 
 	/* table with registered client handles */
 	struct msm_hw_fence_client *clients[HW_FENCE_CLIENT_MAX];
+
+	bool vm_ready;
 #ifdef HW_DPU_IPCC
 	/* state variables */
 	bool ipcc_dpu_initialized;
