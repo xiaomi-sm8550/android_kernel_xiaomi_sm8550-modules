@@ -465,6 +465,7 @@ struct cnss_plat_data {
 	enum cnss_driver_status driver_status;
 	u32 recovery_count;
 	u8 recovery_enabled;
+	u8 recovery_pcss_enabled;
 	u8 hds_enabled;
 	unsigned long driver_state;
 	struct list_head event_list;
@@ -511,6 +512,7 @@ struct cnss_plat_data {
 	u8 use_fw_path_with_prefix;
 	char firmware_name[MAX_FIRMWARE_NAME_LEN];
 	char fw_fallback_name[MAX_FIRMWARE_NAME_LEN];
+	u8 *sram_dump;
 	struct completion rddm_complete;
 	struct completion recovery_complete;
 	struct cnss_control_params ctrl_params;
@@ -538,13 +540,14 @@ struct cnss_plat_data {
 	struct mbox_client mbox_client_data;
 	struct mbox_chan *mbox_chan;
 	const char *vreg_ol_cpr, *vreg_ipa;
-	const char **pdc_init_table, **vreg_pdc_map;
-	int pdc_init_table_len, vreg_pdc_map_len;
+	const char **pdc_init_table, **vreg_pdc_map, **pmu_vreg_map;
+	int pdc_init_table_len, vreg_pdc_map_len, pmu_vreg_map_len;
 	bool adsp_pc_enabled;
 	u64 feature_list;
 	u32 is_converged_dt;
 	u16 hang_event_data_len;
 	u32 hang_data_addr_offset;
+	enum cnss_driver_mode driver_mode;
 };
 
 #if IS_ENABLED(CONFIG_ARCH_QCOM)
@@ -622,6 +625,8 @@ int cnss_aop_mbox_init(struct cnss_plat_data *plat_priv);
 int cnss_aop_pdc_reconfig(struct cnss_plat_data *plat_priv);
 int cnss_aop_send_msg(struct cnss_plat_data *plat_priv, char *msg);
 void cnss_power_misc_params_init(struct cnss_plat_data *plat_priv);
+int cnss_aop_ol_cpr_cfg_setup(struct cnss_plat_data *plat_priv,
+			      struct wlfw_pmu_cfg_v01 *fw_pmu_cfg);
 int cnss_request_firmware_direct(struct cnss_plat_data *plat_priv,
 				 const struct firmware **fw_entry,
 				 const char *filename);
@@ -632,4 +637,5 @@ int cnss_clear_feature_list(struct cnss_plat_data *plat_priv,
 int cnss_get_feature_list(struct cnss_plat_data *plat_priv,
 			  u64 *feature_list);
 int cnss_get_input_gpio_value(struct cnss_plat_data *plat_priv, int gpio_num);
+bool cnss_check_driver_loading_allowed(void);
 #endif /* _CNSS_MAIN_H */

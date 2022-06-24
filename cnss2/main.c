@@ -31,6 +31,7 @@
 #include "bus.h"
 #include "debug.h"
 #include "genl.h"
+#include "reg.h"
 
 #define CNSS_DUMP_FORMAT_VER		0x11
 #define CNSS_DUMP_FORMAT_VER_V2		0x22
@@ -69,7 +70,14 @@ enum cnss_cal_db_op {
 	CNSS_CAL_DB_INVALID_OP,
 };
 
+enum cnss_recovery_type {
+	CNSS_WLAN_RECOVERY = 0x1,
+	CNSS_PCSS_RECOVERY = 0x2,
+};
+
 static struct cnss_plat_data *plat_env;
+
+static bool cnss_allow_driver_loading;
 
 static DECLARE_RWSEM(cnss_pm_sem);
 
@@ -96,6 +104,11 @@ static void cnss_set_plat_priv(struct platform_device *plat_dev,
 			       struct cnss_plat_data *plat_priv)
 {
 	plat_env = plat_priv;
+}
+
+bool cnss_check_driver_loading_allowed(void)
+{
+	return cnss_allow_driver_loading;
 }
 
 struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev)
@@ -496,7 +509,10 @@ static int cnss_fw_mem_ready_hdlr(struct cnss_plat_data *plat_priv)
 
 	if (plat_priv->hds_enabled)
 		cnss_wlfw_bdf_dnld_send_sync(plat_priv, CNSS_BDF_HDS);
+
 	cnss_wlfw_bdf_dnld_send_sync(plat_priv, CNSS_BDF_REGDB);
+
+	cnss_wlfw_ini_file_send_sync(plat_priv, WLFW_CONN_ROAM_INI_V01);
 
 	ret = cnss_wlfw_bdf_dnld_send_sync(plat_priv,
 					   plat_priv->ctrl_params.bdf_type);
@@ -3302,12 +3318,52 @@ static ssize_t enable_hds_store(struct device *dev,
 	return count;
 }
 
+static ssize_t recovery_show(struct device *dev,
+			     struct device_attribute *attr,
+			     char *buf)
+{
+	struct cnss_plat_data *plat_priv = dev_get_drvdata(dev);
+	u32 buf_size = PAGE_SIZE;
+	u32 curr_len = 0;
+	u32 buf_written = 0;
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	buf_written = scnprintf(buf, buf_size,
+				"Usage: echo [recovery_bitmap] > /sys/kernel/cnss/recovery\n"
+				"BIT0 -- wlan fw recovery\n"
+				"BIT1 -- wlan pcss recovery\n"
+				"---------------------------------\n");
+	curr_len += buf_written;
+
+	buf_written = scnprintf(buf + curr_len, buf_size - curr_len,
+				"WLAN recovery %s[%d]\n",
+				plat_priv->recovery_enabled ? "Enabled" : "Disabled",
+				plat_priv->recovery_enabled);
+	curr_len += buf_written;
+
+	buf_written = scnprintf(buf + curr_len, buf_size - curr_len,
+				"WLAN PCSS recovery %s[%d]\n",
+				plat_priv->recovery_pcss_enabled ? "Enabled" : "Disabled",
+				plat_priv->recovery_pcss_enabled);
+	curr_len += buf_written;
+
+	/*
+	 * Now size of curr_len is not over page size for sure,
+	 * later if new item or none-fixed size item added, need
+	 * add check to make sure curr_len is not over page size.
+	 */
+	return curr_len;
+}
+
 static ssize_t recovery_store(struct device *dev,
 			      struct device_attribute *attr,
 			      const char *buf, size_t count)
 {
 	struct cnss_plat_data *plat_priv = dev_get_drvdata(dev);
 	unsigned int recovery = 0;
+	int ret;
 
 	if (!plat_priv)
 		return -ENODEV;
@@ -3317,13 +3373,20 @@ static ssize_t recovery_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	if (recovery)
-		plat_priv->recovery_enabled = true;
-	else
-		plat_priv->recovery_enabled = false;
+	plat_priv->recovery_enabled = !!(recovery & CNSS_WLAN_RECOVERY);
+	plat_priv->recovery_pcss_enabled = !!(recovery & CNSS_PCSS_RECOVERY);
 
 	cnss_pr_dbg("%s WLAN recovery, count is %zu\n",
 		    plat_priv->recovery_enabled ? "Enable" : "Disable", count);
+	cnss_pr_dbg("%s PCSS recovery, count is %zu\n",
+		    plat_priv->recovery_pcss_enabled ? "Enable" : "Disable", count);
+
+	ret = cnss_send_subsys_restart_level_msg(plat_priv);
+	if (ret < 0) {
+		cnss_pr_err("pcss recovery setting failed with ret %d\n", ret);
+		plat_priv->recovery_pcss_enabled = false;
+		return -EINVAL;
+	}
 
 	return count;
 }
@@ -3459,7 +3522,7 @@ static ssize_t charger_mode_store(struct device *dev,
 
 static DEVICE_ATTR_WO(fs_ready);
 static DEVICE_ATTR_WO(shutdown);
-static DEVICE_ATTR_WO(recovery);
+static DEVICE_ATTR_RW(recovery);
 static DEVICE_ATTR_WO(enable_hds);
 static DEVICE_ATTR_WO(qdss_trace_start);
 static DEVICE_ATTR_WO(qdss_trace_stop);
@@ -3627,6 +3690,8 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 		cnss_pr_err("QMI IPC connection call back register failed, err = %d\n",
 			    ret);
 
+	plat_priv->sram_dump = kcalloc(SRAM_DUMP_SIZE, 1, GFP_KERNEL);
+
 	return 0;
 }
 
@@ -3645,6 +3710,7 @@ static void cnss_misc_deinit(struct cnss_plat_data *plat_priv)
 	del_timer(&plat_priv->fw_boot_timer);
 	wakeup_source_unregister(plat_priv->recovery_ws);
 	cnss_deinit_sol_gpio(plat_priv);
+	kfree(plat_priv->sram_dump);
 }
 
 static void cnss_init_control_params(struct cnss_plat_data *plat_priv)
@@ -3741,16 +3807,24 @@ static int cnss_get_dev_cfg_node(struct cnss_plat_data *plat_priv)
 {
 	struct device_node *child;
 	u32 id, i;
-	int id_n, ret;
-	int wlan_sw_ctrl_gpio = plat_priv->pinctrl_info.wlan_sw_ctrl_gpio;
+	int id_n,  device_identifier_gpio, ret;
 	u8 gpio_value;
 
 
 	if (!plat_priv->is_converged_dt)
 		return 0;
 
-	gpio_value = gpio_get_value(wlan_sw_ctrl_gpio);
-	cnss_pr_dbg("Value of WLAN_SW_CTRL GPIO: %d\n", gpio_value);
+	/* Parses the wlan_sw_ctrl gpio which is used to identify device */
+	ret = cnss_get_wlan_sw_ctrl(plat_priv);
+	if (ret) {
+		cnss_pr_dbg("Failed to parse wlan_sw_ctrl gpio, error:%d", ret);
+		return ret;
+	}
+
+	device_identifier_gpio = plat_priv->pinctrl_info.wlan_sw_ctrl_gpio;
+
+	gpio_value = gpio_get_value(device_identifier_gpio);
+	cnss_pr_dbg("Value of Device Identifier GPIO: %d\n", gpio_value);
 
 	for_each_available_child_of_node(plat_priv->plat_dev->dev.of_node,
 					 child) {
@@ -3836,8 +3910,6 @@ static int cnss_probe(struct platform_device *plat_dev)
 	plat_priv->use_fw_path_with_prefix =
 		cnss_use_fw_path_with_prefix(plat_priv);
 
-	cnss_get_wlan_sw_ctrl(plat_priv);
-
 	ret = cnss_get_dev_cfg_node(plat_priv);
 	if (ret) {
 		cnss_pr_err("Failed to get device cfg node, err = %d\n", ret);
@@ -3846,6 +3918,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 
 	plat_priv->bus_type = cnss_get_bus_type(plat_priv->device_id);
 	plat_priv->use_nv_mac = cnss_use_nv_mac(plat_priv);
+	plat_priv->driver_mode = CNSS_DRIVER_MODE_MAX;
 	cnss_set_plat_priv(plat_dev, plat_priv);
 	platform_set_drvdata(plat_dev, plat_priv);
 	INIT_LIST_HEAD(&plat_priv->vreg_list);
@@ -3996,6 +4069,20 @@ static struct platform_driver cnss_platform_driver = {
 	},
 };
 
+static bool cnss_check_compatible_node(void)
+{
+	struct device_node *dn = NULL;
+
+	for_each_matching_node(dn, cnss_of_match_table) {
+		if (of_device_is_available(dn)) {
+			cnss_allow_driver_loading = true;
+			return true;
+		}
+	}
+
+	return false;
+}
+
 /**
  * cnss_is_valid_dt_node_found - Check if valid device tree node present
  *
@@ -4025,6 +4112,9 @@ static int __init cnss_initialize(void)
 
 	if (!cnss_is_valid_dt_node_found())
 		return -ENODEV;
+
+	if (!cnss_check_compatible_node())
+		return ret;
 
 	cnss_debug_init();
 	ret = platform_driver_register(&cnss_platform_driver);

@@ -101,6 +101,9 @@ uint64_t dynamic_feature_mask = ICNSS_DEFAULT_FEATURE_MASK;
 #define RAMDUMP_NUM_DEVICES		256
 #define ICNSS_RAMDUMP_NAME		"icnss_ramdump"
 
+#define WLAN_EN_TEMP_THRESHOLD		5000
+#define WLAN_EN_DELAY			500
+
 #define ICNSS_RPROC_LEN			10
 static DEFINE_IDA(rd_minor_id);
 
@@ -614,6 +617,33 @@ static void register_early_crash_notifications(struct device *dev)
 	priv->fw_early_crash_irq = irq;
 }
 
+static int icnss_get_temperature(struct icnss_priv *priv, int *temp)
+{
+	struct thermal_zone_device *thermal_dev;
+	const char *tsens;
+	int ret;
+
+	ret = of_property_read_string(priv->pdev->dev.of_node,
+				      "tsens",
+				      &tsens);
+	if (ret)
+		return ret;
+
+	icnss_pr_dbg("Thermal Sensor is %s\n", tsens);
+	thermal_dev = thermal_zone_get_zone_by_name(tsens);
+	if (IS_ERR(thermal_dev)) {
+		icnss_pr_err("Fail to get thermal zone. ret: %d",
+			     PTR_ERR(thermal_dev));
+		return PTR_ERR(thermal_dev);
+	}
+
+	ret = thermal_zone_get_temp(thermal_dev, temp);
+	if (ret)
+		icnss_pr_err("Fail to get temperature. ret: %d", ret);
+
+	return ret;
+}
+
 static irqreturn_t fw_soc_wake_ack_handler(int irq, void *ctx)
 {
 	struct icnss_priv *priv = ctx;
@@ -751,6 +781,7 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 						 void *data)
 {
 	int ret = 0;
+	int temp = 0;
 	bool ignore_assert = false;
 
 	if (!priv)
@@ -784,6 +815,12 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 	}
 
 	if (priv->device_id == WCN6750_DEVICE_ID) {
+		if (!icnss_get_temperature(priv, &temp)) {
+			icnss_pr_dbg("Temperature: %d\n", temp);
+			if (temp < WLAN_EN_TEMP_THRESHOLD)
+				priv->wlan_en_delay_ms = WLAN_EN_DELAY;
+		}
+
 		ret = wlfw_host_cap_send_sync(priv);
 		if (ret < 0)
 			goto fail;
@@ -863,10 +900,12 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 		if (!priv->fw_soc_wake_ack_irq)
 			register_soc_wake_notif(&priv->pdev->dev);
 
-		icnss_get_smp2p_info(priv, ICNSS_SMP2P_OUT_POWER_SAVE);
 		icnss_get_smp2p_info(priv, ICNSS_SMP2P_OUT_SOC_WAKE);
 		icnss_get_smp2p_info(priv, ICNSS_SMP2P_OUT_EP_POWER_SAVE);
 	}
+
+	if (priv->wpss_supported)
+		icnss_get_smp2p_info(priv, ICNSS_SMP2P_OUT_POWER_SAVE);
 
 	if (priv->device_id == ADRASTEA_DEVICE_ID) {
 		if (priv->bdf_download_support) {
@@ -884,6 +923,9 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 
 	if (!priv->fw_early_crash_irq)
 		register_early_crash_notifications(&priv->pdev->dev);
+
+	if (priv->psf_supported)
+		queue_work(priv->soc_update_wq, &priv->soc_update_work);
 
 	return ret;
 
@@ -903,6 +945,9 @@ static int icnss_driver_event_server_exit(struct icnss_priv *priv)
 	icnss_pr_info("WLAN FW Service Disconnected: 0x%lx\n", priv->state);
 
 	icnss_clear_server(priv);
+
+	if (priv->psf_supported)
+		priv->last_updated_voltage = 0;
 
 	return 0;
 }
@@ -1463,12 +1508,14 @@ static int icnss_driver_event_pd_service_down(struct icnss_priv *priv,
 
 	if (priv->device_id == WCN6750_DEVICE_ID) {
 		icnss_send_smp2p(priv, ICNSS_RESET_MSG,
-				 ICNSS_SMP2P_OUT_POWER_SAVE);
-		icnss_send_smp2p(priv, ICNSS_RESET_MSG,
 				 ICNSS_SMP2P_OUT_SOC_WAKE);
 		icnss_send_smp2p(priv, ICNSS_RESET_MSG,
 				 ICNSS_SMP2P_OUT_EP_POWER_SAVE);
 	}
+
+	if (priv->wpss_supported)
+		icnss_send_smp2p(priv, ICNSS_RESET_MSG,
+				 ICNSS_SMP2P_OUT_POWER_SAVE);
 
 	icnss_send_hang_event_data(priv);
 
@@ -2129,7 +2176,7 @@ static int icnss_modem_ssr_register_notifier(struct icnss_priv *priv)
 	priv->modem_ssr_nb.priority = 1;
 
 	priv->modem_notify_handler =
-		qcom_register_ssr_notifier("modem", &priv->modem_ssr_nb);
+		qcom_register_ssr_notifier("mpss", &priv->modem_ssr_nb);
 
 	if (IS_ERR(priv->modem_notify_handler)) {
 		ret = PTR_ERR(priv->modem_notify_handler);
@@ -3377,7 +3424,7 @@ int icnss_trigger_recovery(struct device *dev)
 		goto out;
 	}
 
-	if (priv->device_id == WCN6750_DEVICE_ID) {
+	if (priv->wpss_supported) {
 		icnss_pr_vdbg("Initiate Root PD restart");
 		ret = icnss_send_smp2p(priv, ICNSS_TRIGGER_SSR,
 				       ICNSS_SMP2P_OUT_POWER_SAVE);
@@ -3763,6 +3810,13 @@ static int icnss_resource_parse(struct icnss_priv *priv)
 	if (ret) {
 		icnss_pr_err("Failed to get clocks, err = %d\n", ret);
 		goto put_vreg;
+	}
+
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,psf-supported")) {
+		ret = icnss_get_psf_info(priv);
+		if (ret < 0)
+			goto out;
+		priv->psf_supported = true;
 	}
 
 	if (priv->device_id == ADRASTEA_DEVICE_ID) {
@@ -4302,6 +4356,18 @@ void icnss_destroy_ramdump_device(struct icnss_ramdump_info *ramdump_info)
 	kfree(ramdump_info);
 }
 
+static void icnss_unregister_power_supply_notifier(struct icnss_priv *priv)
+{
+	if (priv->batt_psy)
+		power_supply_put(penv->batt_psy);
+
+	if (priv->psf_supported) {
+		flush_workqueue(priv->soc_update_wq);
+		destroy_workqueue(priv->soc_update_wq);
+		power_supply_unreg_notifier(&priv->psf_nb);
+	}
+}
+
 static int icnss_remove(struct platform_device *pdev)
 {
 	struct icnss_priv *priv = dev_get_drvdata(&pdev->dev);
@@ -4311,6 +4377,8 @@ static int icnss_remove(struct platform_device *pdev)
 	device_init_wakeup(&priv->pdev->dev, false);
 
 	icnss_debugfs_destroy(priv);
+
+	icnss_unregister_power_supply_notifier(penv);
 
 	icnss_sysfs_destroy(priv);
 

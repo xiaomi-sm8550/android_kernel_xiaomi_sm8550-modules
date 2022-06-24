@@ -4,7 +4,6 @@
  * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#include <linux/cma.h>
 #include <linux/completion.h>
 #include <linux/io.h>
 #include <linux/irq.h>
@@ -13,15 +12,16 @@
 #include <linux/msi.h>
 #include <linux/of.h>
 #include <linux/of_gpio.h>
-#include <linux/of_reserved_mem.h>
 #include <linux/pm_runtime.h>
 #include <linux/suspend.h>
 #include <linux/version.h>
+#include <linux/sched.h>
 
 #include "main.h"
 #include "bus.h"
 #include "debug.h"
 #include "pci.h"
+#include "pci_platform.h"
 #include "reg.h"
 
 #define PCI_LINK_UP			1
@@ -29,8 +29,6 @@
 
 #define SAVE_PCI_CONFIG_SPACE		1
 #define RESTORE_PCI_CONFIG_SPACE	0
-
-#define PM_OPTIONS_DEFAULT		0
 
 #define PCI_BAR_NUM			0
 #define PCI_INVALID_READ(val)		((val) == U32_MAX)
@@ -50,6 +48,7 @@
 #define PHY_UCODE_V2_FILE_NAME		"phy_ucode20.elf"
 #define DEFAULT_FW_FILE_NAME		"amss.bin"
 #define FW_V2_FILE_NAME			"amss20.bin"
+#define FW_V2_FTM_FILE_NAME		"amss20_ftm.bin"
 #define DEVICE_MAJOR_VERSION_MASK	0xF
 
 #define WAKE_MSI_NAME			"WAKE"
@@ -64,6 +63,7 @@
 #endif
 
 #define RAMDUMP_SIZE_DEFAULT		0x420000
+#define CNSS_256KB_SIZE			0x40000
 #define DEVICE_RDDM_COOKIE		0xCAFECACE
 
 static DEFINE_SPINLOCK(pci_link_down_lock);
@@ -79,9 +79,6 @@ static DEFINE_SPINLOCK(time_sync_lock);
 #define FORCE_WAKE_DELAY_MIN_US			4000
 #define FORCE_WAKE_DELAY_MAX_US			6000
 #define FORCE_WAKE_DELAY_TIMEOUT_US		60000
-
-#define LINK_TRAINING_RETRY_MAX_TIMES		3
-#define LINK_TRAINING_RETRY_DELAY_MS		500
 
 #define MHI_SUSPEND_RETRY_MAX_TIMES		3
 #define MHI_SUSPEND_RETRY_DELAY_US		5000
@@ -177,6 +174,7 @@ static const struct mhi_channel_config cnss_mhi_channels[] = {
 		.doorbell_mode_switch = false,
 		.auto_queue = true,
 	},
+/* All MHI satellite config to be at the end of data struct */
 #if IS_ENABLED(CONFIG_MHI_SATELLITE)
 	{
 		.num = 50,
@@ -291,7 +289,15 @@ static const struct mhi_event_config cnss_mhi_events[] = {
 #endif
 };
 
-static const struct mhi_controller_config cnss_mhi_config = {
+#if IS_ENABLED(CONFIG_MHI_SATELLITE)
+#define CNSS_MHI_SATELLITE_CH_CFG_COUNT 4
+#define CNSS_MHI_SATELLITE_EVT_COUNT 1
+#else
+#define CNSS_MHI_SATELLITE_CH_CFG_COUNT 0
+#define CNSS_MHI_SATELLITE_EVT_COUNT 0
+#endif
+
+static const struct mhi_controller_config cnss_mhi_config_default = {
 #if IS_ENABLED(CONFIG_MHI_SATELLITE)
 	.max_channels = 72,
 #else
@@ -303,6 +309,20 @@ static const struct mhi_controller_config cnss_mhi_config = {
 	.num_channels = ARRAY_SIZE(cnss_mhi_channels),
 	.ch_cfg = cnss_mhi_channels,
 	.num_events = ARRAY_SIZE(cnss_mhi_events),
+	.event_cfg = cnss_mhi_events,
+	.m2_no_db = true,
+};
+
+static const struct mhi_controller_config cnss_mhi_config_no_satellite = {
+	.max_channels = 32,
+	.timeout_ms = 10000,
+	.use_bounce_buf = false,
+	.buf_len = 0x8000,
+	.num_channels = ARRAY_SIZE(cnss_mhi_channels) -
+			CNSS_MHI_SATELLITE_CH_CFG_COUNT,
+	.ch_cfg = cnss_mhi_channels,
+	.num_events = ARRAY_SIZE(cnss_mhi_events) -
+			CNSS_MHI_SATELLITE_EVT_COUNT,
 	.event_cfg = cnss_mhi_events,
 	.m2_no_db = true,
 };
@@ -635,231 +655,7 @@ static struct cnss_misc_reg syspm_reg_access_seq[] = {
 #define WLAON_REG_SIZE ARRAY_SIZE(wlaon_reg_access_seq)
 #define SYSPM_REG_SIZE ARRAY_SIZE(syspm_reg_access_seq)
 
-#if IS_ENABLED(CONFIG_PCI_MSM)
-/**
- * _cnss_pci_enumerate() - Enumerate PCIe endpoints
- * @plat_priv: driver platform context pointer
- * @rc_num: root complex index that an endpoint connects to
- *
- * This function shall call corresponding PCIe root complex driver APIs
- * to power on root complex and enumerate the endpoint connected to it.
- *
- * Return: 0 for success, negative value for error
- */
-static int _cnss_pci_enumerate(struct cnss_plat_data *plat_priv, u32 rc_num)
-{
-	return msm_pcie_enumerate(rc_num);
-}
-
-/**
- * cnss_pci_assert_perst() - Assert PCIe PERST GPIO
- * @pci_priv: driver PCI bus context pointer
- *
- * This function shall call corresponding PCIe root complex driver APIs
- * to assert PCIe PERST GPIO.
- *
- * Return: 0 for success, negative value for error
- */
-static int cnss_pci_assert_perst(struct cnss_pci_data *pci_priv)
-{
-	struct pci_dev *pci_dev = pci_priv->pci_dev;
-
-	return msm_pcie_pm_control(MSM_PCIE_HANDLE_LINKDOWN,
-				   pci_dev->bus->number, pci_dev, NULL,
-				   PM_OPTIONS_DEFAULT);
-}
-
-/**
- * cnss_pci_disable_pc() - Disable PCIe link power collapse from RC driver
- * @pci_priv: driver PCI bus context pointer
- * @vote: value to indicate disable (true) or enable (false)
- *
- * This function shall call corresponding PCIe root complex driver APIs
- * to disable PCIe power collapse. The purpose of this API is to avoid
- * root complex driver still controlling PCIe link from callbacks of
- * system suspend/resume. Device driver itself should take full control
- * of the link in such cases.
- *
- * Return: 0 for success, negative value for error
- */
-static int cnss_pci_disable_pc(struct cnss_pci_data *pci_priv, bool vote)
-{
-	struct pci_dev *pci_dev = pci_priv->pci_dev;
-
-	return msm_pcie_pm_control(vote ? MSM_PCIE_DISABLE_PC :
-				   MSM_PCIE_ENABLE_PC,
-				   pci_dev->bus->number, pci_dev, NULL,
-				   PM_OPTIONS_DEFAULT);
-}
-
-/**
- * cnss_pci_set_link_bandwidth() - Update number of lanes and speed of
- *                                 PCIe link
- * @pci_priv: driver PCI bus context pointer
- * @link_speed: PCIe link gen speed
- * @link_width: number of lanes for PCIe link
- *
- * This function shall call corresponding PCIe root complex driver APIs
- * to update number of lanes and speed of the link.
- *
- * Return: 0 for success, negative value for error
- */
-static int cnss_pci_set_link_bandwidth(struct cnss_pci_data *pci_priv,
-				       u16 link_speed, u16 link_width)
-{
-	return msm_pcie_set_link_bandwidth(pci_priv->pci_dev,
-					   link_speed, link_width);
-}
-
-/**
- * cnss_pci_set_max_link_speed() - Set the maximum speed PCIe can link up with
- * @pci_priv: driver PCI bus context pointer
- * @rc_num: root complex index that an endpoint connects to
- * @link_speed: PCIe link gen speed
- *
- * This function shall call corresponding PCIe root complex driver APIs
- * to update the maximum speed that PCIe can link up with.
- *
- * Return: 0 for success, negative value for error
- */
-static int cnss_pci_set_max_link_speed(struct cnss_pci_data *pci_priv,
-				       u32 rc_num, u16 link_speed)
-{
-	return msm_pcie_set_target_link_speed(rc_num, link_speed, false);
-}
-
-/**
- * _cnss_pci_prevent_l1() - Prevent PCIe L1 and L1 sub-states
- * @pci_priv: driver PCI bus context pointer
- *
- * This function shall call corresponding PCIe root complex driver APIs
- * to prevent PCIe link enter L1 and L1 sub-states. The APIs should also
- * bring link out of L1 or L1 sub-states if any and avoid synchronization
- * issues if any.
- *
- * Return: 0 for success, negative value for error
- */
-static int _cnss_pci_prevent_l1(struct cnss_pci_data *pci_priv)
-{
-	return msm_pcie_prevent_l1(pci_priv->pci_dev);
-}
-
-/**
- * _cnss_pci_allow_l1() - Allow PCIe L1 and L1 sub-states
- * @pci_priv: driver PCI bus context pointer
- *
- * This function shall call corresponding PCIe root complex driver APIs
- * to allow PCIe link enter L1 and L1 sub-states. The APIs should avoid
- * synchronization issues if any.
- *
- * Return: 0 for success, negative value for error
- */
-static void _cnss_pci_allow_l1(struct cnss_pci_data *pci_priv)
-{
-	msm_pcie_allow_l1(pci_priv->pci_dev);
-}
-
-/**
- * cnss_pci_set_link_up() - Power on or resume PCIe link
- * @pci_priv: driver PCI bus context pointer
- *
- * This function shall call corresponding PCIe root complex driver APIs
- * to Power on or resume PCIe link.
- *
- * Return: 0 for success, negative value for error
- */
-static int cnss_pci_set_link_up(struct cnss_pci_data *pci_priv)
-{
-	struct pci_dev *pci_dev = pci_priv->pci_dev;
-	enum msm_pcie_pm_opt pm_ops = MSM_PCIE_RESUME;
-	u32 pm_options = PM_OPTIONS_DEFAULT;
-	int ret;
-
-	ret = msm_pcie_pm_control(pm_ops, pci_dev->bus->number, pci_dev,
-				  NULL, pm_options);
-	if (ret)
-		cnss_pr_err("Failed to resume PCI link with default option, err = %d\n",
-			    ret);
-
-	return ret;
-}
-
-/**
- * cnss_pci_set_link_down() - Power off or suspend PCIe link
- * @pci_priv: driver PCI bus context pointer
- *
- * This function shall call corresponding PCIe root complex driver APIs
- * to power off or suspend PCIe link.
- *
- * Return: 0 for success, negative value for error
- */
-static int cnss_pci_set_link_down(struct cnss_pci_data *pci_priv)
-{
-	struct pci_dev *pci_dev = pci_priv->pci_dev;
-	enum msm_pcie_pm_opt pm_ops;
-	u32 pm_options = PM_OPTIONS_DEFAULT;
-	int ret;
-
-	if (pci_priv->drv_connected_last) {
-		cnss_pr_vdbg("Use PCIe DRV suspend\n");
-		pm_ops = MSM_PCIE_DRV_SUSPEND;
-	} else {
-		pm_ops = MSM_PCIE_SUSPEND;
-	}
-
-	ret = msm_pcie_pm_control(pm_ops, pci_dev->bus->number, pci_dev,
-				  NULL, pm_options);
-	if (ret)
-		cnss_pr_err("Failed to suspend PCI link with default option, err = %d\n",
-			    ret);
-
-	return ret;
-}
-#else
-static int _cnss_pci_enumerate(struct cnss_plat_data *plat_priv, u32 rc_num)
-{
-	return -EOPNOTSUPP;
-}
-
-static int cnss_pci_assert_perst(struct cnss_pci_data *pci_priv)
-{
-	return -EOPNOTSUPP;
-}
-
-static int cnss_pci_disable_pc(struct cnss_pci_data *pci_priv, bool vote)
-{
-	return 0;
-}
-
-static int cnss_pci_set_link_bandwidth(struct cnss_pci_data *pci_priv,
-				       u16 link_speed, u16 link_width)
-{
-	return 0;
-}
-
-static int cnss_pci_set_max_link_speed(struct cnss_pci_data *pci_priv,
-				       u32 rc_num, u16 link_speed)
-{
-	return 0;
-}
-
-static int _cnss_pci_prevent_l1(struct cnss_pci_data *pci_priv)
-{
-	return 0;
-}
-
-static void _cnss_pci_allow_l1(struct cnss_pci_data *pci_priv) {}
-
-static int cnss_pci_set_link_up(struct cnss_pci_data *pci_priv)
-{
-	return 0;
-}
-
-static int cnss_pci_set_link_down(struct cnss_pci_data *pci_priv)
-{
-	return 0;
-}
-#endif /* CONFIG_PCI_MSM */
+static int cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv);
 
 #if IS_ENABLED(CONFIG_MHI_BUS_MISC)
 static void cnss_mhi_debug_reg_dump(struct cnss_pci_data *pci_priv)
@@ -1162,6 +958,8 @@ static int cnss_setup_bus_bandwidth(struct cnss_plat_data *plat_priv,
 		return -EINVAL;
 	}
 
+	cnss_pr_vdbg("Bandwidth vote to %d, save %d\n", bw, save);
+
 	list_for_each_entry(bus_bw_info, &plat_priv->icc.list_head, list) {
 		ret = icc_set_bw(bus_bw_info->icc_path,
 				 bus_bw_info->cfg_table[bw].avg_bw,
@@ -1341,79 +1139,6 @@ static int cnss_pci_get_link_status(struct cnss_pci_data *pci_priv)
 	return 0;
 }
 
-static int cnss_set_pci_link_status(struct cnss_pci_data *pci_priv,
-				    enum pci_link_status status)
-{
-	u16 link_speed, link_width = pci_priv->def_link_width;
-	u16 one_lane = PCI_EXP_LNKSTA_NLW_X1 >> PCI_EXP_LNKSTA_NLW_SHIFT;
-	int ret;
-
-	cnss_pr_vdbg("Set PCI link status to: %u\n", status);
-
-	switch (status) {
-	case PCI_GEN1:
-		link_speed = PCI_EXP_LNKSTA_CLS_2_5GB;
-		if (!link_width)
-			link_width = one_lane;
-		break;
-	case PCI_GEN2:
-		link_speed = PCI_EXP_LNKSTA_CLS_5_0GB;
-		if (!link_width)
-			link_width = one_lane;
-		break;
-	case PCI_DEF:
-		link_speed = pci_priv->def_link_speed;
-		if (!link_speed || !link_width) {
-			cnss_pr_err("PCI link speed or width is not valid\n");
-			return -EINVAL;
-		}
-		break;
-	default:
-		cnss_pr_err("Unknown PCI link status config: %u\n", status);
-		return -EINVAL;
-	}
-
-	ret = cnss_pci_set_link_bandwidth(pci_priv, link_speed, link_width);
-	if (!ret)
-		pci_priv->cur_link_speed = link_speed;
-
-	return ret;
-}
-
-static int cnss_set_pci_link(struct cnss_pci_data *pci_priv, bool link_up)
-{
-	int ret = 0, retry = 0;
-
-	cnss_pr_vdbg("%s PCI link\n", link_up ? "Resuming" : "Suspending");
-
-	if (link_up) {
-retry:
-		ret = cnss_pci_set_link_up(pci_priv);
-		if (ret && retry++ < LINK_TRAINING_RETRY_MAX_TIMES) {
-			cnss_pr_dbg("Retry PCI link training #%d\n", retry);
-			if (pci_priv->pci_link_down_ind)
-				msleep(LINK_TRAINING_RETRY_DELAY_MS * retry);
-			goto retry;
-		}
-	} else {
-		/* Since DRV suspend cannot be done in Gen 3, set it to
-		 * Gen 2 if current link speed is larger than Gen 2.
-		 */
-		if (pci_priv->drv_connected_last &&
-		    pci_priv->cur_link_speed > PCI_EXP_LNKSTA_CLS_5_0GB)
-			cnss_set_pci_link_status(pci_priv, PCI_GEN2);
-
-		ret = cnss_pci_set_link_down(pci_priv);
-	}
-
-	if (pci_priv->drv_connected_last) {
-		if ((link_up && !ret) || (!link_up && ret))
-			cnss_set_pci_link_status(pci_priv, PCI_DEF);
-	}
-
-	return ret;
-}
-
 static void cnss_pci_soc_scratch_reg_dump(struct cnss_pci_data *pci_priv)
 {
 	u32 reg_offset, val;
@@ -1569,61 +1294,6 @@ int cnss_pci_recover_link_down(struct cnss_pci_data *pci_priv)
 	return 0;
 }
 
-int cnss_pci_prevent_l1(struct device *dev)
-{
-	struct pci_dev *pci_dev = to_pci_dev(dev);
-	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
-	int ret;
-
-	if (!pci_priv) {
-		cnss_pr_err("pci_priv is NULL\n");
-		return -ENODEV;
-	}
-
-	if (pci_priv->pci_link_state == PCI_LINK_DOWN) {
-		cnss_pr_dbg("PCIe link is in suspend state\n");
-		return -EIO;
-	}
-
-	if (pci_priv->pci_link_down_ind) {
-		cnss_pr_err("PCIe link is down\n");
-		return -EIO;
-	}
-
-	ret = _cnss_pci_prevent_l1(pci_priv);
-	if (ret == -EIO) {
-		cnss_pr_err("Failed to prevent PCIe L1, considered as link down\n");
-		cnss_pci_link_down(dev);
-	}
-
-	return ret;
-}
-EXPORT_SYMBOL(cnss_pci_prevent_l1);
-
-void cnss_pci_allow_l1(struct device *dev)
-{
-	struct pci_dev *pci_dev = to_pci_dev(dev);
-	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(pci_dev);
-
-	if (!pci_priv) {
-		cnss_pr_err("pci_priv is NULL\n");
-		return;
-	}
-
-	if (pci_priv->pci_link_state == PCI_LINK_DOWN) {
-		cnss_pr_dbg("PCIe link is in suspend state\n");
-		return;
-	}
-
-	if (pci_priv->pci_link_down_ind) {
-		cnss_pr_err("PCIe link is down\n");
-		return;
-	}
-
-	_cnss_pci_allow_l1(pci_priv);
-}
-EXPORT_SYMBOL(cnss_pci_allow_l1);
-
 static void cnss_pci_update_link_event(struct cnss_pci_data *pci_priv,
 				       enum cnss_bus_event_type type,
 				       void *data)
@@ -1635,7 +1305,7 @@ static void cnss_pci_update_link_event(struct cnss_pci_data *pci_priv,
 	cnss_pci_call_driver_uevent(pci_priv, CNSS_BUS_EVENT, &bus_event);
 }
 
-static void cnss_pci_handle_linkdown(struct cnss_pci_data *pci_priv)
+void cnss_pci_handle_linkdown(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
@@ -1848,6 +1518,41 @@ static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 	}
 }
 
+static void cnss_pci_dump_sram(struct cnss_pci_data *pci_priv)
+{
+	struct cnss_plat_data *plat_priv;
+	u32 i, mem_addr;
+	u32 *dump_ptr;
+
+	plat_priv = pci_priv->plat_priv;
+
+	if (plat_priv->device_id != QCA6490_DEVICE_ID ||
+	    cnss_get_host_build_type() != QMI_HOST_BUILD_TYPE_PRIMARY_V01)
+		return;
+
+	if (!plat_priv->sram_dump) {
+		cnss_pr_err("SRAM dump memory is not allocated\n");
+		return;
+	}
+
+	if (cnss_pci_check_link_status(pci_priv))
+		return;
+
+	cnss_pr_dbg("Dumping SRAM at 0x%lx\n", plat_priv->sram_dump);
+
+	for (i = 0; i < SRAM_DUMP_SIZE; i += sizeof(u32)) {
+		mem_addr = SRAM_START + i;
+		dump_ptr = (u32 *)(plat_priv->sram_dump + i);
+		if (cnss_pci_reg_read(pci_priv, mem_addr, dump_ptr)) {
+			cnss_pr_err("SRAM Dump failed at 0x%x\n", mem_addr);
+			break;
+		}
+		/* Relinquish CPU after dumping 256KB chunks*/
+		if (!(i % CNSS_256KB_SIZE))
+			cond_resched();
+	}
+}
+
 static int cnss_pci_handle_mhi_poweron_timeout(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -1871,6 +1576,7 @@ static int cnss_pci_handle_mhi_poweron_timeout(struct cnss_pci_data *pci_priv)
 		cnss_pci_soc_scratch_reg_dump(pci_priv);
 		/* Dump PBL/SBL error log if RDDM cookie is not set */
 		cnss_pci_dump_bl_sram_mem(pci_priv);
+		cnss_pci_dump_sram(pci_priv);
 		return -ETIMEDOUT;
 	}
 
@@ -2099,56 +1805,6 @@ out:
 	return ret;
 }
 
-#if IS_ENABLED(CONFIG_PCI_MSM)
-/**
- * cnss_wlan_adsp_pc_enable: Control ADSP power collapse setup
- * @dev: Platform driver pci private data structure
- * @control: Power collapse enable / disable
- *
- * This function controls ADSP power collapse (PC). It must be called
- * based on wlan state.  ADSP power collapse during wlan RTPM suspend state
- * results in delay during periodic QMI stats PCI link up/down. This delay
- * causes additional power consumption.
- * Introduced in SM8350.
- *
- * Result: 0 Success. negative error codes.
- */
-static int cnss_wlan_adsp_pc_enable(struct cnss_pci_data *pci_priv,
-				    bool control)
-{
-	struct pci_dev *pci_dev = pci_priv->pci_dev;
-	int ret = 0;
-	u32 pm_options = PM_OPTIONS_DEFAULT;
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
-
-	if (plat_priv->adsp_pc_enabled == control) {
-		cnss_pr_dbg("ADSP power collapse already %s\n",
-			    control ? "Enabled" : "Disabled");
-		return 0;
-	}
-
-	if (control)
-		pm_options &= ~MSM_PCIE_CONFIG_NO_DRV_PC;
-	else
-		pm_options |= MSM_PCIE_CONFIG_NO_DRV_PC;
-
-	ret = msm_pcie_pm_control(MSM_PCIE_DRV_PC_CTRL, pci_dev->bus->number,
-				  pci_dev, NULL, pm_options);
-	if (ret)
-		return ret;
-
-	cnss_pr_dbg("%s ADSP power collapse\n", control ? "Enable" : "Disable");
-	plat_priv->adsp_pc_enabled = control;
-	return 0;
-}
-#else
-static int cnss_wlan_adsp_pc_enable(struct cnss_pci_data *pci_priv,
-				    bool control)
-{
-	return 0;
-}
-#endif
-
 int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -2184,7 +1840,7 @@ int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv)
 		  jiffies + msecs_to_jiffies(BOOT_DEBUG_TIMEOUT_MS));
 
 	ret = cnss_pci_set_mhi_state(pci_priv, CNSS_MHI_POWER_ON);
-	del_timer(&pci_priv->boot_debug_timer);
+	del_timer_sync(&pci_priv->boot_debug_timer);
 	if (ret == 0)
 		cnss_wlan_adsp_pc_enable(pci_priv, false);
 
@@ -2859,6 +2515,21 @@ static int cnss_qca6174_ramdump(struct cnss_pci_data *pci_priv)
 	return cnss_do_ramdump(plat_priv);
 }
 
+static void cnss_get_driver_mode_update_fw_name(struct cnss_plat_data *plat_priv)
+{
+	struct cnss_pci_data *pci_priv;
+	struct cnss_wlan_driver *driver_ops;
+
+	pci_priv = plat_priv->bus_priv;
+	driver_ops = pci_priv->driver_ops;
+
+	if (driver_ops && driver_ops->get_driver_mode) {
+		plat_priv->driver_mode = driver_ops->get_driver_mode();
+		cnss_pci_update_fw_name(pci_priv);
+		cnss_pr_dbg("New driver mode is %d", plat_priv->driver_mode);
+	}
+}
+
 static int cnss_qca6290_powerup(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -2879,6 +2550,8 @@ static int cnss_qca6290_powerup(struct cnss_pci_data *pci_priv)
 	pci_priv->qmi_send_usage_count = 0;
 
 	plat_priv->power_up_error = 0;
+
+	cnss_get_driver_mode_update_fw_name(plat_priv);
 retry:
 	ret = cnss_power_on_device(plat_priv);
 	if (ret) {
@@ -3254,8 +2927,13 @@ int cnss_wlan_register_driver(struct cnss_wlan_driver *driver_ops)
 	const struct pci_device_id *id_table = driver_ops->id_table;
 	unsigned int timeout;
 
+	if (!cnss_check_driver_loading_allowed()) {
+		cnss_pr_info("No cnss2 dtsi entry present");
+		return -ENODEV;
+	}
+
 	if (!plat_priv) {
-		cnss_pr_info("plat_priv is not ready for register driver\n");
+		cnss_pr_buf("plat_priv is not ready for register driver\n");
 		return -EAGAIN;
 	}
 
@@ -3297,6 +2975,8 @@ int cnss_wlan_register_driver(struct cnss_wlan_driver *driver_ops)
 			    plat_priv->device_version.major_version);
 		return -ENODEV;
 	}
+
+	cnss_get_driver_mode_update_fw_name(plat_priv);
 	set_bit(CNSS_DRIVER_REGISTER, &plat_priv->driver_state);
 
 	if (!plat_priv->cbc_enabled ||
@@ -3409,157 +3089,6 @@ int cnss_pci_unregister_driver_hdlr(struct cnss_pci_data *pci_priv)
 
 	return 0;
 }
-
-#if IS_ENABLED(CONFIG_PCI_MSM)
-static bool cnss_pci_is_drv_supported(struct cnss_pci_data *pci_priv)
-{
-	struct pci_dev *root_port = pcie_find_root_port(pci_priv->pci_dev);
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
-	struct device_node *root_of_node;
-	bool drv_supported = false;
-
-	if (!root_port) {
-		cnss_pr_err("PCIe DRV is not supported as root port is null\n");
-		pci_priv->drv_supported = false;
-		return drv_supported;
-	}
-
-	root_of_node = root_port->dev.of_node;
-
-	if (root_of_node->parent) {
-		drv_supported = of_property_read_bool(root_of_node->parent,
-						      "qcom,drv-supported") ||
-				of_property_read_bool(root_of_node->parent,
-						      "qcom,drv-name");
-	}
-
-	cnss_pr_dbg("PCIe DRV is %s\n",
-		    drv_supported ? "supported" : "not supported");
-	pci_priv->drv_supported = drv_supported;
-
-	if (drv_supported) {
-		plat_priv->cap.cap_flag |= CNSS_HAS_DRV_SUPPORT;
-		cnss_set_feature_list(plat_priv, CNSS_DRV_SUPPORT_V01);
-	}
-
-	return drv_supported;
-}
-
-static void cnss_pci_event_cb(struct msm_pcie_notify *notify)
-{
-	struct pci_dev *pci_dev;
-	struct cnss_pci_data *pci_priv;
-	struct device *dev;
-	struct cnss_plat_data *plat_priv = NULL;
-	int ret = 0;
-
-	if (!notify)
-		return;
-
-	pci_dev = notify->user;
-	if (!pci_dev)
-		return;
-
-	pci_priv = cnss_get_pci_priv(pci_dev);
-	if (!pci_priv)
-		return;
-	dev = &pci_priv->pci_dev->dev;
-
-	switch (notify->event) {
-	case MSM_PCIE_EVENT_LINK_RECOVER:
-		cnss_pr_dbg("PCI link recover callback\n");
-
-		plat_priv = pci_priv->plat_priv;
-		if (!plat_priv) {
-			cnss_pr_err("plat_priv is NULL\n");
-			return;
-		}
-
-		plat_priv->ctrl_params.quirks |= BIT(LINK_DOWN_SELF_RECOVERY);
-
-		ret = msm_pcie_pm_control(MSM_PCIE_HANDLE_LINKDOWN,
-					  pci_dev->bus->number, pci_dev, NULL,
-					  PM_OPTIONS_DEFAULT);
-		if (ret)
-			cnss_pci_handle_linkdown(pci_priv);
-		break;
-	case MSM_PCIE_EVENT_LINKDOWN:
-		cnss_pr_dbg("PCI link down event callback\n");
-		cnss_pci_handle_linkdown(pci_priv);
-		break;
-	case MSM_PCIE_EVENT_WAKEUP:
-		if ((cnss_pci_get_monitor_wake_intr(pci_priv) &&
-		     cnss_pci_get_auto_suspended(pci_priv)) ||
-		     dev->power.runtime_status == RPM_SUSPENDING) {
-			cnss_pci_set_monitor_wake_intr(pci_priv, false);
-			cnss_pci_pm_request_resume(pci_priv);
-		}
-		break;
-	case MSM_PCIE_EVENT_DRV_CONNECT:
-		cnss_pr_dbg("DRV subsystem is connected\n");
-		cnss_pci_set_drv_connected(pci_priv, 1);
-		break;
-	case MSM_PCIE_EVENT_DRV_DISCONNECT:
-		cnss_pr_dbg("DRV subsystem is disconnected\n");
-		if (cnss_pci_get_auto_suspended(pci_priv))
-			cnss_pci_pm_request_resume(pci_priv);
-		cnss_pci_set_drv_connected(pci_priv, 0);
-		break;
-	default:
-		cnss_pr_err("Received invalid PCI event: %d\n", notify->event);
-	}
-}
-
-/**
- * cnss_reg_pci_event() - Register for PCIe events
- * @pci_priv: driver PCI bus context pointer
- *
- * This function shall call corresponding PCIe root complex driver APIs
- * to register for PCIe events like link down or WAKE GPIO toggling etc.
- * The events should be based on PCIe root complex driver's capability.
- *
- * Return: 0 for success, negative value for error
- */
-static int cnss_reg_pci_event(struct cnss_pci_data *pci_priv)
-{
-	int ret = 0;
-	struct msm_pcie_register_event *pci_event;
-
-	pci_event = &pci_priv->msm_pci_event;
-	pci_event->events = MSM_PCIE_EVENT_LINK_RECOVER |
-			    MSM_PCIE_EVENT_LINKDOWN |
-			    MSM_PCIE_EVENT_WAKEUP;
-
-	if (cnss_pci_is_drv_supported(pci_priv))
-		pci_event->events = pci_event->events |
-			MSM_PCIE_EVENT_DRV_CONNECT |
-			MSM_PCIE_EVENT_DRV_DISCONNECT;
-
-	pci_event->user = pci_priv->pci_dev;
-	pci_event->mode = MSM_PCIE_TRIGGER_CALLBACK;
-	pci_event->callback = cnss_pci_event_cb;
-	pci_event->options = MSM_PCIE_CONFIG_NO_RECOVERY;
-
-	ret = msm_pcie_register_event(pci_event);
-	if (ret)
-		cnss_pr_err("Failed to register MSM PCI event, err = %d\n",
-			    ret);
-
-	return ret;
-}
-
-static void cnss_dereg_pci_event(struct cnss_pci_data *pci_priv)
-{
-	msm_pcie_deregister_event(&pci_priv->msm_pci_event);
-}
-#else
-static int cnss_reg_pci_event(struct cnss_pci_data *pci_priv)
-{
-	return 0;
-}
-
-static void cnss_dereg_pci_event(struct cnss_pci_data *pci_priv) {}
-#endif
 
 static int cnss_pci_suspend_driver(struct cnss_pci_data *pci_priv)
 {
@@ -4559,86 +4088,6 @@ void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv)
 			       CNSS_REASON_TIMEOUT);
 }
 
-static int cnss_pci_smmu_fault_handler(struct iommu_domain *domain,
-				       struct device *dev, unsigned long iova,
-				       int flags, void *handler_token)
-{
-	struct cnss_pci_data *pci_priv = handler_token;
-
-	cnss_fatal_err("SMMU fault happened with IOVA 0x%lx\n", iova);
-
-	if (!pci_priv) {
-		cnss_pr_err("pci_priv is NULL\n");
-		return -ENODEV;
-	}
-
-	cnss_pci_update_status(pci_priv, CNSS_FW_DOWN);
-	cnss_force_fw_assert(&pci_priv->pci_dev->dev);
-
-	/* IOMMU driver requires -ENOSYS to print debug info. */
-	return -ENOSYS;
-}
-
-static int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
-{
-	struct pci_dev *pci_dev = pci_priv->pci_dev;
-	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
-	struct device_node *of_node;
-	struct resource *res;
-	const char *iommu_dma_type;
-	u32 addr_win[2];
-	int ret = 0;
-
-	of_node = of_parse_phandle(pci_dev->dev.of_node, "qcom,iommu-group", 0);
-	if (!of_node)
-		return ret;
-
-	cnss_pr_dbg("Initializing SMMU\n");
-
-	pci_priv->iommu_domain = iommu_get_domain_for_dev(&pci_dev->dev);
-	ret = of_property_read_string(of_node, "qcom,iommu-dma",
-				      &iommu_dma_type);
-	if (!ret && !strcmp("fastmap", iommu_dma_type)) {
-		cnss_pr_dbg("Enabling SMMU S1 stage\n");
-		pci_priv->smmu_s1_enable = true;
-		iommu_set_fault_handler(pci_priv->iommu_domain,
-					cnss_pci_smmu_fault_handler, pci_priv);
-	}
-
-	ret = of_property_read_u32_array(of_node,  "qcom,iommu-dma-addr-pool",
-					 addr_win, ARRAY_SIZE(addr_win));
-	if (ret) {
-		cnss_pr_err("Invalid SMMU size window, err = %d\n", ret);
-		of_node_put(of_node);
-		return ret;
-	}
-
-	pci_priv->smmu_iova_start = addr_win[0];
-	pci_priv->smmu_iova_len = addr_win[1];
-	cnss_pr_dbg("smmu_iova_start: %pa, smmu_iova_len: 0x%zx\n",
-		    &pci_priv->smmu_iova_start,
-		    pci_priv->smmu_iova_len);
-
-	res = platform_get_resource_byname(plat_priv->plat_dev, IORESOURCE_MEM,
-					   "smmu_iova_ipa");
-	if (res) {
-		pci_priv->smmu_iova_ipa_start = res->start;
-		pci_priv->smmu_iova_ipa_current = res->start;
-		pci_priv->smmu_iova_ipa_len = resource_size(res);
-		cnss_pr_dbg("smmu_iova_ipa_start: %pa, smmu_iova_ipa_len: 0x%zx\n",
-			    &pci_priv->smmu_iova_ipa_start,
-			    pci_priv->smmu_iova_ipa_len);
-	}
-
-	pci_priv->iommu_geometry = of_property_read_bool(of_node,
-							 "qcom,iommu-geometry");
-	cnss_pr_dbg("iommu_geometry: %d\n", pci_priv->iommu_geometry);
-
-	of_node_put(of_node);
-
-	return 0;
-}
-
 static void cnss_pci_deinit_smmu(struct cnss_pci_data *pci_priv)
 {
 	pci_priv->iommu_domain = NULL;
@@ -4822,24 +4271,6 @@ int cnss_get_soc_info(struct device *dev, struct cnss_soc_info *info)
 	return 0;
 }
 EXPORT_SYMBOL(cnss_get_soc_info);
-
-static struct cnss_msi_config msi_config = {
-	.total_vectors = 32,
-	.total_users = 4,
-	.users = (struct cnss_msi_user[]) {
-		{ .name = "MHI", .num_vectors = 3, .base_vector = 0 },
-		{ .name = "CE", .num_vectors = 10, .base_vector = 3 },
-		{ .name = "WAKE", .num_vectors = 1, .base_vector = 13 },
-		{ .name = "DP", .num_vectors = 18, .base_vector = 14 },
-	},
-};
-
-static int cnss_pci_get_msi_assignment(struct cnss_pci_data *pci_priv)
-{
-	pci_priv->msi_config = &msi_config;
-
-	return 0;
-}
 
 static int cnss_pci_enable_msi(struct cnss_pci_data *pci_priv)
 {
@@ -5625,21 +5056,6 @@ void cnss_pci_add_fw_prefix_name(struct cnss_pci_data *pci_priv,
 static int cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
-	struct mhi_controller *mhi_ctrl = pci_priv->mhi_ctrl;
-
-	plat_priv->device_version.family_number = mhi_ctrl->family_number;
-	plat_priv->device_version.device_number = mhi_ctrl->device_number;
-	plat_priv->device_version.major_version = mhi_ctrl->major_version;
-	plat_priv->device_version.minor_version = mhi_ctrl->minor_version;
-
-	cnss_pr_dbg("Get device version info, family number: 0x%x, device number: 0x%x, major version: 0x%x, minor version: 0x%x\n",
-		    plat_priv->device_version.family_number,
-		    plat_priv->device_version.device_number,
-		    plat_priv->device_version.major_version,
-		    plat_priv->device_version.minor_version);
-
-	/* Only keep lower 4 bits as real device major version */
-	plat_priv->device_version.major_version &= DEVICE_MAJOR_VERSION_MASK;
 
 	switch (pci_priv->device_id) {
 	case QCA6390_DEVICE_ID:
@@ -5655,15 +5071,63 @@ static int cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv)
 			 FW_V2_FILE_NAME);
 		break;
 	case QCA6490_DEVICE_ID:
+		switch (plat_priv->device_version.major_version) {
+		case FW_V2_NUMBER:
+				cnss_pci_add_fw_prefix_name(pci_priv,
+							    plat_priv->firmware_name,
+							    FW_V2_FILE_NAME);
+				snprintf(plat_priv->fw_fallback_name,
+					 MAX_FIRMWARE_NAME_LEN,
+					 FW_V2_FILE_NAME);
+			break;
+		default:
+			cnss_pci_add_fw_prefix_name(pci_priv,
+						    plat_priv->firmware_name,
+						    DEFAULT_FW_FILE_NAME);
+			snprintf(plat_priv->fw_fallback_name,
+				 MAX_FIRMWARE_NAME_LEN,
+				 DEFAULT_FW_FILE_NAME);
+			break;
+		}
+		break;
 	case KIWI_DEVICE_ID:
 		switch (plat_priv->device_version.major_version) {
 		case FW_V2_NUMBER:
-			cnss_pci_add_fw_prefix_name(pci_priv,
-						    plat_priv->firmware_name,
-						    FW_V2_FILE_NAME);
-			snprintf(plat_priv->fw_fallback_name,
-				 MAX_FIRMWARE_NAME_LEN,
-				 FW_V2_FILE_NAME);
+			/*
+			 * kiwiv2 using seprate fw binary for MM and FTM mode,
+			 * platform driver loads corresponding binary according
+			 * to current mode indicated by wlan driver. Otherwise
+			 * use default binary.
+			 * Mission mode using same binary name as before,
+			 * if seprate binary is not there, fall back to default.
+			 */
+			if (plat_priv->driver_mode == CNSS_MISSION) {
+				cnss_pci_add_fw_prefix_name(pci_priv,
+							    plat_priv->firmware_name,
+							    FW_V2_FILE_NAME);
+				cnss_pci_add_fw_prefix_name(pci_priv,
+							    plat_priv->fw_fallback_name,
+							    FW_V2_FILE_NAME);
+			} else if (plat_priv->driver_mode == CNSS_FTM) {
+				cnss_pci_add_fw_prefix_name(pci_priv,
+							    plat_priv->firmware_name,
+							    FW_V2_FTM_FILE_NAME);
+				cnss_pci_add_fw_prefix_name(pci_priv,
+							    plat_priv->fw_fallback_name,
+							    FW_V2_FILE_NAME);
+			} else {
+				/*
+				 * Since during cold boot calibration phase,
+				 * wlan driver has not registered, so default
+				 * fw binary will be used.
+				 */
+				cnss_pci_add_fw_prefix_name(pci_priv,
+							    plat_priv->firmware_name,
+							    FW_V2_FILE_NAME);
+				snprintf(plat_priv->fw_fallback_name,
+					 MAX_FIRMWARE_NAME_LEN,
+					 FW_V2_FILE_NAME);
+			}
 			break;
 		default:
 			cnss_pci_add_fw_prefix_name(pci_priv,
@@ -5832,8 +5296,12 @@ static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl,
 		break;
 #if IS_ENABLED(CONFIG_MHI_BUS_MISC)
 	case MHI_CB_FALLBACK_IMG:
-		plat_priv->use_fw_path_with_prefix = false;
-		cnss_pci_update_fw_name(pci_priv);
+		/* for kiwi_v2 binary fallback is used, skip path fallback here */
+		if (!(pci_priv->device_id == KIWI_DEVICE_ID &&
+		      plat_priv->device_version.major_version == FW_V2_NUMBER)) {
+			plat_priv->use_fw_path_with_prefix = false;
+			cnss_pci_update_fw_name(pci_priv);
+		}
 		return;
 #endif
 	default:
@@ -5933,6 +5401,33 @@ static void cnss_mhi_write_reg(struct mhi_controller *mhi_ctrl,
 	writel_relaxed(val, addr);
 }
 
+static int cnss_get_mhi_soc_info(struct cnss_plat_data *plat_priv,
+				 struct mhi_controller *mhi_ctrl)
+{
+	int ret = 0;
+
+	ret = mhi_get_soc_info(mhi_ctrl);
+	if (ret)
+		goto exit;
+
+	plat_priv->device_version.family_number = mhi_ctrl->family_number;
+	plat_priv->device_version.device_number = mhi_ctrl->device_number;
+	plat_priv->device_version.major_version = mhi_ctrl->major_version;
+	plat_priv->device_version.minor_version = mhi_ctrl->minor_version;
+
+	cnss_pr_dbg("Get device version info, family number: 0x%x, device number: 0x%x, major version: 0x%x, minor version: 0x%x\n",
+		    plat_priv->device_version.family_number,
+		    plat_priv->device_version.device_number,
+		    plat_priv->device_version.major_version,
+		    plat_priv->device_version.minor_version);
+
+	/* Only keep lower 4 bits as real device major version */
+	plat_priv->device_version.major_version &= DEVICE_MAJOR_VERSION_MASK;
+
+exit:
+	return ret;
+}
+
 static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -5940,6 +5435,8 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
 	struct mhi_controller *mhi_ctrl;
 	phys_addr_t bar_start;
+	const struct mhi_controller_config *cnss_mhi_config =
+						&cnss_mhi_config_default;
 
 	if (pci_priv->device_id == QCA6174_DEVICE_ID)
 		return 0;
@@ -5992,7 +5489,17 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	mhi_ctrl->seg_len = SZ_512K;
 	mhi_ctrl->fbc_download = true;
 
-	ret = mhi_register_controller(mhi_ctrl, &cnss_mhi_config);
+	ret = cnss_get_mhi_soc_info(plat_priv, mhi_ctrl);
+	if (ret)
+		goto free_mhi_irq;
+
+	/* Satellite config only supported on KIWI V2 and later chipset */
+	if (plat_priv->device_id <= QCA6490_DEVICE_ID ||
+	    (plat_priv->device_id == KIWI_DEVICE_ID &&
+	     plat_priv->device_version.major_version == 1))
+		cnss_mhi_config = &cnss_mhi_config_no_satellite;
+
+	ret = mhi_register_controller(mhi_ctrl, cnss_mhi_config);
 	if (ret) {
 		cnss_pr_err("Failed to register to MHI bus, err = %d\n", ret);
 		goto free_mhi_irq;
@@ -6062,6 +5569,11 @@ static void cnss_pci_config_regs(struct cnss_pci_data *pci_priv)
 }
 
 #if !IS_ENABLED(CONFIG_ARCH_QCOM)
+static int cnss_pci_of_reserved_mem_device_init(struct cnss_pci_data *pci_priv)
+{
+	return 0;
+}
+
 static irqreturn_t cnss_pci_wake_handler(int irq, void *data)
 {
 	struct cnss_pci_data *pci_priv = data;
@@ -6161,53 +5673,6 @@ static void cnss_pci_wake_gpio_deinit(struct cnss_pci_data *pci_priv)
 	disable_irq_wake(pci_priv->wake_irq);
 	free_irq(pci_priv->wake_irq, pci_priv);
 	gpio_free(pci_priv->wake_gpio);
-}
-#else
-static int cnss_pci_wake_gpio_init(struct cnss_pci_data *pci_priv)
-{
-	return 0;
-}
-
-static void cnss_pci_wake_gpio_deinit(struct cnss_pci_data *pci_priv)
-{
-}
-#endif
-
-#if IS_ENABLED(CONFIG_ARCH_QCOM)
-/**
- * cnss_pci_of_reserved_mem_device_init() - Assign reserved memory region
- *                                          to given PCI device
- * @pci_priv: driver PCI bus context pointer
- *
- * This function shall call corresponding of_reserved_mem_device* API to
- * assign reserved memory region to PCI device based on where the memory is
- * defined and attached to (platform device of_node or PCI device of_node)
- * in device tree.
- *
- * Return: 0 for success, negative value for error
- */
-static int cnss_pci_of_reserved_mem_device_init(struct cnss_pci_data *pci_priv)
-{
-	struct device *dev_pci = &pci_priv->pci_dev->dev;
-	int ret;
-
-	/* Use of_reserved_mem_device_init_by_idx() if reserved memory is
-	 * attached to platform device of_node.
-	 */
-	ret = of_reserved_mem_device_init(dev_pci);
-	if (ret)
-		cnss_pr_err("Failed to init reserved mem device, err = %d\n",
-			    ret);
-	if (dev_pci->cma_area)
-		cnss_pr_dbg("CMA area is %s\n",
-			    cma_get_name(dev_pci->cma_area));
-
-	return ret;
-}
-#else
-static int cnss_pci_of_reserved_mem_device_init(struct cnss_pci_data *pci_priv)
-{
-	return 0;
 }
 #endif
 
