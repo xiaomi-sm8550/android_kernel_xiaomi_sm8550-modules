@@ -1296,6 +1296,10 @@ static void __set_queue_hdr_defaults(struct cvp_hfi_queue_header *q_hdr)
 	q_hdr->qhdr_write_idx = 0x0;
 }
 
+/*
+ *Unused, keep for reference
+ */
+/*
 static void __interface_dsp_queues_release(struct iris_hfi_device *device)
 {
 	int i;
@@ -1320,6 +1324,7 @@ static void __interface_dsp_queues_release(struct iris_hfi_device *device)
 	device->dsp_iface_q_table.align_virtual_addr = NULL;
 	device->dsp_iface_q_table.align_device_addr = 0;
 }
+*/
 
 static int __interface_dsp_queues_init(struct iris_hfi_device *dev)
 {
@@ -1338,6 +1343,11 @@ static int __interface_dsp_queues_init(struct iris_hfi_device *dev)
 	q_size = ALIGN(QUEUE_SIZE, SZ_1M);
 	mem_data = &dev->dsp_iface_q_table.mem_data;
 
+	if (mem_data->kvaddr) {
+		memset((void *)mem_data->kvaddr, 0, q_size);
+		cvp_dsp_init_hfi_queue_hdr(dev);
+		return 0;
+	}
 	/* Allocate dsp queues from CDSP device memory */
 	kvaddr = dma_alloc_coherent(dev->res->mem_cdsp.dev, q_size,
 				&dma_handle, GFP_KERNEL);
@@ -1454,7 +1464,6 @@ static void __interface_queues_release(struct iris_hfi_device *device)
 	device->mem_addr.align_virtual_addr = NULL;
 	device->mem_addr.align_device_addr = 0;
 #endif
-	__interface_dsp_queues_release(device);
 }
 
 static int __get_qdss_iommu_virtual_addr(struct iris_hfi_device *dev,

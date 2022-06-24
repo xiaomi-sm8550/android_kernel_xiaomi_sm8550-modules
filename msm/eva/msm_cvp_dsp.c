@@ -260,10 +260,6 @@ static int delete_dsp_session(struct msm_cvp_inst *inst,
 
 	mutex_unlock(&buf_list->lock);
 
-	rc = msm_cvp_session_delete(inst);
-	if (rc)
-		dprintk(CVP_ERR, "Warning: send Delete Session failed\n");
-
 	task = inst->task;
 
 	spin_lock(&inst->core->resources.pm_qos.lock);
@@ -510,6 +506,47 @@ int cvp_dsp_resume(uint32_t session_flag)
 
 exit:
 	return rc;
+}
+
+static void cvp_remove_dsp_process_sess(
+	struct cvp_dsp_fastrpc_driver_entry *frpc_node)
+{
+	struct msm_cvp_inst *inst = NULL;
+	struct list_head *s = NULL, *next_s = NULL;
+
+	s = &frpc_node->dsp_sessions.list;
+	list_for_each_safe(s, next_s, &frpc_node->dsp_sessions.list) {
+		inst = list_entry(s, struct msm_cvp_inst, dsp_list);
+		delete_dsp_session(inst, frpc_node);
+	}
+}
+
+static void cvp_remove_dsp_sessions(void)
+{
+	struct cvp_dsp_apps *me = &gfa_cv;
+	struct cvp_dsp_fastrpc_driver_entry *frpc_node = NULL;
+	struct list_head *ptr = NULL, *next = NULL;
+
+	dprintk(CVP_WARN, "%s: EVA SSR triggered, clean cdsp eva sessions\n",
+		__func__);
+
+	ptr = &me->fastrpc_driver_list.list;
+	mutex_lock(&me->fastrpc_driver_list.lock);
+	list_for_each_safe(ptr, next, &me->fastrpc_driver_list.list) {
+		frpc_node = list_entry(ptr,
+			struct cvp_dsp_fastrpc_driver_entry, list);
+		if (frpc_node) {
+			cvp_remove_dsp_process_sess(frpc_node);
+			list_del(&frpc_node->list);
+			__fastrpc_driver_unregister(&frpc_node->cvp_fastrpc_driver);
+			mutex_lock(&me->driver_name_lock);
+			eva_fastrpc_driver_release_name(frpc_node);
+			mutex_unlock(&me->driver_name_lock);
+			kfree(frpc_node);
+		}
+	}
+	mutex_unlock(&me->fastrpc_driver_list.lock);
+	dprintk(CVP_WARN, "%s: EVA SSR handled for CDSP\n", __func__);
 }
 
 int cvp_dsp_shutdown(uint32_t session_flag)
@@ -785,6 +822,11 @@ static int __reinit_dsp(void)
 	rc = cvp_dsp_shutdown(flag);
 	if (rc)
 		return rc;
+	/*
+	 * Workaround to force delete DSP session resources
+	 * To be removed after DSP optimization ready
+	 */
+	cvp_remove_dsp_sessions();
 
 	/* Resend HFI queue */
 	mutex_lock(&me->tx_lock);
@@ -1447,13 +1489,6 @@ static void __dsp_cvp_sess_delete(struct cvp_dsp_cmd_msg *cmd)
 			dsp2cpu_cmd->session_cpu_low);
 	if (!inst || !is_cvp_inst_valid(inst)) {
 		dprintk(CVP_ERR, "%s incorrect session ID\n", __func__);
-		cmd->ret = -1;
-		goto dsp_fail_delete;
-	}
-
-	rc = msm_cvp_session_delete(inst);
-	if (rc) {
-		dprintk(CVP_ERR, "Warning: send Delete Session failed\n");
 		cmd->ret = -1;
 		goto dsp_fail_delete;
 	}
