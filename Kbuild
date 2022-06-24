@@ -1,4 +1,3 @@
-ifneq ($(TARGET_BOARD_PLATFORM ), taro)
 LINUXINCLUDE += -I$(SSG_MODULE_ROOT)/ \
                 -I$(SSG_MODULE_ROOT)/linux/ \
                 -include $(SSG_MODULE_ROOT)/config/sec-kernel_defconfig.h
@@ -33,4 +32,3 @@ hdcp_qseecom_dlkm-objs := hdcp/hdcp_qseecom.o
 
 obj-$(CONFIG_HW_RANDOM_MSM_LEGACY) += qrng_dlkm.o
 qrng_dlkm-objs := qrng/msm_rng.o
-endif

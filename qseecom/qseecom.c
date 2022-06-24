@@ -2086,7 +2086,6 @@ static int __qseecom_process_incomplete_cmd(struct qseecom_dev_handle *data,
 									= {0};
 	struct qseecom_registered_listener_list *ptr_svc = NULL;
 	sigset_t new_sigset;
-	sigset_t old_sigset;
 	uint32_t status;
 	void *cmd_buf = NULL;
 	size_t cmd_len;
@@ -2153,8 +2152,6 @@ static int __qseecom_process_incomplete_cmd(struct qseecom_dev_handle *data,
 		/* initialize the new signal mask with all signals*/
 		sigfillset(&new_sigset);
 		/* block all signals */
-		sigprocmask(SIG_SETMASK, &new_sigset, &old_sigset);
-
 		mutex_unlock(&listener_access_lock);
 		do {
 			/*
@@ -2178,7 +2175,6 @@ static int __qseecom_process_incomplete_cmd(struct qseecom_dev_handle *data,
 		} while (1);
 		mutex_lock(&listener_access_lock);
 		/* restore signal mask */
-		sigprocmask(SIG_SETMASK, &old_sigset, NULL);
 		if (data->abort || ptr_svc->abort) {
 			pr_err("Abort clnt %d waiting on lstnr svc %d, ret %d\n",
 				data->client.app_id, lstnr, ret);
@@ -2292,7 +2288,6 @@ static int __qseecom_process_reentrancy_blocked_on_listener(
 	struct qseecom_command_scm_resp continue_resp;
 	unsigned int session_id;
 	sigset_t new_sigset;
-	sigset_t old_sigset;
 	unsigned long flags;
 	bool found_app = false;
 	struct qseecom_registered_app_list dummy_app_entry = { {NULL} };
@@ -2352,8 +2347,6 @@ static int __qseecom_process_reentrancy_blocked_on_listener(
 
 		/* sleep until listener is available */
 		sigfillset(&new_sigset);
-		sigprocmask(SIG_SETMASK, &new_sigset, &old_sigset);
-
 		do {
 			qseecom.app_block_ref_cnt++;
 			ptr_app->app_blocked = true;
@@ -2367,9 +2360,6 @@ static int __qseecom_process_reentrancy_blocked_on_listener(
 			ptr_app->app_blocked = false;
 			qseecom.app_block_ref_cnt--;
 		}  while (list_ptr->listener_in_use);
-
-		sigprocmask(SIG_SETMASK, &old_sigset, NULL);
-
 		ptr_app->blocked_on_listener_id = 0;
 		pr_warn("Lsntr %d is available, unblock session(%d) app(%d)\n",
 			resp->data, session_id, data->client.app_id);
@@ -2429,7 +2419,6 @@ static int __qseecom_reentrancy_process_incomplete_cmd(
 									= {0};
 	struct qseecom_registered_listener_list *ptr_svc = NULL;
 	sigset_t new_sigset;
-	sigset_t old_sigset;
 	uint32_t status;
 	void *cmd_buf = NULL;
 	size_t cmd_len;
@@ -2497,8 +2486,6 @@ static int __qseecom_reentrancy_process_incomplete_cmd(
 		sigfillset(&new_sigset);
 
 		/* block all signals */
-		sigprocmask(SIG_SETMASK, &new_sigset, &old_sigset);
-
 		/* unlock mutex btw waking listener and sleep-wait */
 		mutex_unlock(&listener_access_lock);
 		mutex_unlock(&app_access_lock);
@@ -2516,7 +2503,6 @@ static int __qseecom_reentrancy_process_incomplete_cmd(
 		qseecom.send_resp_flag = 0;
 
 		/* restore signal mask */
-		sigprocmask(SIG_SETMASK, &old_sigset, NULL);
 		if (data->abort || ptr_svc->abort) {
 			pr_err("Abort clnt %d waiting on lstnr svc %d, ret %d\n",
 				data->client.app_id, lstnr, ret);
