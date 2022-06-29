@@ -1874,7 +1874,7 @@ enum msm_vidc_allow msm_vidc_allow_streamoff(struct msm_vidc_inst *inst, u32 typ
 		else if (!inst->bufq[OUTPUT_META_PORT].vb2q->streaming)
 			allow = MSM_VIDC_IGNORE;
 	}
-	if (allow != MSM_VIDC_ALLOW)
+	if (allow != MSM_VIDC_ALLOW && allow != MSM_VIDC_IGNORE)
 		i_vpr_e(inst, "%s: type %d is %s in state %s\n",
 				__func__, type, allow_name(allow),
 				state_name(inst->state));
