@@ -314,14 +314,33 @@ static void eva_fastrpc_driver_release_name(
 		DRIVER_NAME_AVAILABLE;
 }
 
+static struct cvp_dsp_fastrpc_driver_entry *dequeue_frpc_node(void)
+{
+	struct cvp_dsp_apps *me = &gfa_cv;
+	struct cvp_dsp_fastrpc_driver_entry *frpc_node = NULL;
+	struct list_head *ptr = NULL, *next = NULL;
+
+	ptr = &me->fastrpc_driver_list.list;
+	mutex_lock(&me->fastrpc_driver_list.lock);
+	list_for_each_safe(ptr, next, &me->fastrpc_driver_list.list) {
+		frpc_node = list_entry(ptr,
+			struct cvp_dsp_fastrpc_driver_entry, list);
+
+		if (frpc_node) {
+			list_del(&frpc_node->list);
+			break;
+		}
+	}
+	mutex_unlock(&me->fastrpc_driver_list.lock);
+	return frpc_node;
+}
+
 static void cvp_dsp_rpmsg_remove(struct rpmsg_device *rpdev)
 {
 	struct cvp_dsp_apps *me = &gfa_cv;
-
 	struct cvp_dsp_fastrpc_driver_entry *frpc_node = NULL;
-	struct list_head *ptr = NULL, *next = NULL;
-	struct list_head *s = NULL, *next_s = NULL;
 	struct msm_cvp_inst *inst = NULL;
+	struct list_head *s = NULL, *next_s = NULL;
 
 	dprintk(CVP_WARN, "%s: CDSP SSR triggered\n", __func__);
 
@@ -332,40 +351,37 @@ static void cvp_dsp_rpmsg_remove(struct rpmsg_device *rpdev)
 	me->state = DSP_UNINIT;
 	mutex_unlock(&me->tx_lock);
 
-	ptr = &me->fastrpc_driver_list.list;
-	mutex_lock(&me->fastrpc_driver_list.lock);
-	list_for_each_safe(ptr, next, &me->fastrpc_driver_list.list) {
-		frpc_node = list_entry(ptr,
-				struct cvp_dsp_fastrpc_driver_entry, list);
-
-		if (frpc_node) {
-			s = &frpc_node->dsp_sessions.list;
-			list_for_each_safe(s, next_s,
-					&frpc_node->dsp_sessions.list) {
-				inst = list_entry(s, struct msm_cvp_inst,
-						dsp_list);
+	while ((frpc_node = dequeue_frpc_node())) {
+		s = &frpc_node->dsp_sessions.list;
+		list_for_each_safe(s, next_s,
+				&frpc_node->dsp_sessions.list) {
+			inst = list_entry(s, struct msm_cvp_inst,
+					dsp_list);
+			if (inst) {
 				delete_dsp_session(inst, frpc_node);
+				mutex_lock(&frpc_node->dsp_sessions.lock);
+				list_del(&inst->dsp_list);
+				frpc_node->session_cnt--;
+				mutex_unlock(&frpc_node->dsp_sessions.lock);
 			}
-
-			dprintk(CVP_DSP, "%s DEINIT_MSM_CVP_LIST 0x%x\n",
-					__func__, frpc_node->dsp_sessions);
-			DEINIT_MSM_CVP_LIST(&frpc_node->dsp_sessions);
-			dprintk(CVP_DSP, "%s list_del fastrpc node 0x%x\n",
-					__func__, frpc_node);
-			list_del(&frpc_node->list);
-			__fastrpc_driver_unregister(
-				&frpc_node->cvp_fastrpc_driver);
-			dprintk(CVP_DSP,
-				"%s Unregistered fastrpc handle 0x%x\n",
-				__func__, frpc_node->handle);
-			mutex_lock(&me->driver_name_lock);
-			eva_fastrpc_driver_release_name(frpc_node);
-			mutex_unlock(&me->driver_name_lock);
-			kfree(frpc_node);
-			frpc_node = NULL;
 		}
+
+		dprintk(CVP_DSP, "%s DEINIT_MSM_CVP_LIST 0x%x\n",
+				__func__, frpc_node->dsp_sessions);
+		DEINIT_MSM_CVP_LIST(&frpc_node->dsp_sessions);
+		dprintk(CVP_DSP, "%s list_del fastrpc node 0x%x\n",
+				__func__, frpc_node);
+		__fastrpc_driver_unregister(
+			&frpc_node->cvp_fastrpc_driver);
+		dprintk(CVP_DSP,
+			"%s Unregistered fastrpc handle 0x%x\n",
+			__func__, frpc_node->handle);
+		mutex_lock(&me->driver_name_lock);
+		eva_fastrpc_driver_release_name(frpc_node);
+		mutex_unlock(&me->driver_name_lock);
+		kfree(frpc_node);
+		frpc_node = NULL;
 	}
-	mutex_unlock(&me->fastrpc_driver_list.lock);
 	dprintk(CVP_WARN, "%s: CDSP SSR handled\n", __func__);
 }
 
