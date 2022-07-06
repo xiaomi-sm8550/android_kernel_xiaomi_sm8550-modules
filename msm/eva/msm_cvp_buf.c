@@ -1143,7 +1143,8 @@ static int msm_cvp_session_add_smem(struct msm_cvp_inst *inst,
 }
 
 static struct msm_cvp_smem *msm_cvp_session_get_smem(struct msm_cvp_inst *inst,
-						struct cvp_buf_type *buf)
+						struct cvp_buf_type *buf,
+						bool is_persist)
 {
 	int rc = 0, found = 1;
 	struct msm_cvp_smem *smem = NULL;
@@ -1160,6 +1161,25 @@ static struct msm_cvp_smem *msm_cvp_session_get_smem(struct msm_cvp_inst *inst,
 		return NULL;
 	}
 
+	if (is_persist) {
+		smem = kmem_cache_zalloc(cvp_driver->smem_cache, GFP_KERNEL);
+		if (!smem)
+			return NULL;
+
+		smem->dma_buf = dma_buf;
+		smem->bitmap_index = MAX_DMABUF_NUMS;
+		rc = msm_cvp_map_smem(inst, smem, "map cpu");
+		if (rc)
+			goto exit;
+		if (!IS_CVP_BUF_VALID(buf, smem)) {
+			dprintk(CVP_ERR,
+				"%s: invalid offset %d or size %d persist\n",
+				__func__, buf->offset, buf->size);
+			goto exit2;
+		}
+		return smem;
+	}
+
 	smem = msm_cvp_session_find_smem(inst, dma_buf);
 	if (!smem) {
 		found = 0;
@@ -1172,17 +1192,19 @@ static struct msm_cvp_smem *msm_cvp_session_get_smem(struct msm_cvp_inst *inst,
 		rc = msm_cvp_map_smem(inst, smem, "map cpu");
 		if (rc)
 			goto exit;
-		if (buf->size > smem->size || buf->size > smem->size - buf->offset) {
-			dprintk(CVP_ERR, "%s: invalid offset %d or size %d for a new entry\n",
+		if (!IS_CVP_BUF_VALID(buf, smem)) {
+			dprintk(CVP_ERR,
+				"%s: invalid offset %d or size %d new entry\n",
 				__func__, buf->offset, buf->size);
 			goto exit2;
 		}
 		rc = msm_cvp_session_add_smem(inst, smem);
 		if (rc && rc != -ENOMEM)
 			goto exit2;
+		return smem;
 	}
 
-	if (buf->size > smem->size || buf->size > smem->size - buf->offset) {
+	if (!IS_CVP_BUF_VALID(buf, smem)) {
 		dprintk(CVP_ERR, "%s: invalid offset %d or size %d\n",
 			__func__, buf->offset, buf->size);
 		if (found) {
@@ -1222,7 +1244,7 @@ static u32 msm_cvp_map_user_persist_buf(struct msm_cvp_inst *inst,
 	if (!pbuf)
 		return 0;
 
-	smem = msm_cvp_session_get_smem(inst, buf);
+	smem = msm_cvp_session_get_smem(inst, buf, true);
 	if (!smem)
 		goto exit;
 
@@ -1271,7 +1293,7 @@ u32 msm_cvp_map_frame_buf(struct msm_cvp_inst *inst,
 		return 0;
 	}
 
-	smem = msm_cvp_session_get_smem(inst, buf);
+	smem = msm_cvp_session_get_smem(inst, buf, false);
 	if (!smem)
 		return 0;
 
@@ -1363,107 +1385,12 @@ void msm_cvp_unmap_frame(struct msm_cvp_inst *inst, u64 ktid)
 		dprintk(CVP_WARN, "%s frame %llu not found!\n", __func__, ktid);
 }
 
-int msm_cvp_unmap_user_persist(struct msm_cvp_inst *inst,
-				struct eva_kmd_hfi_packet *in_pkt,
-				unsigned int offset, unsigned int buf_num)
-{
-	struct cvp_hfi_cmd_session_hdr *cmd_hdr;
-	struct cvp_internal_buf *pbuf, *dummy;
-	u64 ktid;
-	int rc = 0;
-	struct msm_cvp_smem *smem = NULL;
-
-	if (!offset || !buf_num)
-		return rc;
-
-	cmd_hdr = (struct cvp_hfi_cmd_session_hdr *)in_pkt;
-	ktid = cmd_hdr->client_data.kdata & (FENCE_BIT - 1);
-
-	mutex_lock(&inst->persistbufs.lock);
-	list_for_each_entry_safe(pbuf, dummy, &inst->persistbufs.list, list) {
-		if (pbuf->ktid == ktid && pbuf->ownership == CLIENT) {
-			list_del(&pbuf->list);
-			smem = pbuf->smem;
-
-			dprintk(CVP_MEM, "unmap persist: %x %d %d %#x",
-				hash32_ptr(inst->session), pbuf->fd,
-				pbuf->size, smem->device_addr);
-
-			if (smem->bitmap_index >= MAX_DMABUF_NUMS) {
-				/* smem not in dmamap cache */
-				msm_cvp_unmap_smem(inst, smem,
-						"unmap cpu");
-				dma_heap_buffer_free(smem->dma_buf);
-				smem->pkt_type = smem->buf_idx = 0;
-				kmem_cache_free(
-					cvp_driver->smem_cache,
-					smem);
-				pbuf->smem = NULL;
-			} else {
-				mutex_lock(&inst->dma_cache.lock);
-				if (atomic_dec_and_test(&smem->refcount)) {
-					CLEAR_USE_BITMAP(
-						smem->bitmap_index,
-						inst);
-					smem->pkt_type = smem->buf_idx = 0;
-				}
-				mutex_unlock(&inst->dma_cache.lock);
-			}
-
-			kmem_cache_free(cvp_driver->buf_cache, pbuf);
-		}
-	}
-	mutex_unlock(&inst->persistbufs.lock);
-	return rc;
-}
-
 int msm_cvp_mark_user_persist(struct msm_cvp_inst *inst,
 			struct eva_kmd_hfi_packet *in_pkt,
 			unsigned int offset, unsigned int buf_num)
 {
-	struct cvp_hfi_cmd_session_hdr *cmd_hdr;
-	struct cvp_internal_buf *pbuf, *dummy;
-	u64 ktid;
-	struct cvp_buf_type *buf;
-	int i, rc = 0;
-
-	if (!offset || !buf_num)
+	dprintk(CVP_ERR, "Unexpected user persistent buffer release\n");
 		return 0;
-
-	cmd_hdr = (struct cvp_hfi_cmd_session_hdr *)in_pkt;
-	ktid = atomic64_inc_return(&inst->core->kernel_trans_id);
-	ktid &= (FENCE_BIT - 1);
-	cmd_hdr->client_data.kdata = ktid;
-
-	for (i = 0; i < buf_num; i++) {
-		buf = (struct cvp_buf_type *)&in_pkt->pkt_data[offset];
-		offset += sizeof(*buf) >> 2;
-
-		if (buf->fd < 0 || !buf->size)
-			continue;
-
-		mutex_lock(&inst->persistbufs.lock);
-		list_for_each_entry_safe(pbuf, dummy, &inst->persistbufs.list,
-				list) {
-			if (pbuf->ownership == CLIENT) {
-				if (pbuf->fd == buf->fd &&
-					pbuf->size == buf->size)
-					buf->fd = pbuf->smem->device_addr;
-				rc = 1;
-				break;
-			}
-		}
-		mutex_unlock(&inst->persistbufs.lock);
-		if (!rc) {
-			dprintk(CVP_ERR, "%s No persist buf %d found\n",
-				__func__, buf->fd);
-			rc = -EFAULT;
-			break;
-		}
-		pbuf->ktid = ktid;
-		rc = 0;
-	}
-	return rc;
 }
 
 int msm_cvp_map_user_persist(struct msm_cvp_inst *inst,

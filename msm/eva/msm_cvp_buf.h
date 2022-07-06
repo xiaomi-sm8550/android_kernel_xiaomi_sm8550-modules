@@ -15,6 +15,9 @@
 
 #define MAX_FRAME_BUFFER_NUMS 30
 #define MAX_DMABUF_NUMS 64
+#define IS_CVP_BUF_VALID(buf, smem) \
+	((buf->size <= smem->size) && \
+	(buf->size <= smem->size - buf->offset))
 
 struct msm_cvp_inst;
 struct msm_cvp_platform_resources;
@@ -210,9 +213,6 @@ int msm_cvp_mark_user_persist(struct msm_cvp_inst *inst,
 			struct eva_kmd_hfi_packet *in_pkt,
 			unsigned int offset, unsigned int buf_num);
 int msm_cvp_map_user_persist(struct msm_cvp_inst *inst,
-			struct eva_kmd_hfi_packet *in_pkt,
-			unsigned int offset, unsigned int buf_num);
-int msm_cvp_unmap_user_persist(struct msm_cvp_inst *inst,
 			struct eva_kmd_hfi_packet *in_pkt,
 			unsigned int offset, unsigned int buf_num);
 int msm_cvp_map_frame(struct msm_cvp_inst *inst,
