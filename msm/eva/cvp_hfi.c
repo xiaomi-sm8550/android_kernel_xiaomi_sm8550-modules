@@ -241,8 +241,8 @@ static int __dsp_suspend(struct iris_hfi_device *device, bool force, u32 flags)
 		/* don't suspend if cvp session is not paused */
 		if (!(temp->flags & SESSION_PAUSE)) {
 			dprintk(CVP_DSP,
-				"%s: cvp session %x not paused\n",
-				__func__, hash32_ptr(temp));
+				"%s: cvp session %x not paused %d\n",
+				__func__, hash32_ptr(temp), gfa_cv.state);
 			return -EBUSY;
 		}
 	}
