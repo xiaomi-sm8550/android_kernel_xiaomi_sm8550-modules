@@ -7,6 +7,7 @@
 #define _MSM_CVP_INTERNAL_H_
 
 #include <linux/atomic.h>
+#include <linux/sched.h>
 #include <linux/list.h>
 #include <linux/time.h>
 #include <linux/types.h>
@@ -412,6 +413,7 @@ struct msm_cvp_inst {
 	u32 prev_error_code;
 	struct synx_session synx_session_id;
 	struct cvp_fence_queue fence_cmd_queue;
+	char proc_name[TASK_COMM_LEN];
 };
 
 extern struct msm_cvp_drv *cvp_driver;

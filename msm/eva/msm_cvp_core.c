@@ -124,7 +124,7 @@ static void __deinit_session_queue(struct msm_cvp_inst *inst)
 	wake_up_all(&inst->session_queue.wq);
 }
 
-void *msm_cvp_open(int core_id, int session_type)
+void *msm_cvp_open(int core_id, int session_type, struct task_struct *task)
 {
 	struct msm_cvp_inst *inst = NULL;
 	struct msm_cvp_core *core = NULL;
@@ -167,9 +167,9 @@ void *msm_cvp_open(int core_id, int session_type)
 		goto err_invalid_core;
 	}
 
-	pr_info_ratelimited(
-		CVP_DBG_TAG "Opening cvp instance: %pK type %d\n",
-		"sess", inst, session_type);
+	pr_info(
+		CVP_DBG_TAG "%s opening cvp instance: %pK type %d\n",
+		"sess", task->comm, inst, session_type);
 	mutex_init(&inst->sync_lock);
 	mutex_init(&inst->lock);
 	spin_lock_init(&inst->event_handler.lock);
@@ -225,6 +225,7 @@ void *msm_cvp_open(int core_id, int session_type)
 
 	inst->debugfs_root =
 		msm_cvp_debugfs_init_inst(inst, core->debugfs_root);
+	strlcpy(inst->proc_name, task->comm, TASK_COMM_LEN);
 
 	return inst;
 fail_init:
@@ -305,7 +306,7 @@ wait_dsp:
 			(inst->core->resources.msm_cvp_hw_rsp_timeout >> 5)
 			- max_retries);
 	max_retries =  inst->core->resources.msm_cvp_hw_rsp_timeout >> 1;
-wait:
+wait_frame:
 	mutex_lock(&inst->frames.lock);
 	empty = list_empty(&inst->frames.list);
 	if (!empty && max_retries > 0) {
@@ -314,7 +315,7 @@ wait:
 		msm_cvp_clean_sess_queue(inst, sqf);
 		msm_cvp_clean_sess_queue(inst, sq);
 		max_retries--;
-		goto wait;
+		goto wait_frame;
 	}
 	mutex_unlock(&inst->frames.lock);
 
@@ -385,9 +386,11 @@ int msm_cvp_destroy(struct msm_cvp_inst *inst)
 	__deinit_fence_queue(inst);
 	core->synx_ftbl->cvp_sess_deinit_synx(inst);
 
-	pr_info_ratelimited(
-		CVP_DBG_TAG "Closed cvp instance: %pK session_id = %d type %d\n",
-		"sess", inst, hash32_ptr(inst->session), inst->session_type);
+	pr_info(
+		CVP_DBG_TAG
+		"%s closed cvp instance: %pK session_id = %d type %d\n",
+		"sess", inst->proc_name, inst, hash32_ptr(inst->session),
+		inst->session_type);
 	inst->session = (void *)0xdeadbeef;
 	kfree(inst);
 	return 0;

@@ -104,8 +104,8 @@ static int msm_dma_get_device_address(struct dma_buf *dbuf, u32 align,
 
 		table = dma_buf_map_attachment(attach, DMA_BIDIRECTIONAL);
 		if (IS_ERR_OR_NULL(table)) {
+			dprintk(CVP_ERR, "Failed to map table %d\n", PTR_ERR(table));
 			rc = PTR_ERR(table) ?: -ENOMEM;
-			dprintk(CVP_ERR, "Failed to map table\n");
 			goto mem_map_table_failed;
 		}
 

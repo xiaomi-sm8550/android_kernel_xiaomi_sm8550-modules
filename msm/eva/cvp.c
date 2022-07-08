@@ -41,7 +41,7 @@ static int cvp_open(struct inode *inode, struct file *filp)
 
 	dprintk(CVP_SESS, "%s: core->id: %d\n", __func__, core->id);
 
-	inst = msm_cvp_open(core->id, MSM_CVP_USER);
+	inst = msm_cvp_open(core->id, MSM_CVP_USER, current);
 	if (!inst) {
 		dprintk(CVP_ERR, "Failed to create cvp instance\n");
 		return -ENOMEM;
@@ -266,7 +266,7 @@ static ssize_t boot_store(struct device *dev,
 	if (val > 0 && booted == 0) {
 		struct msm_cvp_inst *inst;
 
-		inst = msm_cvp_open(MSM_CORE_CVP, MSM_CVP_BOOT);
+		inst = msm_cvp_open(MSM_CORE_CVP, MSM_CVP_BOOT, current);
 		if (!inst) {
 			dprintk(CVP_ERR,
 			"Failed to create cvp instance\n");
@@ -281,7 +281,7 @@ static ssize_t boot_store(struct device *dev,
 	} else if ((val == 2) && booted) {
 		struct msm_cvp_inst *inst;
 
-		inst = msm_cvp_open(MSM_CORE_CVP, MSM_CVP_USER);
+		inst = msm_cvp_open(MSM_CORE_CVP, MSM_CVP_USER, current);
 		if (!inst) {
 			dprintk(CVP_ERR,
 			"Failed to create eva instance\n");

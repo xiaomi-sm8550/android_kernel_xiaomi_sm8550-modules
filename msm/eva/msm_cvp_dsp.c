@@ -1372,14 +1372,31 @@ static void __dsp_cvp_sess_create(struct cvp_dsp_cmd_msg *cmd)
 		dsp2cpu_cmd->is_secure,
 		dsp2cpu_cmd->pid);
 
-	rc = eva_fastrpc_driver_register(dsp2cpu_cmd->pid);
-	if (rc) {
-		dprintk(CVP_ERR, "%s Register fastrpc driver fail\n", __func__);
+	pid_s = find_get_pid(dsp2cpu_cmd->pid);
+	if (pid_s == NULL) {
+		dprintk(CVP_WARN, "%s incorrect pid\n", __func__);
+		cmd->ret = -1;
+		return;
+	}
+	dprintk(CVP_DSP, "%s get pid_s 0x%x from pidA 0x%x\n", __func__,
+			pid_s, dsp2cpu_cmd->pid);
+
+	task = get_pid_task(pid_s, PIDTYPE_TGID);
+	if (!task) {
+		dprintk(CVP_WARN, "%s task doesn't exist\n", __func__);
 		cmd->ret = -1;
 		return;
 	}
 
-	inst = msm_cvp_open(MSM_CORE_CVP, MSM_CVP_DSP);
+	rc = eva_fastrpc_driver_register(dsp2cpu_cmd->pid);
+	if (rc) {
+		dprintk(CVP_ERR, "%s Register fastrpc driver fail\n", __func__);
+		put_task_struct(task);
+		cmd->ret = -1;
+		return;
+	}
+
+	inst = msm_cvp_open(MSM_CORE_CVP, MSM_CVP_DSP, task);
 	if (!inst) {
 		dprintk(CVP_ERR, "%s Failed create instance\n", __func__);
 		goto fail_msm_cvp_open;
@@ -1415,20 +1432,6 @@ static void __dsp_cvp_sess_create(struct cvp_dsp_cmd_msg *cmd)
 	if (frpc_node)
 		eva_fastrpc_driver_add_sess(frpc_node, inst);
 
-	pid_s = find_get_pid(inst->process_id);
-	if (pid_s == NULL) {
-		dprintk(CVP_WARN, "%s incorrect pid\n", __func__);
-		goto fail_get_pid;
-	}
-	dprintk(CVP_DSP, "%s get pid_s 0x%x from pidA 0x%x\n", __func__,
-			pid_s, inst->process_id);
-
-	task = get_pid_task(pid_s, PIDTYPE_TGID);
-	if (!task) {
-		dprintk(CVP_WARN, "%s task doesn't exist\n", __func__);
-		goto fail_get_task;
-	}
-
 	inst->task = task;
 	dprintk(CVP_DSP,
 		"%s CREATE_SESS id 0x%x, cpu_low 0x%x, cpu_high 0x%x\n",
@@ -1443,14 +1446,13 @@ static void __dsp_cvp_sess_create(struct cvp_dsp_cmd_msg *cmd)
 
 	return;
 
-fail_get_pid:
-fail_get_task:
 fail_get_session_info:
 fail_session_create:
 	msm_cvp_close(inst);
 fail_msm_cvp_open:
 	/* unregister fastrpc driver */
 	eva_fastrpc_driver_unregister(dsp2cpu_cmd->pid, false);
+	put_task_struct(task);
 	cmd->ret = -1;
 }
 
