@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _CNSS_REG_H
@@ -52,6 +52,7 @@
 #define CE_REG_INTERVAL				0x2000
 
 #define SHADOW_REG_COUNT			36
+#define SHADOW_REG_LEN_BYTES			4
 #define PCIE_SHADOW_REG_VALUE_0			0x8FC
 #define PCIE_SHADOW_REG_VALUE_1			0x900
 #define PCIE_SHADOW_REG_VALUE_34		0x984

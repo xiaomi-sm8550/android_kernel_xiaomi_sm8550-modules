@@ -777,6 +777,16 @@ retry:
 	icnss_pr_dbg("smem state, Entry: %s", icnss_smp2p_str[smp2p_entry]);
 }
 
+static inline
+void icnss_set_wlan_en_delay(struct icnss_priv *priv)
+{
+	if (priv->wlan_en_delay_ms_user > WLAN_EN_DELAY) {
+		priv->wlan_en_delay_ms = priv->wlan_en_delay_ms_user;
+	} else {
+		priv->wlan_en_delay_ms = WLAN_EN_DELAY;
+	}
+}
+
 static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 						 void *data)
 {
@@ -818,7 +828,7 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 		if (!icnss_get_temperature(priv, &temp)) {
 			icnss_pr_dbg("Temperature: %d\n", temp);
 			if (temp < WLAN_EN_TEMP_THRESHOLD)
-				priv->wlan_en_delay_ms = WLAN_EN_DELAY;
+				icnss_set_wlan_en_delay(priv);
 		}
 
 		ret = wlfw_host_cap_send_sync(priv);
@@ -3712,7 +3722,7 @@ static ssize_t wlan_en_delay_store(struct device *dev,
 	}
 
 	icnss_pr_dbg("WLAN_EN delay: %dms", wlan_en_delay);
-	priv->wlan_en_delay_ms = wlan_en_delay;
+	priv->wlan_en_delay_ms_user = wlan_en_delay;
 
 	return count;
 }

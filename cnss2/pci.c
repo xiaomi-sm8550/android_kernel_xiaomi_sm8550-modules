@@ -2010,15 +2010,20 @@ static void cnss_pci_clear_time_sync_counter(struct cnss_pci_data *pci_priv)
 			   TIME_SYNC_CLEAR);
 }
 
+
 static void cnss_pci_time_sync_reg_update(struct cnss_pci_data *pci_priv,
 					  u32 low, u32 high)
 {
-	u32 time_reg_low = PCIE_SHADOW_REG_VALUE_0;
-	u32 time_reg_high = PCIE_SHADOW_REG_VALUE_1;
+	u32 time_reg_low;
+	u32 time_reg_high;
 
 	switch (pci_priv->device_id) {
 	case KIWI_DEVICE_ID:
-		/* Forward compatibility */
+		/* Use the next two shadow registers after host's usage */
+		time_reg_low = PCIE_SHADOW_REG_VALUE_0 +
+				(pci_priv->plat_priv->num_shadow_regs_v3 *
+				 SHADOW_REG_LEN_BYTES);
+		time_reg_high = time_reg_low + SHADOW_REG_LEN_BYTES;
 		break;
 	default:
 		time_reg_low = PCIE_SHADOW_REG_VALUE_34;
@@ -2935,6 +2940,24 @@ int cnss_wlan_register_driver(struct cnss_wlan_driver *driver_ops)
 	if (!plat_priv) {
 		cnss_pr_buf("plat_priv is not ready for register driver\n");
 		return -EAGAIN;
+	}
+
+	if (test_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state)) {
+		while (id_table && id_table->device) {
+			if (plat_priv->device_id == id_table->device) {
+				if (plat_priv->device_id == KIWI_DEVICE_ID &&
+				    driver_ops->chip_version != 2) {
+					cnss_pr_err("WLAN HW disabled. kiwi_v2 only supported\n");
+					return -ENODEV;
+				}
+				cnss_pr_info("WLAN register driver deferred for device ID: 0x%x due to HW disable\n",
+					     id_table->device);
+				plat_priv->driver_ops = driver_ops;
+				return 0;
+			}
+			id_table++;
+		}
+		return -ENODEV;
 	}
 
 	if (!test_bit(CNSS_PCI_PROBE_DONE, &plat_priv->driver_state)) {
@@ -4877,7 +4900,6 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 	cnss_pci_soc_scratch_reg_dump(pci_priv);
 	cnss_pci_dump_misc_reg(pci_priv);
 	cnss_pci_dump_shadow_reg(pci_priv);
-	cnss_pci_dump_qdss_reg(pci_priv);
 
 	ret = mhi_download_rddm_image(pci_priv->mhi_ctrl, in_panic);
 	if (ret) {
@@ -4893,6 +4915,8 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 	rddm_image = pci_priv->mhi_ctrl->rddm_image;
 	dump_data->nentries = 0;
 
+	if (plat_priv->qdss_mem_seg_len)
+		cnss_pci_dump_qdss_reg(pci_priv);
 	cnss_mhi_dump_sfr(pci_priv);
 
 	if (!dump_seg) {

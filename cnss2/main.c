@@ -33,6 +33,16 @@
 #include "genl.h"
 #include "reg.h"
 
+#ifdef CONFIG_CNSS_HW_SECURE_DISABLE
+#include "smcinvoke.h"
+#include "smcinvoke_object.h"
+#include "IClientEnv.h"
+
+#define HW_STATE_UID 0x108
+#define HW_OP_GET_STATE 1
+#define HW_WIFI_UID 0x508
+#endif
+
 #define CNSS_DUMP_FORMAT_VER		0x11
 #define CNSS_DUMP_FORMAT_VER_V2		0x22
 #define CNSS_DUMP_MAGIC_VER_V2		0x42445953
@@ -1936,6 +1946,9 @@ static int cnss_cold_boot_cal_start_hdlr(struct cnss_plat_data *plat_priv)
 	} else if (test_bit(CNSS_IN_COLD_BOOT_CAL, &plat_priv->driver_state)) {
 		cnss_pr_dbg("Calibration in progress. Ignore new calibration req\n");
 		goto out;
+	} else if (test_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state)) {
+		cnss_pr_dbg("Calibration deferred as WLAN device disabled\n");
+		goto out;
 	}
 
 	if (test_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state) ||
@@ -3444,6 +3457,7 @@ static ssize_t fs_ready_store(struct device *dev,
 		return count;
 	}
 
+	set_bit(CNSS_FS_READY, &plat_priv->driver_state);
 	if (fs_ready == FILE_SYSTEM_READY && plat_priv->cbc_enabled) {
 		cnss_driver_event_post(plat_priv,
 				       CNSS_DRIVER_EVENT_COLD_BOOT_CAL_START,
@@ -3642,6 +3656,62 @@ static int cnss_reboot_notifier(struct notifier_block *nb,
 
 	return NOTIFY_DONE;
 }
+
+#ifdef CONFIG_CNSS_HW_SECURE_DISABLE
+int cnss_wlan_hw_disable_check(struct cnss_plat_data *plat_priv)
+{
+	struct Object client_env;
+	struct Object app_object;
+	u32 wifi_uid = HW_WIFI_UID;
+	union ObjectArg obj_arg[2] = {{{0, 0}}};
+	int ret;
+	u8 state = 0;
+
+	/* get rootObj */
+	ret = get_client_env_object(&client_env);
+	if (ret) {
+		cnss_pr_dbg("Failed to get client_env_object, ret: %d\n", ret);
+		goto end;
+	}
+	ret = IClientEnv_open(client_env, HW_STATE_UID, &app_object);
+	if (ret) {
+		cnss_pr_dbg("Failed to get app_object, ret: %d\n",  ret);
+		goto exit_release_clientenv;
+	}
+
+	obj_arg[0].b = (struct ObjectBuf) {&wifi_uid, sizeof(u32)};
+	obj_arg[1].b = (struct ObjectBuf) {&state, sizeof(u8)};
+	ret = Object_invoke(app_object, HW_OP_GET_STATE, obj_arg,
+			    ObjectCounts_pack(1, 1, 0, 0));
+
+	cnss_pr_dbg("SMC invoke ret: %d state: %d\n", ret, state);
+	if (ret)
+		goto exit_release_app_obj;
+
+	if (state == 1)
+		set_bit(CNSS_WLAN_HW_DISABLED,
+			&plat_priv->driver_state);
+	else
+		clear_bit(CNSS_WLAN_HW_DISABLED,
+			  &plat_priv->driver_state);
+
+exit_release_app_obj:
+	Object_release(app_object);
+exit_release_clientenv:
+	Object_release(client_env);
+end:
+	if (ret) {
+		cnss_pr_err("Unable to get HW disable status\n");
+		CNSS_ASSERT(0);
+	}
+	return ret;
+}
+#else
+int cnss_wlan_hw_disable_check(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+#endif
 
 static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 {
@@ -3874,13 +3944,70 @@ cnss_is_converged_dt(struct cnss_plat_data *plat_priv)
 				     "qcom,converged-dt");
 }
 
+static int cnss_wlan_device_init(struct cnss_plat_data *plat_priv)
+{
+	int ret = 0;
+	int retry = 0;
+
+	if (test_bit(SKIP_DEVICE_BOOT, &plat_priv->ctrl_params.quirks))
+		return 0;
+
+retry:
+	ret = cnss_power_on_device(plat_priv);
+	if (ret)
+		goto end;
+
+	ret = cnss_bus_init(plat_priv);
+	if (ret) {
+		if ((ret != -EPROBE_DEFER) &&
+		    retry++ < POWER_ON_RETRY_MAX_TIMES) {
+			cnss_power_off_device(plat_priv);
+			cnss_pr_dbg("Retry cnss_bus_init #%d\n", retry);
+			msleep(POWER_ON_RETRY_DELAY_MS * retry);
+			goto retry;
+		}
+		goto power_off;
+	}
+power_off:
+	cnss_power_off_device(plat_priv);
+end:
+	return ret;
+}
+
+int cnss_wlan_hw_enable(void)
+{
+	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(NULL);
+	int ret = 0;
+
+	if (test_bit(CNSS_PCI_PROBE_DONE, &plat_priv->driver_state))
+		return 0;
+
+	clear_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state);
+
+	ret = cnss_wlan_device_init(plat_priv);
+	if (ret) {
+		CNSS_ASSERT(0);
+		return ret;
+	}
+
+	if (test_bit(CNSS_FS_READY, &plat_priv->driver_state))
+		cnss_driver_event_post(plat_priv,
+				       CNSS_DRIVER_EVENT_COLD_BOOT_CAL_START,
+				       0, NULL);
+
+	if (plat_priv->driver_ops)
+		ret = cnss_wlan_register_driver(plat_priv->driver_ops);
+
+	return ret;
+}
+EXPORT_SYMBOL(cnss_wlan_hw_enable);
+
 static int cnss_probe(struct platform_device *plat_dev)
 {
 	int ret = 0;
 	struct cnss_plat_data *plat_priv;
 	const struct of_device_id *of_id;
 	const struct platform_device_id *device_id;
-	int retry = 0;
 
 	if (cnss_get_plat_priv(plat_dev)) {
 		cnss_pr_err("Driver is already initialized!\n");
@@ -3968,28 +4095,20 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret)
 		goto destroy_debugfs;
 
+	ret = cnss_wlan_hw_disable_check(plat_priv);
+	if (ret)
+		goto deinit_misc;
+
 	/* Make sure all platform related init are done before
 	 * device power on and bus init.
 	 */
-	if (!test_bit(SKIP_DEVICE_BOOT, &plat_priv->ctrl_params.quirks)) {
-retry:
-		ret = cnss_power_on_device(plat_priv);
+	if (!test_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state)) {
+		ret = cnss_wlan_device_init(plat_priv);
 		if (ret)
 			goto deinit_misc;
-
-		ret = cnss_bus_init(plat_priv);
-		if (ret) {
-			if ((ret != -EPROBE_DEFER) &&
-			    retry++ < POWER_ON_RETRY_MAX_TIMES) {
-				cnss_power_off_device(plat_priv);
-				cnss_pr_dbg("Retry cnss_bus_init #%d\n", retry);
-				msleep(POWER_ON_RETRY_DELAY_MS * retry);
-				goto retry;
-			}
-			goto power_off;
-		}
+	} else {
+		cnss_pr_info("WLAN HW Disabled. Defer PCI enumeration\n");
 	}
-
 	cnss_register_coex_service(plat_priv);
 	cnss_register_ims_service(plat_priv);
 
@@ -4001,9 +4120,6 @@ retry:
 
 	return 0;
 
-power_off:
-	if (!test_bit(SKIP_DEVICE_BOOT, &plat_priv->ctrl_params.quirks))
-		cnss_power_off_device(plat_priv);
 deinit_misc:
 	cnss_misc_deinit(plat_priv);
 destroy_debugfs:
