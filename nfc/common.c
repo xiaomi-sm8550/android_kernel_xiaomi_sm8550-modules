@@ -586,6 +586,15 @@ int nfc_dev_open(struct inode *inode, struct file *filp)
 
 	pr_debug("%s: %d, %d\n", __func__, imajor(inode), iminor(inode));
 
+	/* Set flag to block freezer fake signal if not set already.
+	 * Without this Signal being set, Driver is trying to do a read
+	 * which is causing the delay in moving to Hibernate Mode.
+	 */
+	if (!(current->flags & PF_NOFREEZE)) {
+		current->flags |= PF_NOFREEZE;
+		pr_debug("%s: current->flags 0x%x. \n", __func__, current->flags);
+	}
+
 	mutex_lock(&nfc_dev->dev_ref_mutex);
 
 	filp->private_data = nfc_dev;
@@ -632,6 +641,13 @@ int nfc_dev_close(struct inode *inode, struct file *filp)
 		return -ENODEV;
 
 	pr_debug("%s: %d, %d\n", __func__, imajor(inode), iminor(inode));
+
+	/* unset the flag to restore to previous state */
+	if (current->flags & PF_NOFREEZE) {
+		current->flags &= ~PF_NOFREEZE;
+		pr_debug("%s: current->flags 0x%x. \n", __func__, current->flags);
+	}
+
 	mutex_lock(&nfc_dev->dev_ref_mutex);
 	if (nfc_dev->dev_ref_count == 1) {
 		nfc_dev->nfc_disable_intr(nfc_dev);
