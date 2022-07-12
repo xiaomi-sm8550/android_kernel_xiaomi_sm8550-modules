@@ -640,26 +640,43 @@ static void smcinvoke_destroy_kthreads(void)
 
 static inline void free_mem_obj_locked(struct smcinvoke_mem_obj *mem_obj)
 {
+	int ret = 0;
+	bool is_bridge_created = mem_obj->is_smcinvoke_created_shmbridge;
+	struct dma_buf *dmabuf_to_free = mem_obj->dma_buf;
+	uint64_t shmbridge_handle = mem_obj->shmbridge_handle;
 	struct smcinvoke_shmbridge_deregister_pending_list *entry = NULL;
 
-	if (!mem_obj->is_smcinvoke_created_shmbridge) {
-		entry = kzalloc(sizeof(*entry), GFP_KERNEL);
-		if (!entry)
-			return;
-		entry->data.shmbridge_handle = mem_obj->shmbridge_handle;
-		entry->data.dmabuf_to_free = mem_obj->dma_buf;
-		mutex_lock(&bridge_postprocess_lock);
-		list_add_tail(&entry->list, &g_bridge_postprocess);
-		mutex_unlock(&bridge_postprocess_lock);
-		pr_debug("SHMBridge list: added a Handle:%#llx\n",
-				mem_obj->shmbridge_handle);
-		__wakeup_postprocess_kthread(&smcinvoke[SHMB_WORKER_THREAD]);
-	} else {
-		dma_buf_put(mem_obj->dma_buf);
-	}
 	list_del(&mem_obj->list);
 	kfree(mem_obj);
 	mem_obj = NULL;
+	mutex_unlock(&g_smcinvoke_lock);
+
+	if (is_bridge_created)
+		ret = qtee_shmbridge_deregister(shmbridge_handle);
+	if (ret) {
+		pr_err("Error:%d delete bridge failed leaking memory 0x%x\n",
+				ret, dmabuf_to_free);
+		if (ret == -EBUSY) {
+			pr_err("EBUSY: we postpone it 0x%x\n",
+					dmabuf_to_free);
+			entry = kzalloc(sizeof(*entry), GFP_KERNEL);
+			if (entry) {
+				entry->data.shmbridge_handle = shmbridge_handle;
+				entry->data.dmabuf_to_free = dmabuf_to_free;
+				mutex_lock(&bridge_postprocess_lock);
+				list_add_tail(&entry->list, &g_bridge_postprocess);
+				mutex_unlock(&bridge_postprocess_lock);
+				pr_debug("SHMBridge list: added a Handle:%#llx\n",
+						shmbridge_handle);
+				__wakeup_postprocess_kthread(
+						&smcinvoke[SHMB_WORKER_THREAD]);
+			}
+		}
+	} else {
+		dma_buf_put(dmabuf_to_free);
+	}
+
+	mutex_lock(&g_smcinvoke_lock);
 }
 
 static void del_mem_regn_obj_locked(struct kref *kref)
