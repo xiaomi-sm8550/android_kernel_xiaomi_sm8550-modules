@@ -41,6 +41,8 @@
 #define HW_STATE_UID 0x108
 #define HW_OP_GET_STATE 1
 #define HW_WIFI_UID 0x508
+#define FEATURE_NOT_SUPPORTED 12
+#define PERIPHERAL_NOT_FOUND 10
 #endif
 
 #define CNSS_DUMP_FORMAT_VER		0x11
@@ -3679,6 +3681,10 @@ int cnss_wlan_hw_disable_check(struct cnss_plat_data *plat_priv)
 	ret = IClientEnv_open(client_env, HW_STATE_UID, &app_object);
 	if (ret) {
 		cnss_pr_dbg("Failed to get app_object, ret: %d\n",  ret);
+		if (ret == FEATURE_NOT_SUPPORTED) {
+			ret = 0; /* Do not Assert */
+			cnss_pr_dbg("Secure HW feature not supported\n");
+		}
 		goto exit_release_clientenv;
 	}
 
@@ -3688,8 +3694,13 @@ int cnss_wlan_hw_disable_check(struct cnss_plat_data *plat_priv)
 			    ObjectCounts_pack(1, 1, 0, 0));
 
 	cnss_pr_dbg("SMC invoke ret: %d state: %d\n", ret, state);
-	if (ret)
+	if (ret) {
+		if (ret == PERIPHERAL_NOT_FOUND) {
+			ret = 0; /* Do not Assert */
+			cnss_pr_dbg("Secure HW mode is not updated. Peripheral not found\n");
+		}
 		goto exit_release_app_obj;
+	}
 
 	if (state == 1)
 		set_bit(CNSS_WLAN_HW_DISABLED,
