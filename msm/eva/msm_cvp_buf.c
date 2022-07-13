@@ -56,18 +56,16 @@ int print_smem(u32 tag, const char *str, struct msm_cvp_inst *inst,
 		if (!atomic_read(&smem->refcount))
 			return 0;
 
-		for (i = 0; i < get_pkt_array_size(); i++)
-			if (cvp_hfi_defs[i].type == smem->pkt_type) {
-				strlcpy(name, cvp_hfi_defs[i].name, PKT_NAME_LEN);
-				break;
-			}
+		i = get_pkt_index_from_type(smem->pkt_type);
+		if (i > 0)
+			strlcpy(name, cvp_hfi_defs[i].name, PKT_NAME_LEN);
 
 		dprintk(tag,
-			"%s: %x : %pK size %d flags %#x iova %#x idx %d ref %d pkt_type %s buf_idx %#x",
+			"%s: %x : %pK size %d flags %#x iova %#x idx %d ref %d pkt_type %s buf_idx %#x chksum %#x",
 			str, hash32_ptr(inst->session), smem->dma_buf,
 			smem->size, smem->flags, smem->device_addr,
 			smem->bitmap_index, atomic_read(&smem->refcount),
-			name, smem->buf_idx);
+			name, smem->buf_idx, smem->checksum);
 	}
 	return 0;
 }
@@ -1144,7 +1142,8 @@ static int msm_cvp_session_add_smem(struct msm_cvp_inst *inst,
 
 static struct msm_cvp_smem *msm_cvp_session_get_smem(struct msm_cvp_inst *inst,
 						struct cvp_buf_type *buf,
-						bool is_persist)
+						bool is_persist,
+						u32 pkt_type)
 {
 	int rc = 0, found = 1;
 	struct msm_cvp_smem *smem = NULL;
@@ -1168,6 +1167,9 @@ static struct msm_cvp_smem *msm_cvp_session_get_smem(struct msm_cvp_inst *inst,
 
 		smem->dma_buf = dma_buf;
 		smem->bitmap_index = MAX_DMABUF_NUMS;
+		smem->pkt_type = pkt_type;
+		smem->flags |= SMEM_PERSIST;
+		atomic_inc(&smem->refcount);
 		rc = msm_cvp_map_smem(inst, smem, "map cpu");
 		if (rc)
 			goto exit;
@@ -1189,6 +1191,7 @@ static struct msm_cvp_smem *msm_cvp_session_get_smem(struct msm_cvp_inst *inst,
 
 		smem->dma_buf = dma_buf;
 		smem->bitmap_index = MAX_DMABUF_NUMS;
+		smem->pkt_type = pkt_type;
 		rc = msm_cvp_map_smem(inst, smem, "map cpu");
 		if (rc)
 			goto exit;
@@ -1274,14 +1277,12 @@ static u32 msm_cvp_map_user_persist_buf(struct msm_cvp_inst *inst,
 		return 0;
 	}
 
-	smem = msm_cvp_session_get_smem(inst, buf, true);
+	smem = msm_cvp_session_get_smem(inst, buf, true, pkt_type);
 	if (!smem)
 		goto exit;
 
-	smem->flags |= SMEM_PERSIST;
 	smem->pkt_type = pkt_type;
 	smem->buf_idx = buf_idx;
-	atomic_inc(&smem->refcount);
 	pbuf->smem = smem;
 	pbuf->fd = buf->fd;
 	pbuf->size = buf->size;
@@ -1303,7 +1304,7 @@ exit:
 	return 0;
 }
 
-u32 msm_cvp_map_frame_buf(struct msm_cvp_inst *inst,
+static u32 msm_cvp_map_frame_buf(struct msm_cvp_inst *inst,
 			struct cvp_buf_type *buf,
 			struct msm_cvp_frame *frame,
 			u32 pkt_type, u32 buf_idx)
@@ -1324,11 +1325,10 @@ u32 msm_cvp_map_frame_buf(struct msm_cvp_inst *inst,
 		return 0;
 	}
 
-	smem = msm_cvp_session_get_smem(inst, buf, false);
+	smem = msm_cvp_session_get_smem(inst, buf, false, pkt_type);
 	if (!smem)
 		return 0;
 
-	smem->pkt_type = pkt_type;
 	smem->buf_idx = buf_idx;
 
 	frame->bufs[nr].fd = buf->fd;
@@ -1444,7 +1444,8 @@ int msm_cvp_map_user_persist(struct msm_cvp_inst *inst,
 		if (buf->fd < 0 || !buf->size)
 			continue;
 
-		iova = msm_cvp_map_user_persist_buf(inst, buf, cmd_hdr->packet_type, i);
+		iova = msm_cvp_map_user_persist_buf(inst, buf,
+				cmd_hdr->packet_type, i);
 		if (!iova) {
 			dprintk(CVP_ERR,
 				"%s: buf %d register failed.\n",

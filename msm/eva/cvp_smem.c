@@ -204,12 +204,13 @@ int msm_cvp_map_smem(struct msm_cvp_inst *inst,
 	int *vmid_list;
 	int *perms_list;
 	int nelems = 0;
-	int rc = 0;
+	int i, rc = 0;
 
 	dma_addr_t iova = 0;
 	u32 temp = 0;
 	u32 align = SZ_4K;
 	struct dma_buf *dma_buf;
+	bool is_config_pkt = false;
 
 	if (!inst || !smem) {
 		dprintk(CVP_ERR, "%s: Invalid params: %pK %pK\n",
@@ -250,7 +251,33 @@ int msm_cvp_map_smem(struct msm_cvp_inst *inst,
 
 	smem->size = dma_buf->size;
 	smem->device_addr = (u32)iova;
+	i = get_pkt_index_from_type(smem->pkt_type);
+	if (i > 0 && smem->pkt_type != HFI_CMD_SESSION_CVP_SET_PERSIST_BUFFERS
+		&& smem->pkt_type != HFI_CMD_SESSION_CVP_SET_MODEL_BUFFERS
+		&& smem->pkt_type != HFI_CMD_SESSION_EVA_DLFL_CONFIG)
+		/* User persist buffer has no feature config info */
+		is_config_pkt = cvp_hfi_defs[i].is_config_pkt;
 
+	/* if (!(smem->flags & SMEM_SECURE) &&
+				is_config_pkt &&
+				(msm_cvp_debug & CVP_MEM)) {
+		dma_buf_begin_cpu_access(dma_buf, DMA_BIDIRECTIONAL);
+		smem->kvaddr = __cvp_dma_buf_vmap(dma_buf);
+		if (!smem->kvaddr) {
+			dprintk(CVP_WARN,
+				"Failed to map config buf in kernel\n");
+			dma_buf_end_cpu_access(dma_buf, DMA_BIDIRECTIONAL);
+			goto checksum_done;
+		}
+		for (i = 0; i < (dma_buf->size); i++) {
+			smem->checksum += *(u8 *)(smem->kvaddr + i);
+		}
+		__cvp_dma_buf_vunmap(dma_buf, smem->kvaddr);
+		smem->kvaddr = 0;
+		dma_buf_end_cpu_access(dma_buf, DMA_BIDIRECTIONAL);
+	}
+
+checksum_done:*/
 	print_smem(CVP_MEM, str, inst, smem);
 	goto success;
 exit:
