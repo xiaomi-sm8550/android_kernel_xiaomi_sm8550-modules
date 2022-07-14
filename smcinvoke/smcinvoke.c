@@ -33,6 +33,7 @@
 #include "misc/qseecom_kernel.h"
 #include "smcinvoke.h"
 #include "smcinvoke_object.h"
+#include "IClientEnv.h"
 
 #define CREATE_TRACE_POINTS
 #include "trace_smcinvoke.h"
@@ -2253,6 +2254,14 @@ static long process_invoke_req(struct file *filp, unsigned int cmd,
 	}
 	if (req.argsize != sizeof(union smcinvoke_arg)) {
 		pr_err("arguments size for invoke req is invalid\n");
+		return -EINVAL;
+	}
+
+	if (context_type == SMCINVOKE_OBJ_TYPE_TZ_OBJ &&
+			tzobj->tzhandle == SMCINVOKE_TZ_ROOT_OBJ &&
+			(req.op == IClientEnv_OP_notifyDomainChange ||
+			req.op == IClientEnv_OP_registerWithCredentials)) {
+		pr_err("invalid rootenv op\n");
 		return -EINVAL;
 	}
 
