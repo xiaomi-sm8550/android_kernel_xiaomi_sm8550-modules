@@ -550,6 +550,7 @@ struct cnss_plat_data {
 	bool adsp_pc_enabled;
 	u64 feature_list;
 	u32 is_converged_dt;
+	struct kobject *wifi_kobj;
 	u16 hang_event_data_len;
 	u32 hang_data_addr_offset;
 	/* bitmap to detect FEM combination */

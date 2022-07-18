@@ -160,6 +160,22 @@ int cnss_get_mem_seg_count(enum cnss_remote_mem_type type, u32 *seg)
 EXPORT_SYMBOL(cnss_get_mem_seg_count);
 
 /**
+ * cnss_get_wifi_kobject -return wifi kobject
+ * Return: Null, to maintain driver comnpatibilty
+ */
+struct kobject *cnss_get_wifi_kobj(struct device *dev)
+{
+	struct cnss_plat_data *plat_priv;
+
+	plat_priv = cnss_get_plat_priv(NULL);
+	if (!plat_priv)
+		return NULL;
+
+	return plat_priv->wifi_kobj;
+}
+EXPORT_SYMBOL(cnss_get_wifi_kobj);
+
+/**
  * cnss_get_mem_segment_info - Get memory info of different type
  * @type: memory type
  * @segment: array to save the segment info
