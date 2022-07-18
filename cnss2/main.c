@@ -3986,6 +3986,8 @@ retry:
 		}
 		goto power_off;
 	}
+	return 0;
+
 power_off:
 	cnss_power_off_device(plat_priv);
 end:
