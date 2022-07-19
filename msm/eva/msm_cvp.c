@@ -473,6 +473,9 @@ static int cvp_fence_proc(struct msm_cvp_inst *inst,
 
 	dprintk(CVP_SYNX, "%s %s\n", current->comm, __func__);
 
+	if (!inst || !inst->core)
+		return -EINVAL;
+
 	hdev = inst->core->device;
 	sq = &inst->session_queue_fence;
 	ktid = pkt->client_data.kdata;
@@ -509,10 +512,10 @@ static int cvp_fence_proc(struct msm_cvp_inst *inst,
 			dprintk(CVP_PWR, "busy cycle %d, total %d\n",
 				fhdr->busy_cycles, fhdr->total_cycles);
 
-			if (core && (core->dyn_clk.sum_fps[HFI_HW_FDU] ||
+			if (core->dyn_clk.sum_fps[HFI_HW_FDU] ||
 				core->dyn_clk.sum_fps[HFI_HW_MPU] ||
 				core->dyn_clk.sum_fps[HFI_HW_OD] ||
-				core->dyn_clk.sum_fps[HFI_HW_ICA])) {
+				core->dyn_clk.sum_fps[HFI_HW_ICA]) {
 				clock_check = true;
 			}
 		} else {

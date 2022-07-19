@@ -49,16 +49,16 @@ int msm_cvp_private(void *cvp_inst, unsigned int cmd,
 }
 EXPORT_SYMBOL(msm_cvp_private);
 
-static bool msm_cvp_check_for_inst_overload(struct msm_cvp_core *core)
+static bool msm_cvp_check_for_inst_overload(struct msm_cvp_core *core,
+		u32 *instance_count)
 {
-	u32 instance_count = 0;
 	u32 secure_instance_count = 0;
 	struct msm_cvp_inst *inst = NULL;
 	bool overload = false;
 
 	mutex_lock(&core->lock);
 	list_for_each_entry(inst, &core->instances, list) {
-		instance_count++;
+		(*instance_count)++;
 		/* This flag is not updated yet for the current instance */
 		if (inst->flags & CVP_SECURE)
 			secure_instance_count++;
@@ -67,7 +67,7 @@ static bool msm_cvp_check_for_inst_overload(struct msm_cvp_core *core)
 
 	/* Instance count includes current instance as well. */
 
-	if ((instance_count >= core->resources.max_inst_count) ||
+	if ((*instance_count >= core->resources.max_inst_count) ||
 		(secure_instance_count >=
 			core->resources.max_secure_inst_count))
 		overload = true;
@@ -130,6 +130,7 @@ void *msm_cvp_open(int core_id, int session_type, struct task_struct *task)
 	struct msm_cvp_core *core = NULL;
 	int rc = 0;
 	int i = 0;
+	u32 instance_count;
 
 	if (core_id >= MSM_CVP_CORES_MAX ||
 			session_type >= MSM_CVP_MAX_DEVICES) {
@@ -150,7 +151,7 @@ void *msm_cvp_open(int core_id, int session_type, struct task_struct *task)
 	}
 
 	core->resources.max_inst_count = MAX_SUPPORTED_INSTANCES;
-	if (msm_cvp_check_for_inst_overload(core)) {
+	if (msm_cvp_check_for_inst_overload(core, &instance_count)) {
 		dprintk(CVP_ERR, "Instance num reached Max, rejecting session");
 		mutex_lock(&core->lock);
 		list_for_each_entry(inst, &core->instances, list)
@@ -168,8 +169,8 @@ void *msm_cvp_open(int core_id, int session_type, struct task_struct *task)
 	}
 
 	pr_info(
-		CVP_DBG_TAG "%s opening cvp instance: %pK type %d\n",
-		"sess", task->comm, inst, session_type);
+		CVP_DBG_TAG "%s opening cvp instance: %pK type %d cnt %d\n",
+		"sess", task->comm, inst, session_type, instance_count);
 	mutex_init(&inst->sync_lock);
 	mutex_init(&inst->lock);
 	spin_lock_init(&inst->event_handler.lock);

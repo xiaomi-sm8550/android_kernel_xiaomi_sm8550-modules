@@ -1235,25 +1235,37 @@ static u32 msm_cvp_map_user_persist_buf(struct msm_cvp_inst *inst,
 	struct msm_cvp_smem *smem = NULL;
 	struct list_head *ptr, *next;
 	struct cvp_internal_buf *pbuf;
+	struct dma_buf *dma_buf;
 
 	if (!inst) {
 		dprintk(CVP_ERR, "%s: invalid params\n", __func__);
 		return -EINVAL;
 	}
 
+	dma_buf = msm_cvp_smem_get_dma_buf(buf->fd);
+	if (!dma_buf)
+		return -EINVAL;
+
 	mutex_lock(&inst->persistbufs.lock);
 	list_for_each_safe(ptr, next, &inst->persistbufs.list) {
 		pbuf = list_entry(ptr, struct cvp_internal_buf, list);
-		if (buf->fd == pbuf->fd) {
+		if (dma_buf == pbuf->smem->dma_buf) {
 			pbuf->size =
 				(pbuf->size >= buf->size) ?
 				pbuf->size : buf->size;
 			iova = pbuf->smem->device_addr + buf->offset;
 			mutex_unlock(&inst->persistbufs.lock);
+			atomic_inc(&pbuf->smem->refcount);
+			dma_buf_put(dma_buf);
+			dprintk(CVP_MEM,
+				"map persist Reuse fd %d, dma_buf %#llx\n",
+				pbuf->fd, pbuf->smem->dma_buf);
 			return iova;
 		}
 	}
 	mutex_unlock(&inst->persistbufs.lock);
+
+	dma_buf_put(dma_buf);
 
 	pbuf = kmem_cache_zalloc(cvp_driver->buf_cache, GFP_KERNEL);
 	if (!pbuf) {
