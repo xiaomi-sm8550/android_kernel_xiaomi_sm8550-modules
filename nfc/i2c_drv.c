@@ -156,10 +156,12 @@ int i2c_read(struct nfc_dev *nfc_dev, char *buf, size_t count, int timeout)
 
 			if (gpio_get_value(nfc_gpio->irq))
 				break;
-			if (!gpio_get_value(nfc_gpio->ven)) {
-				pr_info("%s: releasing read\n", __func__);
-				ret = -EIO;
-				goto err;
+			if(!nfc_dev->secure_zone) {
+				if (!gpio_get_value(nfc_gpio->ven)) {
+					pr_info("%s: releasing read\n", __func__);
+					ret = -EIO;
+					goto err;
+				}
 			}
 			/*
 			 * NFC service wanted to close the driver so,
@@ -412,6 +414,15 @@ int nfc_i2c_dev_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		pr_err("LDO config failed\n");
 		goto err_ldo_config_failed;
 	}
+
+	/*Check NFC Secure Zone status*/
+	if(!nfc_hw_secure_check()) {
+		nfc_post_init(nfc_dev);
+		nfc_dev->secure_zone = false;
+	}
+	else
+		nfc_dev->secure_zone = true;
+	pr_info("%s:nfc_dev->secure_zone = %s", __func__, nfc_dev->secure_zone ? "true" : "false");
 
 	if(nfc_dev->configs.clk_pin_voting)
 		nfc_dev->clk_run = false;
