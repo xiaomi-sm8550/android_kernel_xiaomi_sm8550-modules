@@ -134,6 +134,17 @@ static int _process_doorbell_client(struct hw_fence_driver_data *drv_data, int c
 	case HW_FENCE_LOOPBACK_GFX_CTX_0:
 		ret = _process_gfx_client_loopback(drv_data, client_id);
 		break;
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+	case HW_FENCE_LOOPBACK_VAL_0:
+	case HW_FENCE_LOOPBACK_VAL_1:
+	case HW_FENCE_LOOPBACK_VAL_2:
+	case HW_FENCE_LOOPBACK_VAL_3:
+	case HW_FENCE_LOOPBACK_VAL_4:
+	case HW_FENCE_LOOPBACK_VAL_5:
+	case HW_FENCE_LOOPBACK_VAL_6:
+		ret = process_validation_client_loopback(drv_data, client_id);
+		break;
+#endif /* CONFIG_DEBUG_FS */
 	default:
 		HWFNC_ERR("unknown client:%d\n", client_id);
 		ret = -EINVAL;
