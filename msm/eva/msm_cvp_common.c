@@ -625,7 +625,10 @@ static void handle_sys_error(enum hal_command_response cmd, void *data)
 	}
 	call_hfi_op(hdev, flush_debug_queue, hdev->hfi_device_data);
 	list_for_each_entry(inst, &core->instances, list) {
-		cvp_print_inst(CVP_WARN, inst);
+		dprintk(CVP_WARN,
+			"%s: sys error inst %#x kref %x, state %x\n",
+				__func__, inst, kref_read(&inst->kref),
+				inst->state);
 		if (inst->state != MSM_CVP_CORE_INVALID) {
 			change_cvp_inst_state(inst, MSM_CVP_CORE_INVALID);
 			if (cvp_clean_session_queues(inst))
@@ -639,10 +642,8 @@ static void handle_sys_error(enum hal_command_response cmd, void *data)
 			wake_up_all(&inst->event_handler.wq);
 		}
 
-		if (!core->trigger_ssr) {
-			cvp_print_inst(CVP_WARN, inst);
+		if (!core->trigger_ssr)
 			msm_cvp_print_inst_bufs(inst, false);
-		}
 	}
 
 	/* handle the hw error before core released to get full debug info */
@@ -1553,18 +1554,3 @@ bool is_cvp_inst_valid(struct msm_cvp_inst *inst)
 	return false;
 }
 
-int cvp_print_inst(u32 tag, struct msm_cvp_inst *inst)
-{
-	if (!inst) {
-		dprintk(CVP_ERR, "%s invalid inst %pK\n", __func__, inst);
-		return -EINVAL;
-	}
-
-	dprintk(tag, "inst %pK id = %#x type %#x prio %#x secure %#x kmask %#x dmask %#x, kref %#x state %#x\n",
-		inst, hash32_ptr(inst->session),
-		inst->prop.type, inst->prop.priority, inst->prop.is_secure,
-		inst, inst->prop.kernel_mask, inst->prop.dsp_mask,
-		kref_read(&inst->kref), inst->state);
-
-	return 0;
-}

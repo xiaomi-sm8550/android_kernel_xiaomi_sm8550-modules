@@ -1077,8 +1077,8 @@ static int eva_fastrpc_driver_register(uint32_t handle)
 		if (!wait_for_completion_timeout(
 				&frpc_node->fastrpc_probe_completion,
 				msecs_to_jiffies(CVP_DSP_RESPONSE_TIMEOUT))) {
-			dprintk(CVP_ERR, "%s fastrpc driver_register timeout %#x\n",
-				__func__, frpc_node->handle);
+			dprintk(CVP_ERR, "%s fastrpc driver_register timeout\n",
+				__func__);
 			skip_deregister = false;
 			goto fail_fastrpc_driver_register;
 		}
