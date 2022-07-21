@@ -1075,6 +1075,16 @@ int cnss_idle_restart(struct device *dev)
 		goto out;
 	}
 
+	/* In non-DRV mode, remove MHI satellite configuration. Switching to
+	 * non-DRV is supported only once after device reboots and before wifi
+	 * is turned on. We do not allow switching back to DRV.
+	 * To bring device back into DRV, user needs to reboot device.
+	 */
+	if (test_bit(DISABLE_DRV, &plat_priv->ctrl_params.quirks)) {
+		cnss_pr_dbg("DRV is disabled\n");
+		cnss_bus_disable_mhi_satellite_cfg(plat_priv);
+	}
+
 	mutex_unlock(&plat_priv->driver_ops_lock);
 	return 0;
 

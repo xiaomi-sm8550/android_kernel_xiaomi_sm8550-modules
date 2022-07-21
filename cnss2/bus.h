@@ -72,5 +72,5 @@ int cnss_bus_get_iova_ipa(struct cnss_plat_data *plat_priv, u64 *addr,
 			  u64 *size);
 int cnss_bus_update_time_sync_period(struct cnss_plat_data *plat_priv,
 				     unsigned int time_sync_period);
-
+void cnss_bus_disable_mhi_satellite_cfg(struct cnss_plat_data *plat_priv);
 #endif /* _CNSS_BUS_H */

@@ -715,8 +715,8 @@ static int cnss_mhi_force_reset(struct cnss_pci_data *pci_priv)
 	return mhi_force_reset(pci_priv->mhi_ctrl);
 }
 
-static void cnss_mhi_controller_set_base(struct cnss_pci_data *pci_priv,
-					 phys_addr_t base)
+void cnss_mhi_controller_set_base(struct cnss_pci_data *pci_priv,
+				  phys_addr_t base)
 {
 	return mhi_controller_set_base(pci_priv->mhi_ctrl, base);
 }
@@ -770,8 +770,8 @@ static int cnss_mhi_force_reset(struct cnss_pci_data *pci_priv)
 	return -EOPNOTSUPP;
 }
 
-static void cnss_mhi_controller_set_base(struct cnss_pci_data *pci_priv,
-					 phys_addr_t base)
+void cnss_mhi_controller_set_base(struct cnss_pci_data *pci_priv,
+				  phys_addr_t base)
 {
 }
 #endif /* CONFIG_MHI_BUS_MISC */
