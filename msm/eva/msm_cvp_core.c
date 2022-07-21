@@ -168,8 +168,7 @@ void *msm_cvp_open(int core_id, int session_type)
 	}
 
 	pr_info_ratelimited(
-		CVP_DBG_TAG "Opening cvp instance: %pK type %d\n",
-		"sess", inst, session_type);
+		CVP_DBG_TAG "Opening cvp instance: %pK\n", "sess", inst);
 	mutex_init(&inst->sync_lock);
 	mutex_init(&inst->lock);
 	spin_lock_init(&inst->event_handler.lock);
@@ -386,8 +385,8 @@ int msm_cvp_destroy(struct msm_cvp_inst *inst)
 	core->synx_ftbl->cvp_sess_deinit_synx(inst);
 
 	pr_info_ratelimited(
-		CVP_DBG_TAG "Closed cvp instance: %pK session_id = %d type %d\n",
-		"sess", inst, hash32_ptr(inst->session), inst->session_type);
+		CVP_DBG_TAG "Closed cvp instance: %pK session_id = %d\n",
+		"sess", inst, hash32_ptr(inst->session));
 	inst->session = (void *)0xdeadbeef;
 	kfree(inst);
 	return 0;
