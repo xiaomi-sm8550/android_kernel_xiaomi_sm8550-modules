@@ -15,6 +15,7 @@
 #include "hw_fence_drv_ipc.h"
 
 struct hw_fence_driver_data *hw_fence_drv_data;
+static bool hw_fence_driver_enable;
 
 void *msm_hw_fence_register(enum hw_fence_client_id client_id,
 	struct msm_hw_fence_mem_addr *mem_descriptor)
@@ -420,6 +421,11 @@ static int msm_hw_fence_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+	if (!hw_fence_driver_enable) {
+		HWFNC_DBG_INFO("hw fence driver not enabled\n");
+		return -EOPNOTSUPP;
+	}
+
 	if (of_device_is_compatible(pdev->dev.of_node, "qcom,msm-hw-fence"))
 		rc = msm_hw_fence_probe_init(pdev);
 	if (rc)
@@ -498,6 +504,9 @@ static void __exit msm_hw_fence_exit(void)
 
 	HWFNC_DBG_H("-\n");
 }
+
+module_param_named(enable, hw_fence_driver_enable, bool, 0600);
+MODULE_PARM_DESC(enable, "Enable hardware fences");
 
 module_init(msm_hw_fence_init);
 module_exit(msm_hw_fence_exit);
