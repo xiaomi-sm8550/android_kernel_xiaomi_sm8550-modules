@@ -29,6 +29,7 @@
 #include <asm/cacheflush.h>
 #include <soc/qcom/qseecomi.h>
 #include <linux/qtee_shmbridge.h>
+#include <linux/kthread.h>
 #include "misc/qseecom_kernel.h"
 #include "smcinvoke.h"
 #include "smcinvoke_object.h"
