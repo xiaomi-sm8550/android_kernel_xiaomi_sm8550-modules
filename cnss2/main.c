@@ -41,6 +41,8 @@
 #define HW_STATE_UID 0x108
 #define HW_OP_GET_STATE 1
 #define HW_WIFI_UID 0x508
+#define FEATURE_NOT_SUPPORTED 12
+#define PERIPHERAL_NOT_FOUND 10
 #endif
 
 #define CNSS_DUMP_FORMAT_VER		0x11
@@ -2949,6 +2951,7 @@ int cnss_register_ramdump(struct cnss_plat_data *plat_priv)
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		ret = cnss_register_ramdump_v2(plat_priv);
 		break;
 	default:
@@ -2969,6 +2972,7 @@ void cnss_unregister_ramdump(struct cnss_plat_data *plat_priv)
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		cnss_unregister_ramdump_v2(plat_priv);
 		break;
 	default:
@@ -3450,6 +3454,7 @@ static ssize_t fs_ready_store(struct device *dev,
 	case QCA6390_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
 		break;
 	default:
 		cnss_pr_err("Not supported for device ID 0x%lx\n",
@@ -3676,6 +3681,10 @@ int cnss_wlan_hw_disable_check(struct cnss_plat_data *plat_priv)
 	ret = IClientEnv_open(client_env, HW_STATE_UID, &app_object);
 	if (ret) {
 		cnss_pr_dbg("Failed to get app_object, ret: %d\n",  ret);
+		if (ret == FEATURE_NOT_SUPPORTED) {
+			ret = 0; /* Do not Assert */
+			cnss_pr_dbg("Secure HW feature not supported\n");
+		}
 		goto exit_release_clientenv;
 	}
 
@@ -3685,8 +3694,13 @@ int cnss_wlan_hw_disable_check(struct cnss_plat_data *plat_priv)
 			    ObjectCounts_pack(1, 1, 0, 0));
 
 	cnss_pr_dbg("SMC invoke ret: %d state: %d\n", ret, state);
-	if (ret)
+	if (ret) {
+		if (ret == PERIPHERAL_NOT_FOUND) {
+			ret = 0; /* Do not Assert */
+			cnss_pr_dbg("Secure HW mode is not updated. Peripheral not found\n");
+		}
 		goto exit_release_app_obj;
+	}
 
 	if (state == 1)
 		set_bit(CNSS_WLAN_HW_DISABLED,
@@ -3839,6 +3853,7 @@ static const struct platform_device_id cnss_platform_id_table[] = {
 	{ .name = "qca6390", .driver_data = QCA6390_DEVICE_ID, },
 	{ .name = "qca6490", .driver_data = QCA6490_DEVICE_ID, },
 	{ .name = "kiwi", .driver_data = KIWI_DEVICE_ID, },
+	{ .name = "mango", .driver_data = MANGO_DEVICE_ID, },
 	{ .name = "qcaconv", .driver_data = 0, },
 	{ },
 };
@@ -3860,8 +3875,11 @@ static const struct of_device_id cnss_of_match_table[] = {
 		.compatible = "qcom,cnss-kiwi",
 		.data = (void *)&cnss_platform_id_table[4]},
 	{
-		.compatible = "qcom,cnss-qca-converged",
+		.compatible = "qcom,cnss-mango",
 		.data = (void *)&cnss_platform_id_table[5]},
+	{
+		.compatible = "qcom,cnss-qca-converged",
+		.data = (void *)&cnss_platform_id_table[6]},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, cnss_of_match_table);
@@ -3968,6 +3986,8 @@ retry:
 		}
 		goto power_off;
 	}
+	return 0;
+
 power_off:
 	cnss_power_off_device(plat_priv);
 end:

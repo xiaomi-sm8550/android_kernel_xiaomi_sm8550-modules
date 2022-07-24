@@ -55,7 +55,7 @@
 #define CNSS_RAMDUMP_VERSION		0
 #define MAX_FIRMWARE_NAME_LEN		40
 #define FW_V2_NUMBER                    2
-#define POWER_ON_RETRY_MAX_TIMES        3
+#define POWER_ON_RETRY_MAX_TIMES        4
 #define POWER_ON_RETRY_DELAY_MS         500
 #define WLFW_MAX_HANG_EVENT_DATA_SIZE   384
 
@@ -550,6 +550,8 @@ struct cnss_plat_data {
 	u32 is_converged_dt;
 	u16 hang_event_data_len;
 	u32 hang_data_addr_offset;
+	/* bitmap to detect FEM combination */
+	u8 hwid_bitmap;
 	enum cnss_driver_mode driver_mode;
 	uint32_t num_shadow_regs_v3;
 };

@@ -236,7 +236,8 @@ qmi_registered:
 static void cnss_wlfw_host_cap_parse_mlo(struct cnss_plat_data *plat_priv,
 					 struct wlfw_host_cap_req_msg_v01 *req)
 {
-	if (plat_priv->device_id == KIWI_DEVICE_ID) {
+	if (plat_priv->device_id == KIWI_DEVICE_ID ||
+	    plat_priv->device_id == MANGO_DEVICE_ID) {
 		req->mlo_capable_valid = 1;
 		req->mlo_capable = 1;
 		req->mlo_chip_id_valid = 1;
@@ -579,6 +580,9 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 	else
 		plat_priv->hang_data_addr_offset = 0;
 
+	if (resp->hwid_bitmap_valid)
+		plat_priv->hwid_bitmap = resp->hwid_bitmap;
+
 	if (resp->ol_cpr_cfg_valid)
 		cnss_aop_ol_cpr_cfg_setup(plat_priv, &resp->ol_cpr_cfg);
 
@@ -587,10 +591,11 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 		    plat_priv->chip_info.chip_family,
 		    plat_priv->board_info.board_id, plat_priv->soc_info.soc_id,
 		    plat_priv->otp_version);
-	cnss_pr_dbg("fw_version: 0x%x, fw_build_timestamp: %s, fw_build_id: %s\n",
+	cnss_pr_dbg("fw_version: 0x%x, fw_build_timestamp: %s, fw_build_id: %s, hwid_bitmap:0x%x\n",
 		    plat_priv->fw_version_info.fw_version,
 		    plat_priv->fw_version_info.fw_build_timestamp,
-		    plat_priv->fw_build_id);
+		    plat_priv->fw_build_id,
+		    plat_priv->hwid_bitmap);
 	cnss_pr_dbg("Hang event params, Length: 0x%x, Offset Address: 0x%x\n",
 		    plat_priv->hang_event_data_len,
 		    plat_priv->hang_data_addr_offset);
@@ -1218,7 +1223,8 @@ void cnss_get_qdss_cfg_filename(struct cnss_plat_data *plat_priv,
 	char filename_tmp[MAX_FIRMWARE_NAME_LEN];
 	char *debug_str = QDSS_DEBUG_FILE_STR;
 
-	if (plat_priv->device_id == KIWI_DEVICE_ID)
+	if (plat_priv->device_id == KIWI_DEVICE_ID ||
+	    plat_priv->device_id == MANGO_DEVICE_ID)
 		debug_str = "";
 
 	if (plat_priv->device_version.major_version == FW_V2_NUMBER)
@@ -1570,7 +1576,8 @@ int cnss_wlfw_wlan_cfg_send_sync(struct cnss_plat_data *plat_priv,
 		req->svc_cfg[i].pipe_num = config->ce_svc_cfg[i].pipe_num;
 	}
 
-	if (plat_priv->device_id != KIWI_DEVICE_ID) {
+	if (plat_priv->device_id != KIWI_DEVICE_ID &&
+	    plat_priv->device_id != MANGO_DEVICE_ID) {
 		req->shadow_reg_v2_valid = 1;
 		if (config->num_shadow_reg_v2_cfg >
 		    QMI_WLFW_MAX_NUM_SHADOW_REG_V2_V01)
@@ -2406,7 +2413,8 @@ static void cnss_wlfw_request_mem_ind_cb(struct qmi_handle *qmi_wlfw,
 			    ind_msg->mem_seg[i].size, ind_msg->mem_seg[i].type);
 		plat_priv->fw_mem[i].type = ind_msg->mem_seg[i].type;
 		plat_priv->fw_mem[i].size = ind_msg->mem_seg[i].size;
-		if (plat_priv->fw_mem[i].type == CNSS_MEM_TYPE_DDR)
+		if (!plat_priv->fw_mem[i].va &&
+		    plat_priv->fw_mem[i].type == CNSS_MEM_TYPE_DDR)
 			plat_priv->fw_mem[i].attrs |=
 				DMA_ATTR_FORCE_CONTIGUOUS;
 		if (plat_priv->fw_mem[i].type == CNSS_MEM_CAL_V01)
