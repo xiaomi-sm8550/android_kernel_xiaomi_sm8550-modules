@@ -2945,6 +2945,9 @@ static void cnss_wlan_reg_driver_work(struct work_struct *work)
 	struct cnss_cal_info *cal_info;
 	unsigned int timeout;
 
+	if (test_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state))
+		return;
+
 	if (test_bit(CNSS_COLD_BOOT_CAL_DONE, &plat_priv->driver_state)) {
 		goto reg_driver;
 	} else {
@@ -2993,7 +2996,7 @@ int cnss_wlan_register_driver(struct cnss_wlan_driver *driver_ops)
 {
 	int ret = 0;
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(NULL);
-	struct cnss_pci_data *pci_priv;
+	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
 	const struct pci_device_id *id_table = driver_ops->id_table;
 	unsigned int timeout;
 
@@ -3030,8 +3033,7 @@ int cnss_wlan_register_driver(struct cnss_wlan_driver *driver_ops)
 		return -EAGAIN;
 	}
 
-	pci_priv = plat_priv->bus_priv;
-	if (pci_priv->driver_ops) {
+	if (test_bit(CNSS_DRIVER_REGISTERED, &plat_priv->driver_state)) {
 		cnss_pr_err("Driver has already registered\n");
 		return -EEXIST;
 	}
@@ -3162,6 +3164,8 @@ int cnss_pci_register_driver_hdlr(struct cnss_pci_data *pci_priv,
 	if (ret) {
 		clear_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
 		pci_priv->driver_ops = NULL;
+	} else {
+		set_bit(CNSS_DRIVER_REGISTERED, &plat_priv->driver_state);
 	}
 
 	return ret;
@@ -3174,6 +3178,7 @@ int cnss_pci_unregister_driver_hdlr(struct cnss_pci_data *pci_priv)
 	set_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state);
 	cnss_pci_dev_shutdown(pci_priv);
 	pci_priv->driver_ops = NULL;
+	clear_bit(CNSS_DRIVER_REGISTERED, &plat_priv->driver_state);
 
 	return 0;
 }

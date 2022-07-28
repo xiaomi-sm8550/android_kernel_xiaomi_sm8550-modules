@@ -761,6 +761,9 @@ int cnss_get_pinctrl(struct cnss_plat_data *plat_priv)
 	}
 
 	if (of_find_property(dev->of_node, WLAN_EN_GPIO, NULL)) {
+		pinctrl_info->wlan_en_gpio = of_get_named_gpio(dev->of_node,
+							       WLAN_EN_GPIO, 0);
+		cnss_pr_dbg("WLAN_EN GPIO: %d\n", pinctrl_info->wlan_en_gpio);
 		pinctrl_info->wlan_en_active =
 			pinctrl_lookup_state(pinctrl_info->pinctrl,
 					     WLAN_EN_ACTIVE);
@@ -780,6 +783,8 @@ int cnss_get_pinctrl(struct cnss_plat_data *plat_priv)
 				    ret);
 			goto out;
 		}
+	} else {
+		pinctrl_info->wlan_en_gpio = -EINVAL;
 	}
 
 	/* Added for QCA6490 PMU delayed WLAN_EN_GPIO */
@@ -923,10 +928,18 @@ static int cnss_select_pinctrl_state(struct cnss_plat_data *plat_priv,
 				goto out;
 			}
 			udelay(WLAN_ENABLE_DELAY);
+			cnss_set_xo_clk_gpio_state(plat_priv, false);
+		} else {
+			cnss_set_xo_clk_gpio_state(plat_priv, false);
+			goto out;
 		}
-		cnss_set_xo_clk_gpio_state(plat_priv, false);
 	} else {
 		if (!IS_ERR_OR_NULL(pinctrl_info->wlan_en_sleep)) {
+			cnss_wlan_hw_disable_check(plat_priv);
+			if (test_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state)) {
+				cnss_pr_dbg("Avoid WLAN_EN low. WLAN HW Disbaled");
+				goto out;
+			}
 			ret = pinctrl_select_state(pinctrl_info->pinctrl,
 						   pinctrl_info->wlan_en_sleep);
 			if (ret) {
@@ -934,9 +947,12 @@ static int cnss_select_pinctrl_state(struct cnss_plat_data *plat_priv,
 					    ret);
 				goto out;
 			}
+		} else {
+			goto out;
 		}
 	}
 
+	cnss_pr_dbg("WLAN_EN Value: %d\n", gpio_get_value(pinctrl_info->wlan_en_gpio));
 	cnss_pr_dbg("%s WLAN_EN GPIO successfully\n",
 		    state ? "Assert" : "De-assert");
 
@@ -1010,6 +1026,12 @@ int cnss_power_on_device(struct cnss_plat_data *plat_priv)
 	if (plat_priv->powered_on) {
 		cnss_pr_dbg("Already powered up");
 		return 0;
+	}
+
+	cnss_wlan_hw_disable_check(plat_priv);
+	if (test_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state)) {
+		cnss_pr_dbg("Avoid WLAN Power On. WLAN HW Disbaled");
+		return -EINVAL;
 	}
 
 	ret = cnss_vreg_on_type(plat_priv, CNSS_VREG_PRIM);

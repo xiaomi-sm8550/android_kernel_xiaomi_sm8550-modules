@@ -4038,10 +4038,10 @@ int cnss_wlan_hw_enable(void)
 	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(NULL);
 	int ret = 0;
 
-	if (test_bit(CNSS_PCI_PROBE_DONE, &plat_priv->driver_state))
-		return 0;
-
 	clear_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state);
+
+	if (test_bit(CNSS_PCI_PROBE_DONE, &plat_priv->driver_state))
+		goto register_driver;
 
 	ret = cnss_wlan_device_init(plat_priv);
 	if (ret) {
@@ -4054,6 +4054,7 @@ int cnss_wlan_hw_enable(void)
 				       CNSS_DRIVER_EVENT_COLD_BOOT_CAL_START,
 				       0, NULL);
 
+register_driver:
 	if (plat_priv->driver_ops)
 		ret = cnss_wlan_register_driver(plat_priv->driver_ops);
 
