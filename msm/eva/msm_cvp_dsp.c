@@ -461,6 +461,8 @@ retry:
 		goto fatal_exit;
 
 	if (rsp.ret == CPU2DSP_EFATAL) {
+		dprintk(CVP_ERR, "%s: suspend dsp got EFATAL error\n",
+				__func__);
 		if (!retried) {
 			mutex_unlock(&me->tx_lock);
 			retried = true;
