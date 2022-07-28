@@ -313,8 +313,8 @@ struct smcinvoke_worker_thread {
 	struct task_struct *postprocess_kthread_task;
 };
 
-struct smcinvoke_worker_thread smcinvoke[MAX_THREAD_NUMBER];
-const char thread_name[MAX_THREAD_NUMBER][MAX_CHAR_NAME] = {
+static struct smcinvoke_worker_thread smcinvoke[MAX_THREAD_NUMBER];
+static const char thread_name[MAX_THREAD_NUMBER][MAX_CHAR_NAME] = {
 	"smcinvoke_shmbridge_postprocess", "smcinvoke_object_postprocess"};
 
 static int prepare_send_scm_msg(const uint8_t *in_buf, phys_addr_t in_paddr,
@@ -2661,11 +2661,26 @@ static int smcinvoke_probe(struct platform_device *pdev)
 	unsigned int count = 1;
 	int rc = 0;
 
+	rc = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
+	if (rc) {
+		pr_err("dma_set_mask_and_coherent failed %d\n", rc);
+		return rc;
+	}
+	legacy_smc_call = of_property_read_bool((&pdev->dev)->of_node,
+			"qcom,support-legacy_smc");
+	invoke_cmd = legacy_smc_call ? SMCINVOKE_INVOKE_CMD_LEGACY : SMCINVOKE_INVOKE_CMD;
+
+	rc = smcinvoke_create_kthreads();
+	if (rc) {
+		pr_err("smcinvoke_create_kthreads failed %d\n", rc);
+		return rc;
+	}
+
 	rc = alloc_chrdev_region(&smcinvoke_device_no, baseminor, count,
 							SMCINVOKE_DEV);
 	if (rc < 0) {
 		pr_err("chrdev_region failed %d for %s\n", rc, SMCINVOKE_DEV);
-		return rc;
+		goto exit_destroy_wkthread;
 	}
 	driver_class = class_create(THIS_MODULE, SMCINVOKE_DEV);
 	if (IS_ERR(driver_class)) {
@@ -2691,31 +2706,17 @@ static int smcinvoke_probe(struct platform_device *pdev)
 		goto exit_destroy_device;
 	}
 	smcinvoke_pdev = pdev;
-	rc = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
-	if (rc) {
-		pr_err("dma_set_mask_and_coherent failed %d\n", rc);
-		goto exit_cv_del;
-	}
-	legacy_smc_call = of_property_read_bool((&pdev->dev)->of_node,
-			"qcom,support-legacy_smc");
-	invoke_cmd = legacy_smc_call ? SMCINVOKE_INVOKE_CMD_LEGACY : SMCINVOKE_INVOKE_CMD;
-
-	rc = smcinvoke_create_kthreads();
-	if (rc) {
-		pr_err("smcinvoke_create_kthreads failed %d\n", rc);
-		goto exit_cv_del;
-	}
 
 	return 0;
 
-exit_cv_del:
-	cdev_del(&smcinvoke_cdev);
 exit_destroy_device:
 	device_destroy(driver_class, smcinvoke_device_no);
 exit_destroy_class:
 	class_destroy(driver_class);
 exit_unreg_chrdev_region:
 	unregister_chrdev_region(smcinvoke_device_no, count);
+exit_destroy_wkthread:
+	smcinvoke_destroy_kthreads();
 	return rc;
 }
 
