@@ -341,8 +341,25 @@ static void cvp_dsp_rpmsg_remove(struct rpmsg_device *rpdev)
 	struct cvp_dsp_fastrpc_driver_entry *frpc_node = NULL;
 	struct msm_cvp_inst *inst = NULL;
 	struct list_head *s = NULL, *next_s = NULL;
+	u32 max_num_retries = 100;
 
 	dprintk(CVP_WARN, "%s: CDSP SSR triggered\n", __func__);
+
+	mutex_lock(&me->rx_lock);
+	while (max_num_retries > 0) {
+		if (me->pending_dsp2cpu_cmd.type !=
+				CVP_INVALID_RPMSG_TYPE) {
+			mutex_unlock(&me->rx_lock);
+			usleep_range(1000, 5000);
+			mutex_lock(&me->rx_lock);
+		} else {
+			break;
+		}
+		max_num_retries--;
+	}
+
+	if (!max_num_retries)
+		dprintk(CVP_ERR, "stuck processing pending DSP cmds\n");
 
 	mutex_lock(&me->tx_lock);
 	cvp_hyp_assign_from_dsp();
@@ -350,6 +367,7 @@ static void cvp_dsp_rpmsg_remove(struct rpmsg_device *rpdev)
 	me->chan = NULL;
 	me->state = DSP_UNINIT;
 	mutex_unlock(&me->tx_lock);
+	mutex_unlock(&me->rx_lock);
 
 	while ((frpc_node = dequeue_frpc_node())) {
 		s = &frpc_node->dsp_sessions.list;
@@ -1819,8 +1837,6 @@ static void __dsp_cvp_mem_free(struct cvp_dsp_cmd_msg *cmd)
 	mutex_lock(&buf_list->lock);
 	list_for_each_safe(ptr, next, &buf_list->list) {
 		buf = list_entry(ptr, struct cvp_internal_buf, list);
-		dprintk(CVP_DSP, "fd in list 0x%x, fd from dsp 0x%x\n",
-					buf->fd, dsp2cpu_cmd->sbuf.fd);
 
 		if (!buf->smem) {
 			dprintk(CVP_DSP, "Empyt smem\n");
@@ -1831,6 +1847,8 @@ static void __dsp_cvp_mem_free(struct cvp_dsp_cmd_msg *cmd)
 		if (buf->smem->device_addr == dsp2cpu_cmd->sbuf.iova) {
 			dprintk(CVP_DSP, "%s find device addr 0x%x\n",
 				__func__, buf->smem->device_addr);
+			dprintk(CVP_DSP, "fd in list 0x%x, fd from dsp 0x%x\n",
+				buf->fd, dsp2cpu_cmd->sbuf.fd);
 
 			rc = eva_fastrpc_dev_unmap_dma(frpc_device, buf);
 			if (rc) {
@@ -1905,6 +1923,11 @@ wait_dsp:
 		dprintk(CVP_WARN, "%s received interrupt signal\n", __func__);
 	} else {
 		mutex_lock(&me->rx_lock);
+		if (me->state == DSP_UNINIT) {
+			/* DSP SSR may have happened */
+			mutex_unlock(&me->rx_lock);
+			goto wait_dsp;
+		}
 		switch (me->pending_dsp2cpu_cmd.type) {
 		case DSP2CPU_POWERON:
 		{

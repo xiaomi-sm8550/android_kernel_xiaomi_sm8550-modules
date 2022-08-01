@@ -1833,6 +1833,7 @@ int cvp_allocate_dsp_bufs(struct msm_cvp_inst *inst,
 		goto err_no_mem;
 	}
 	buf->smem->pkt_type = buf->smem->buf_idx = 0;
+	atomic_inc(&buf->smem->refcount);
 
 	dprintk(CVP_MEM, "%s dma_buf %pK\n", __func__, buf->smem->dma_buf);
 
@@ -1875,6 +1876,7 @@ int cvp_release_dsp_buffers(struct msm_cvp_inst *inst,
 			"%s: %x : fd %x %s size %d",
 			__func__, hash32_ptr(inst->session), buf->fd,
 			smem->dma_buf->name, buf->size);
+		atomic_dec(&smem->refcount);
 		msm_cvp_smem_free(smem);
 		kmem_cache_free(cvp_driver->smem_cache, smem);
 	} else {
