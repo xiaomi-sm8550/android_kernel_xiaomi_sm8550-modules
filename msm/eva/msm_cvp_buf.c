@@ -1068,7 +1068,8 @@ void msm_cvp_cache_operations(struct msm_cvp_smem *smem, u32 type,
 }
 
 static struct msm_cvp_smem *msm_cvp_session_find_smem(struct msm_cvp_inst *inst,
-				struct dma_buf *dma_buf)
+				struct dma_buf *dma_buf,
+				u32 pkt_type)
 {
 	struct msm_cvp_smem *smem;
 	int i;
@@ -1082,6 +1083,7 @@ static struct msm_cvp_smem *msm_cvp_session_find_smem(struct msm_cvp_inst *inst,
 			SET_USE_BITMAP(i, inst);
 			smem = inst->dma_cache.entries[i];
 			smem->bitmap_index = i;
+			smem->pkt_type = pkt_type;
 			atomic_inc(&smem->refcount);
 			/*
 			 * If we find it, it means we already increased
@@ -1182,7 +1184,7 @@ static struct msm_cvp_smem *msm_cvp_session_get_smem(struct msm_cvp_inst *inst,
 		return smem;
 	}
 
-	smem = msm_cvp_session_find_smem(inst, dma_buf);
+	smem = msm_cvp_session_find_smem(inst, dma_buf, pkt_type);
 	if (!smem) {
 		found = 0;
 		smem = kmem_cache_zalloc(cvp_driver->smem_cache, GFP_KERNEL);
