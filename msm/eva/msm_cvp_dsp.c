@@ -488,8 +488,11 @@ int cvp_dsp_resume(uint32_t session_flag)
 	 * Probably get rid of this entirely as discussed before
 	 */
 	if (me->state != DSP_SUSPEND)
-		dprintk(CVP_WARN, "%s DSP not in SUSPEND state\n", __func__);
+		goto exit;
 
+	me->state = DSP_READY;
+
+exit:
 	return rc;
 }
 
