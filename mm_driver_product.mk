@@ -13,3 +13,5 @@ ifeq ($(MM_DRV_DLKM_ENABLE), true)
 		PRODUCT_PACKAGES += sync_fence.ko msm_hw_fence.ko
 	endif
 endif
+
+DISPLAY_MM_DRIVER := msm_ext_display.ko sync_fence.ko msm_hw_fence.ko

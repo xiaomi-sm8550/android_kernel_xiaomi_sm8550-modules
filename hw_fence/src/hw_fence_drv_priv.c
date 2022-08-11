@@ -166,12 +166,12 @@ int hw_fence_read_queue(struct msm_hw_fence_client *hw_fence_client,
 		return -EINVAL;
 	}
 
+	/* Make sure data is ready before read */
+	mb();
+
 	/* Get read and write index */
 	read_idx = readl_relaxed(&hfi_header->read_index);
 	write_idx = readl_relaxed(&hfi_header->write_index);
-
-	/* Make sure we read the values */
-	rmb();
 
 	HWFNC_DBG_Q("read client:%d rd_ptr:0x%pK wr_ptr:0x%pK rd_idx:%d wr_idx:%d queue:0x%pK\n",
 		hw_fence_client->client_id, &hfi_header->read_index, &hfi_header->write_index,
@@ -274,12 +274,12 @@ int hw_fence_update_queue(struct hw_fence_driver_data *drv_data,
 		GLOBAL_ATOMIC_STORE(&drv_data->client_lock_tbl[lock_idx], 1); /* lock */
 	}
 
+	/* Make sure data is ready before read */
+	mb();
+
 	/* Get read and write index */
 	read_idx = readl_relaxed(&hfi_header->read_index);
 	write_idx = readl_relaxed(&hfi_header->write_index);
-
-	/* Make sure we read the values */
-	rmb();
 
 	HWFNC_DBG_Q("wr client:%d rd_ptr:0x%pK wr_ptr:0x%pK rd_idx:%d wr_idx:%d q:0x%pK type:%d\n",
 		hw_fence_client->client_id, &hfi_header->read_index, &hfi_header->write_index,
@@ -324,6 +324,7 @@ int hw_fence_update_queue(struct hw_fence_driver_data *drv_data,
 	writeq_relaxed(hash, &write_ptr_payload->hash);
 	writeq_relaxed(flags, &write_ptr_payload->flags);
 	writel_relaxed(error, &write_ptr_payload->error);
+	writel_relaxed(hw_fence_get_qtime(drv_data), &write_ptr_payload->timestamp);
 
 	/* update memory for the message */
 	wmb();
@@ -544,6 +545,17 @@ int hw_fence_init_controller_signal(struct hw_fence_driver_data *drv_data,
 	case HW_FENCE_CLIENT_ID_CTX0:
 		/* nothing to initialize for gpu client */
 		break;
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+	case HW_FENCE_CLIENT_ID_VAL0:
+	case HW_FENCE_CLIENT_ID_VAL1:
+	case HW_FENCE_CLIENT_ID_VAL2:
+	case HW_FENCE_CLIENT_ID_VAL3:
+	case HW_FENCE_CLIENT_ID_VAL4:
+	case HW_FENCE_CLIENT_ID_VAL5:
+	case HW_FENCE_CLIENT_ID_VAL6:
+		/* nothing to initialize for validation clients */
+		break;
+#endif /* CONFIG_DEBUG_FS */
 	case HW_FENCE_CLIENT_ID_CTL0:
 	case HW_FENCE_CLIENT_ID_CTL1:
 	case HW_FENCE_CLIENT_ID_CTL2:

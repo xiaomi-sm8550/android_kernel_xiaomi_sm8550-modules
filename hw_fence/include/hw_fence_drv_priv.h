@@ -85,6 +85,13 @@ enum hw_fence_lookup_ops {
  * HW_FENCE_LOOPBACK_DPU_CTL_4: dpu client 4. Used in platforms with no dpu-ipc.
  * HW_FENCE_LOOPBACK_DPU_CTL_5: dpu client 5. Used in platforms with no dpu-ipc.
  * HW_FENCE_LOOPBACK_DPU_CTX_0: gfx client 0. Used in platforms with no gmu support.
+ * HW_FENCE_LOOPBACK_VAL_0: debug validation client 0.
+ * HW_FENCE_LOOPBACK_VAL_1: debug validation client 1.
+ * HW_FENCE_LOOPBACK_VAL_2: debug validation client 2.
+ * HW_FENCE_LOOPBACK_VAL_3: debug validation client 3.
+ * HW_FENCE_LOOPBACK_VAL_4: debug validation client 4.
+ * HW_FENCE_LOOPBACK_VAL_5: debug validation client 5.
+ * HW_FENCE_LOOPBACK_VAL_6: debug validation client 6.
  */
 enum hw_fence_loopback_id {
 	HW_FENCE_LOOPBACK_DPU_CTL_0,
@@ -94,6 +101,15 @@ enum hw_fence_loopback_id {
 	HW_FENCE_LOOPBACK_DPU_CTL_4,
 	HW_FENCE_LOOPBACK_DPU_CTL_5,
 	HW_FENCE_LOOPBACK_GFX_CTX_0,
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+	HW_FENCE_LOOPBACK_VAL_0,
+	HW_FENCE_LOOPBACK_VAL_1,
+	HW_FENCE_LOOPBACK_VAL_2,
+	HW_FENCE_LOOPBACK_VAL_3,
+	HW_FENCE_LOOPBACK_VAL_4,
+	HW_FENCE_LOOPBACK_VAL_5,
+	HW_FENCE_LOOPBACK_VAL_6,
+#endif /* CONFIG_DEBUG_FS */
 	HW_FENCE_LOOPBACK_MAX,
 };
 
@@ -121,6 +137,8 @@ struct msm_hw_fence_queue {
  * @ipc_signal_id: id of the signal to be triggered for this client
  * @ipc_client_id: id of the ipc client for this hw fence driver client
  * @update_rxq: bool to indicate if client uses rx-queue
+ * @wait_queue: wait queue for the validation clients
+ * @val_signal: doorbell flag to signal the validation clients in the wait queue
  */
 struct msm_hw_fence_client {
 	enum hw_fence_client_id client_id;
@@ -129,6 +147,10 @@ struct msm_hw_fence_client {
 	int ipc_signal_id;
 	int ipc_client_id;
 	bool update_rxq;
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+	wait_queue_head_t wait_queue;
+	atomic_t val_signal;
+#endif /* CONFIG_DEBUG_FS */
 };
 
 /**
@@ -304,6 +326,7 @@ struct hw_fence_driver_data {
  * @error: error code for this fence, fence controller receives this
  *		  error from the signaling client through the tx queue and
  *		  propagates the error to the waiting client through rx queue
+ * @timestamp: qtime when the payload is written into the queue
  */
 struct msm_hw_fence_queue_payload {
 	u64 ctxt_id;
@@ -311,7 +334,7 @@ struct msm_hw_fence_queue_payload {
 	u64 hash;
 	u64 flags;
 	u32 error;
-	u32 unused; /* align to 64-bit */
+	u32 timestamp;
 };
 
 /**

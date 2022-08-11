@@ -40,6 +40,15 @@ struct hw_fence_client_ipc_map hw_fence_clients_ipc_map_no_dpu[HW_FENCE_CLIENT_M
 	{HW_FENCE_IPC_CLIENT_ID_APPS, 17, false}, /* ctl3 */
 	{HW_FENCE_IPC_CLIENT_ID_APPS, 18, false}, /* ctl4 */
 	{HW_FENCE_IPC_CLIENT_ID_APPS, 19, false}, /* ctl5 */
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+	{HW_FENCE_IPC_CLIENT_ID_APPS, 21, true}, /* val0 */
+	{HW_FENCE_IPC_CLIENT_ID_APPS, 22, true}, /* val1 */
+	{HW_FENCE_IPC_CLIENT_ID_APPS, 23, true}, /* val2 */
+	{HW_FENCE_IPC_CLIENT_ID_APPS, 24, true}, /* val3 */
+	{HW_FENCE_IPC_CLIENT_ID_APPS, 25, true}, /* val4 */
+	{HW_FENCE_IPC_CLIENT_ID_APPS, 26, true}, /* val5 */
+	{HW_FENCE_IPC_CLIENT_ID_APPS, 27, true}, /* val6 */
+#endif /* CONFIG_DEBUG_FS */
 };
 
 /**
@@ -59,6 +68,15 @@ struct hw_fence_client_ipc_map hw_fence_clients_ipc_map[HW_FENCE_CLIENT_MAX] = {
 	{HW_FENCE_IPC_CLIENT_ID_DPU,  3, false}, /* ctl3 */
 	{HW_FENCE_IPC_CLIENT_ID_DPU,  4, false}, /* ctl4 */
 	{HW_FENCE_IPC_CLIENT_ID_DPU,  5, false}, /* ctl5 */
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+	{HW_FENCE_IPC_CLIENT_ID_APPS, 21, true}, /* val0 */
+	{HW_FENCE_IPC_CLIENT_ID_APPS, 22, true}, /* val1 */
+	{HW_FENCE_IPC_CLIENT_ID_APPS, 23, true}, /* val2 */
+	{HW_FENCE_IPC_CLIENT_ID_APPS, 24, true}, /* val3 */
+	{HW_FENCE_IPC_CLIENT_ID_APPS, 25, true}, /* val4 */
+	{HW_FENCE_IPC_CLIENT_ID_APPS, 26, true}, /* val5 */
+	{HW_FENCE_IPC_CLIENT_ID_APPS, 27, true}, /* val6 */
+#endif /* CONFIG_DEBUG_FS */
 };
 
 int hw_fence_ipcc_get_client_id(struct hw_fence_driver_data *drv_data, u32 client_id)
