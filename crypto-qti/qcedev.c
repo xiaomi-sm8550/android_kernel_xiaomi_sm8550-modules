@@ -37,8 +37,12 @@
 #define CACHE_LINE_SIZE 64
 #define CE_SHA_BLOCK_SIZE SHA256_BLOCK_SIZE
 #define MAX_CEHW_REQ_TRANSFER_SIZE (128*32*1024)
-/* Max wait time once a crypt o request is done */
-#define MAX_CRYPTO_WAIT_TIME 1500
+/*
+ * Max wait time once a crypto request is done.
+ * Assuming 5ms per crypto operation, this is calculated for
+ * the scenario of having 3 offload reqs + 1 tz req + buffer.
+ */
+#define MAX_CRYPTO_WAIT_TIME 25
 
 static uint8_t  _std_init_vector_sha1_uint8[] =   {
 	0x67, 0x45, 0x23, 0x01, 0xEF, 0xCD, 0xAB, 0x89,
@@ -109,7 +113,7 @@ static int qcedev_control_clocks(struct qcedev_control *podev, bool enable)
 			return ret;
 		}
 		ret = icc_set_bw(podev->icc_path,
-				CRYPTO_AVG_BW, CRYPTO_PEAK_BW);
+				podev->icc_avg_bw, podev->icc_peak_bw);
 		if (ret) {
 			pr_err("%s Unable to set high bw\n", __func__);
 			ret = qce_disable_clk(podev->qce);
@@ -120,7 +124,7 @@ static int qcedev_control_clocks(struct qcedev_control *podev, bool enable)
 		break;
 	case QCE_BW_REQUEST_FIRST:
 		ret = icc_set_bw(podev->icc_path,
-				CRYPTO_AVG_BW, CRYPTO_PEAK_BW);
+				podev->icc_avg_bw, podev->icc_peak_bw);
 		if (ret) {
 			pr_err("%s Unable to set high bw\n", __func__);
 			return ret;
@@ -159,7 +163,7 @@ static int qcedev_control_clocks(struct qcedev_control *podev, bool enable)
 		if (ret) {
 			pr_err("%s Unable to disable clk\n", __func__);
 			ret = icc_set_bw(podev->icc_path,
-					CRYPTO_AVG_BW, CRYPTO_PEAK_BW);
+					podev->icc_avg_bw, podev->icc_peak_bw);
 			if (ret)
 				pr_err("%s Unable to set high bw\n", __func__);
 			return ret;
@@ -2156,7 +2160,7 @@ long qcedev_ioctl(struct file *file,
 			err = -EINVAL;
 			goto exit_free_qcedev_areq;
 		}
-
+		qcedev_areq->offload_cipher_op_req.err = QCEDEV_OFFLOAD_NO_ERROR;
 		err = qcedev_smmu_ablk_offload_cipher(qcedev_areq, handle);
 		if (err)
 			goto exit_free_qcedev_areq;
@@ -2491,7 +2495,26 @@ static int qcedev_probe_device(struct platform_device *pdev)
 		goto exit_del_cdev;
 	}
 
-	rc = icc_set_bw(podev->icc_path, CRYPTO_AVG_BW, CRYPTO_PEAK_BW);
+	/*
+	 * HLOS crypto vote values from DTSI. If no values specified, use
+	 * nominal values.
+	 */
+	if (of_property_read_u32((&pdev->dev)->of_node,
+				"qcom,icc_avg_bw",
+				&podev->icc_avg_bw)) {
+		pr_warn("%s: No icc avg BW set, using default\n", __func__);
+		podev->icc_avg_bw = CRYPTO_AVG_BW;
+	}
+
+	if (of_property_read_u32((&pdev->dev)->of_node,
+				"qcom,icc_peak_bw",
+				&podev->icc_peak_bw)) {
+		pr_warn("%s: No icc peak BW set, using default\n", __func__);
+		podev->icc_peak_bw = CRYPTO_PEAK_BW;
+	}
+
+	rc = icc_set_bw(podev->icc_path, podev->icc_avg_bw,
+				podev->icc_peak_bw);
 	if (rc) {
 		pr_err("%s Unable to set high bandwidth\n", __func__);
 		goto exit_unregister_bus_scale;
