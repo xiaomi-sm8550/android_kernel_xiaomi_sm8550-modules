@@ -27,7 +27,6 @@
 
 #include "common.h"
 
-static int secure_zone = 1;
 
 int nfc_parse_dt(struct device *dev, struct platform_configs *nfc_configs,
 		 uint8_t interface)
@@ -131,14 +130,15 @@ int get_valid_gpio(int gpio)
 void gpio_set_ven(struct nfc_dev *nfc_dev, int value)
 {
 	struct platform_gpio *nfc_gpio = &nfc_dev->configs.gpio;
+	if(!nfc_dev->secure_zone) {
+		if (gpio_get_value(nfc_gpio->ven) != value) {
+			pr_debug("%s: value %d\n", __func__, value);
 
-	if (gpio_get_value(nfc_gpio->ven) != value) {
-		pr_debug("%s: value %d\n", __func__, value);
-
-		gpio_set_value(nfc_gpio->ven, value);
-		/* hardware dependent delay */
-		usleep_range(NFC_GPIO_SET_WAIT_TIME_US,
-			     NFC_GPIO_SET_WAIT_TIME_US + 100);
+			gpio_set_value(nfc_gpio->ven, value);
+			/* hardware dependent delay */
+			usleep_range(NFC_GPIO_SET_WAIT_TIME_US,
+					NFC_GPIO_SET_WAIT_TIME_US + 100);
+		}
 	}
 }
 
@@ -407,9 +407,12 @@ long nfc_dev_compat_ioctl(struct file *pfile, unsigned int cmd,
 int nfc_post_init(struct nfc_dev *nfc_dev)
 {
 	int ret=0;
+	static int post_init_success;
 	struct platform_configs nfc_configs;
 	struct platform_gpio *nfc_gpio;
 
+	if(post_init_success)
+		return 0;
 	if (!nfc_dev)
 		return -ENODEV;
 
@@ -449,11 +452,78 @@ int nfc_post_init(struct nfc_dev *nfc_dev)
 	/*Initialising sempahore to disbale NFC Ven GPIO only after eSE is power off flag is set */
 	sema_init(&sem_eSE_pwr_off,0);
 
+	post_init_success = 1;
 	pr_info("%s success\n", __func__);
 	return 0;
 
 
 }
+
+/**
+ * nfc_hw_secure_check() - Checks the NFC secure zone status
+ *
+ * Queries the TZ secure libraries if NFC is in secure zone statue or not.
+ *
+ * Return: 0 if FEATURE_NOT_SUPPORTED/PERIPHERAL_NOT_FOUND/state is 2 and 
+ * return 1(non-secure) otherwise
+ */
+
+ bool nfc_hw_secure_check(void)
+ {
+	struct Object client_env;
+	struct Object app_object;
+	u32 wifi_uid = HW_NFC_UID;
+	union ObjectArg obj_arg[2] = {{{0, 0}}};
+	int ret;
+	bool retstat = 1;
+	u8 state = 0;
+
+	/* get rootObj */
+	ret = get_client_env_object(&client_env);
+	if (ret) {
+		pr_err("Failed to get client_env_object, ret: %d\n", ret);
+		return 1;
+	}
+
+	ret = IClientEnv_open(client_env, HW_STATE_UID, &app_object);
+	if (ret) {
+		pr_debug("Failed to get app_object, ret: %d\n",  ret);
+		if (ret == FEATURE_NOT_SUPPORTED) {
+			retstat = 0; /* Do not Assert */
+			pr_debug("Secure HW feature not supported\n");
+		}
+		goto exit_release_clientenv;
+	}
+
+	obj_arg[0].b = (struct ObjectBuf) {&wifi_uid, sizeof(u32)};
+	obj_arg[1].b = (struct ObjectBuf) {&state, sizeof(u8)};
+	ret = Object_invoke(app_object, HW_OP_GET_STATE, obj_arg,
+			ObjectCounts_pack(1, 1, 0, 0));
+
+	pr_info("SMC invoke ret: %d state: %d\n", ret, state);
+	if (ret) {
+		if (ret == PERIPHERAL_NOT_FOUND) {
+			retstat = 0; /* Do not Assert */
+			pr_debug("Secure HW mode is not updated. Peripheral not found\n");
+		}
+		goto exit_release_app_obj;
+	}
+
+	if (state == 1) {
+		/*Secure Zone*/
+		retstat = 1;
+	} else {
+		/*Non-Secure Zone*/
+		retstat = 0;
+	}
+
+exit_release_app_obj:
+	Object_release(app_object);
+exit_release_clientenv:
+	Object_release(client_env);
+
+	return  retstat;
+ }
 
 /**
  * nfc_dynamic_protection_ioctl() - dynamic protection control
@@ -491,7 +561,7 @@ int nfc_dynamic_protection_ioctl(struct nfc_dev *nfc_dev, unsigned long sec_zone
 			}
 			ret = nfc_ioctl_power_states(nfc_dev, 0);
 			/*set driver as secure zone, such that no ioctl calls are allowed*/
-			secure_zone=1;
+			nfc_dev->secure_zone = true;
 			pr_info("Driver Secure flag set successful\n");
 		} else {
 			ret = -1;
@@ -499,7 +569,7 @@ int nfc_dynamic_protection_ioctl(struct nfc_dev *nfc_dev, unsigned long sec_zone
 	}
 	else if(sec_zone_trans == 0) {
 		chk_eSE_pwr_off = 0;
-		secure_zone=0;
+		nfc_dev->secure_zone = false;
 
 		if(init_flag) {
 			/*Initialize once,only during the  first non-secure entry*/
@@ -508,7 +578,8 @@ int nfc_dynamic_protection_ioctl(struct nfc_dev *nfc_dev, unsigned long sec_zone
 				init_flag=0;
 		}
 		else {
-			ret = nfc_ioctl_power_states(nfc_dev, 1);
+			if(!gpio_get_value(nfc_gpio->ven))
+				ret = nfc_ioctl_power_states(nfc_dev, 1);
 		}
 		pr_info("Func Driver Secure flag clear successful\n");
 	} else {
@@ -541,7 +612,7 @@ long nfc_dev_ioctl(struct file *pfile, unsigned int cmd, unsigned long arg)
 		return -ENODEV;
 
 	/*Avoiding ioctl call in secure zone*/
-	if(secure_zone) {
+	if(nfc_dev->secure_zone) {
 		if(cmd!=NFC_SECURE_ZONE) {
 			pr_debug("nfc_dev_ioctl failed\n");
 			return -1;
@@ -665,10 +736,11 @@ int nfc_dev_close(struct inode *inode, struct file *filp)
 int validate_nfc_state_nci(struct nfc_dev *nfc_dev)
 {
 	struct platform_gpio *nfc_gpio = &nfc_dev->configs.gpio;
-
-	if (!gpio_get_value(nfc_gpio->ven)) {
-		pr_err("%s: ven low - nfcc powered off\n", __func__);
-		return -ENODEV;
+	if(!nfc_dev->secure_zone) {
+		if (!gpio_get_value(nfc_gpio->ven)) {
+			pr_err("%s: ven low - nfcc powered off\n", __func__);
+			return -ENODEV;
+		}
 	}
 	if (get_valid_gpio(nfc_gpio->dwl_req) == 1) {
 		pr_err("%s: fw download in-progress\n", __func__);

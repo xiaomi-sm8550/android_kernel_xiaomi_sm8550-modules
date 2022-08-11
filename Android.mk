@@ -5,6 +5,11 @@ DLKM_DIR          :=  $(TOP)/device/qcom/common/dlkm
 
 LOCAL_PATH        := $(call my-dir)
 
+KBUILD_OPTIONS += KBUILD_EXTRA_SYMBOLS=$(PWD)/$(call intermediates-dir-for,DLKM,sec-module-symvers)/Module.symvers
+
+LOCAL_REQUIRED_MODULES := sec-module-symvers
+LOCAL_ADDITIONAL_DEPENDENCIES += $(call intermediates-dir-for,DLKM,sec-module-symvers)/Module.symvers
+
 include $(CLEAR_VARS)
 
 LOCAL_MODULE      := nxp-nci.ko

@@ -33,6 +33,11 @@
 #include "i2c_drv.h"
 #include "ese_cold_reset.h"
 
+/*secure library headers*/
+#include "smcinvoke.h"
+#include "smcinvoke_object.h"
+#include "IClientEnv.h"
+
 /* Max device count for this driver */
 #define DEV_COUNT			1
 /* i2c device class */
@@ -115,6 +120,13 @@
 #define NFC_VDDIO_MAX		1950000 //in uV
 #define NFC_CURRENT_MAX		157000 //in uA
 
+//NFC ID for registration with secure libraries
+#define HW_STATE_UID		0x108
+#define HW_OP_GET_STATE		1
+#define HW_NFC_UID			0x506
+#define FEATURE_NOT_SUPPORTED	12
+#define PERIPHERAL_NOT_FOUND	10
+
 
 #define NUM_OF_IPC_LOG_PAGES	(2)
 #define PKT_MAX_LEN		(4) // no of max bytes to print for cmd/resp
@@ -134,6 +146,7 @@ do { \
 
 static struct semaphore sem_eSE_pwr_off;
 static chk_eSE_pwr_off;
+
 
 enum ese_ioctl_request {
 	/* eSE POWER ON */
@@ -262,6 +275,9 @@ struct nfc_dev {
 
 	union nqx_uinfo nqx_info;
 
+	/*secure zone state*/
+	bool secure_zone;
+
 	/* CLK control */
 	bool clk_run;
 	struct clk *s_clk;
@@ -305,4 +321,5 @@ int nfc_clock_select(struct nfc_dev *nfc_dev);
 int nfc_clock_deselect(struct nfc_dev *nfc_dev);
 int nfc_post_init(struct nfc_dev *nfc_dev);
 int nfc_dynamic_protection_ioctl(struct nfc_dev *nfc_dev, unsigned long sec_zone_trans);
+bool nfc_hw_secure_check(void);
 #endif /* _COMMON_H_ */
