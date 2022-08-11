@@ -111,6 +111,7 @@ struct cnss_pinctrl_info {
 	struct pinctrl_state *wlan_en_active;
 	struct pinctrl_state *wlan_en_sleep;
 	int bt_en_gpio;
+	int wlan_en_gpio;
 	int xo_clk_gpio; /*qca6490 only */
 	int sw_ctrl_gpio;
 	int wlan_sw_ctrl_gpio;
@@ -320,6 +321,7 @@ enum cnss_driver_state {
 	CNSS_DRIVER_REGISTER,
 	CNSS_WLAN_HW_DISABLED,
 	CNSS_FS_READY = 25,
+	CNSS_DRIVER_REGISTERED,
 };
 
 struct cnss_recovery_data {
