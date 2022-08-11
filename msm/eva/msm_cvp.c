@@ -116,7 +116,7 @@ static int cvp_wait_process_message(struct msm_cvp_inst *inst,
 
 	hdr = (struct cvp_hfi_msg_session_hdr *)&msg->pkt;
 	memcpy(out, &msg->pkt, get_msg_size(hdr));
-	if (hdr->client_data.kdata >= get_pkt_array_size())
+	if (hdr->client_data.kdata >= ARRAY_SIZE(cvp_hfi_defs))
 		msm_cvp_unmap_frame(inst, hdr->client_data.kdata);
 	kmem_cache_free(cvp_driver->msg_cache, msg);
 
@@ -186,6 +186,10 @@ static int msm_cvp_session_process_hfi(
 		signal = cvp_hfi_defs[pkt_idx].resp;
 		is_config_pkt = cvp_hfi_defs[pkt_idx].is_config_pkt;
 	}
+
+	if (is_config_pkt)
+		pr_info(CVP_DBG_TAG "inst %pK config %s\n", "sess",
+			inst, cvp_hfi_defs[pkt_idx].name);
 
 	if (signal == HAL_NO_RESP) {
 		/* Frame packets are not allowed before session starts*/
@@ -469,6 +473,9 @@ static int cvp_fence_proc(struct msm_cvp_inst *inst,
 
 	dprintk(CVP_SYNX, "%s %s\n", current->comm, __func__);
 
+	if (!inst || !inst->core)
+		return -EINVAL;
+
 	hdev = inst->core->device;
 	sq = &inst->session_queue_fence;
 	ktid = pkt->client_data.kdata;
@@ -505,10 +512,10 @@ static int cvp_fence_proc(struct msm_cvp_inst *inst,
 			dprintk(CVP_PWR, "busy cycle %d, total %d\n",
 				fhdr->busy_cycles, fhdr->total_cycles);
 
-			if (core && (core->dyn_clk.sum_fps[HFI_HW_FDU] ||
+			if (core->dyn_clk.sum_fps[HFI_HW_FDU] ||
 				core->dyn_clk.sum_fps[HFI_HW_MPU] ||
 				core->dyn_clk.sum_fps[HFI_HW_OD] ||
-				core->dyn_clk.sum_fps[HFI_HW_ICA])) {
+				core->dyn_clk.sum_fps[HFI_HW_ICA]) {
 				clock_check = true;
 			}
 		} else {
@@ -655,6 +662,7 @@ static int msm_cvp_session_process_hfi_fence(struct msm_cvp_inst *inst,
 	struct cvp_fence_queue *q;
 	u32 *fence;
 	enum op_mode mode;
+	bool is_config_pkt;
 
 	if (!inst || !inst->core || !arg || !inst->core->device) {
 		dprintk(CVP_ERR, "%s: invalid params\n", __func__);
@@ -689,6 +697,8 @@ static int msm_cvp_session_process_hfi_fence(struct msm_cvp_inst *inst,
 		dprintk(CVP_ERR, "%s incorrect packet %d %#x\n", __func__,
 				pkt->size, pkt->packet_type);
 		goto exit;
+	} else {
+		is_config_pkt = cvp_hfi_defs[idx].is_config_pkt;
 	}
 
 	if (in_offset && in_buf_num) {
@@ -700,6 +710,11 @@ static int msm_cvp_session_process_hfi_fence(struct msm_cvp_inst *inst,
 		dprintk(CVP_ERR, "Incorrect buf num and offset in cmd\n");
 		goto exit;
 	}
+
+	if (is_config_pkt)
+		pr_info(CVP_DBG_TAG "inst %pK config %s\n",
+			inst, cvp_hfi_defs[idx].name);
+
 	rc = msm_cvp_map_frame(inst, (struct eva_kmd_hfi_packet *)pkt, offset,
 				buf_num);
 	if (rc)
@@ -1197,8 +1212,8 @@ static int msm_cvp_session_stop(struct msm_cvp_inst *inst,
 	}
 	sq->state = QUEUE_STOP;
 
-	pr_info_ratelimited(CVP_DBG_TAG "Stop session: %pK session_id = %d\n",
-		"sess", inst, hash32_ptr(inst->session));
+	dprintk(CVP_SESS, "Stop session: %pK session_id = %d\n",
+			inst, hash32_ptr(inst->session));
 	spin_unlock(&sq->lock);
 
 	wake_up_all(&inst->session_queue.wq);

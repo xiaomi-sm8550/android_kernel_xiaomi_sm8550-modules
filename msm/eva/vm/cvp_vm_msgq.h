@@ -13,17 +13,22 @@
 
 #define MAX_CVP_IPC_LEN 16
 
+#define CVP_VM_RESPONSE_TIMEOUT			300
+
+#define CVP_IPC_MSG_TYPE_DIR_CHECK	0x10000000	/* direction check */
+#define CVP_IPC_MSG_TYPE_ACT_CHECK	0x00000011  /* action check */
+
 enum CVP_IPC_MSG_TYPE {
-	REQUEST_SESS_CTRL = 0,
-	RELEASE_SESS_CTRL = 1,
-	REQUEST_EVA_RESET = 2,
-	RECLAIM_SESS_CTRL = 3,	/* Only PVM can reclaim sesession control */
-	CVP_MAX_IPC_CMD = 4,
+	REQUEST_SESS_CTRL = 1,
+	RELEASE_SESS_CTRL = 2,
+	REQUEST_EVA_RESET = 3,
+	RECLAIM_SESS_CTRL = 4,	/* Only PVM can reclaim sesession control */
+	CVP_MAX_IPC_CMD = 5,
 };
 
 struct cvp_ipc_msg {
 	/* type format:
-	 *	bit 31: 0->PVM initiated; 1->TVM initiated
+	 *	bit 31: 0->Initiated command; 1->Response to remote command
 	 *	bit 2~0: CVP_IPC_MSG_TYPE
 	 */
 	uint32_t type;

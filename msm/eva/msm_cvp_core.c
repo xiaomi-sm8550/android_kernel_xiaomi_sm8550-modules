@@ -49,16 +49,16 @@ int msm_cvp_private(void *cvp_inst, unsigned int cmd,
 }
 EXPORT_SYMBOL(msm_cvp_private);
 
-static bool msm_cvp_check_for_inst_overload(struct msm_cvp_core *core)
+static bool msm_cvp_check_for_inst_overload(struct msm_cvp_core *core,
+		u32 *instance_count)
 {
-	u32 instance_count = 0;
 	u32 secure_instance_count = 0;
 	struct msm_cvp_inst *inst = NULL;
 	bool overload = false;
 
 	mutex_lock(&core->lock);
 	list_for_each_entry(inst, &core->instances, list) {
-		instance_count++;
+		(*instance_count)++;
 		/* This flag is not updated yet for the current instance */
 		if (inst->flags & CVP_SECURE)
 			secure_instance_count++;
@@ -67,7 +67,7 @@ static bool msm_cvp_check_for_inst_overload(struct msm_cvp_core *core)
 
 	/* Instance count includes current instance as well. */
 
-	if ((instance_count >= core->resources.max_inst_count) ||
+	if ((*instance_count >= core->resources.max_inst_count) ||
 		(secure_instance_count >=
 			core->resources.max_secure_inst_count))
 		overload = true;
@@ -124,12 +124,13 @@ static void __deinit_session_queue(struct msm_cvp_inst *inst)
 	wake_up_all(&inst->session_queue.wq);
 }
 
-void *msm_cvp_open(int core_id, int session_type)
+void *msm_cvp_open(int core_id, int session_type, struct task_struct *task)
 {
 	struct msm_cvp_inst *inst = NULL;
 	struct msm_cvp_core *core = NULL;
 	int rc = 0;
 	int i = 0;
+	u32 instance_count;
 
 	if (core_id >= MSM_CVP_CORES_MAX ||
 			session_type >= MSM_CVP_MAX_DEVICES) {
@@ -150,12 +151,11 @@ void *msm_cvp_open(int core_id, int session_type)
 	}
 
 	core->resources.max_inst_count = MAX_SUPPORTED_INSTANCES;
-	if (msm_cvp_check_for_inst_overload(core)) {
+	if (msm_cvp_check_for_inst_overload(core, &instance_count)) {
 		dprintk(CVP_ERR, "Instance num reached Max, rejecting session");
 		mutex_lock(&core->lock);
 		list_for_each_entry(inst, &core->instances, list)
-			dprintk(CVP_ERR, "inst %pK, id %d\n",
-				inst, hash32_ptr(inst->session));
+			cvp_print_inst(CVP_ERR, inst);
 		mutex_unlock(&core->lock);
 
 		return NULL;
@@ -168,8 +168,9 @@ void *msm_cvp_open(int core_id, int session_type)
 		goto err_invalid_core;
 	}
 
-	pr_info_ratelimited(
-		CVP_DBG_TAG "Opening cvp instance: %pK\n", "sess", inst);
+	pr_info(
+		CVP_DBG_TAG "%s opening cvp instance: %pK type %d cnt %d\n",
+		"sess", task->comm, inst, session_type, instance_count);
 	mutex_init(&inst->sync_lock);
 	mutex_init(&inst->lock);
 	spin_lock_init(&inst->event_handler.lock);
@@ -225,6 +226,7 @@ void *msm_cvp_open(int core_id, int session_type)
 
 	inst->debugfs_root =
 		msm_cvp_debugfs_init_inst(inst, core->debugfs_root);
+	strlcpy(inst->proc_name, task->comm, TASK_COMM_LEN);
 
 	return inst;
 fail_init:
@@ -305,7 +307,7 @@ wait_dsp:
 			(inst->core->resources.msm_cvp_hw_rsp_timeout >> 5)
 			- max_retries);
 	max_retries =  inst->core->resources.msm_cvp_hw_rsp_timeout >> 1;
-wait:
+wait_frame:
 	mutex_lock(&inst->frames.lock);
 	empty = list_empty(&inst->frames.list);
 	if (!empty && max_retries > 0) {
@@ -314,7 +316,7 @@ wait:
 		msm_cvp_clean_sess_queue(inst, sqf);
 		msm_cvp_clean_sess_queue(inst, sq);
 		max_retries--;
-		goto wait;
+		goto wait_frame;
 	}
 	mutex_unlock(&inst->frames.lock);
 
@@ -385,9 +387,11 @@ int msm_cvp_destroy(struct msm_cvp_inst *inst)
 	__deinit_fence_queue(inst);
 	core->synx_ftbl->cvp_sess_deinit_synx(inst);
 
-	pr_info_ratelimited(
-		CVP_DBG_TAG "Closed cvp instance: %pK session_id = %d\n",
-		"sess", inst, hash32_ptr(inst->session));
+	pr_info(
+		CVP_DBG_TAG
+		"%s closed cvp instance: %pK session_id = %d type %d\n",
+		"sess", inst->proc_name, inst, hash32_ptr(inst->session),
+		inst->session_type);
 	inst->session = (void *)0xdeadbeef;
 	kfree(inst);
 	return 0;

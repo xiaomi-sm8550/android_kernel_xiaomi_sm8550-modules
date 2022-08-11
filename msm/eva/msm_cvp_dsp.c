@@ -260,10 +260,6 @@ static int delete_dsp_session(struct msm_cvp_inst *inst,
 
 	mutex_unlock(&buf_list->lock);
 
-	rc = msm_cvp_session_delete(inst);
-	if (rc)
-		dprintk(CVP_ERR, "Warning: send Delete Session failed\n");
-
 	task = inst->task;
 
 	spin_lock(&inst->core->resources.pm_qos.lock);
@@ -318,16 +314,52 @@ static void eva_fastrpc_driver_release_name(
 		DRIVER_NAME_AVAILABLE;
 }
 
+static struct cvp_dsp_fastrpc_driver_entry *dequeue_frpc_node(void)
+{
+	struct cvp_dsp_apps *me = &gfa_cv;
+	struct cvp_dsp_fastrpc_driver_entry *frpc_node = NULL;
+	struct list_head *ptr = NULL, *next = NULL;
+
+	ptr = &me->fastrpc_driver_list.list;
+	mutex_lock(&me->fastrpc_driver_list.lock);
+	list_for_each_safe(ptr, next, &me->fastrpc_driver_list.list) {
+		frpc_node = list_entry(ptr,
+			struct cvp_dsp_fastrpc_driver_entry, list);
+
+		if (frpc_node) {
+			list_del(&frpc_node->list);
+			break;
+		}
+	}
+	mutex_unlock(&me->fastrpc_driver_list.lock);
+	return frpc_node;
+}
+
 static void cvp_dsp_rpmsg_remove(struct rpmsg_device *rpdev)
 {
 	struct cvp_dsp_apps *me = &gfa_cv;
-
 	struct cvp_dsp_fastrpc_driver_entry *frpc_node = NULL;
-	struct list_head *ptr = NULL, *next = NULL;
-	struct list_head *s = NULL, *next_s = NULL;
 	struct msm_cvp_inst *inst = NULL;
+	struct list_head *s = NULL, *next_s = NULL;
+	u32 max_num_retries = 100;
 
 	dprintk(CVP_WARN, "%s: CDSP SSR triggered\n", __func__);
+
+	mutex_lock(&me->rx_lock);
+	while (max_num_retries > 0) {
+		if (me->pending_dsp2cpu_cmd.type !=
+				CVP_INVALID_RPMSG_TYPE) {
+			mutex_unlock(&me->rx_lock);
+			usleep_range(1000, 5000);
+			mutex_lock(&me->rx_lock);
+		} else {
+			break;
+		}
+		max_num_retries--;
+	}
+
+	if (!max_num_retries)
+		dprintk(CVP_ERR, "stuck processing pending DSP cmds\n");
 
 	mutex_lock(&me->tx_lock);
 	cvp_hyp_assign_from_dsp();
@@ -335,41 +367,39 @@ static void cvp_dsp_rpmsg_remove(struct rpmsg_device *rpdev)
 	me->chan = NULL;
 	me->state = DSP_UNINIT;
 	mutex_unlock(&me->tx_lock);
+	mutex_unlock(&me->rx_lock);
 
-	ptr = &me->fastrpc_driver_list.list;
-	mutex_lock(&me->fastrpc_driver_list.lock);
-	list_for_each_safe(ptr, next, &me->fastrpc_driver_list.list) {
-		frpc_node = list_entry(ptr,
-				struct cvp_dsp_fastrpc_driver_entry, list);
-
-		if (frpc_node) {
-			s = &frpc_node->dsp_sessions.list;
-			list_for_each_safe(s, next_s,
-					&frpc_node->dsp_sessions.list) {
-				inst = list_entry(s, struct msm_cvp_inst,
-						dsp_list);
+	while ((frpc_node = dequeue_frpc_node())) {
+		s = &frpc_node->dsp_sessions.list;
+		list_for_each_safe(s, next_s,
+				&frpc_node->dsp_sessions.list) {
+			inst = list_entry(s, struct msm_cvp_inst,
+					dsp_list);
+			if (inst) {
 				delete_dsp_session(inst, frpc_node);
+				mutex_lock(&frpc_node->dsp_sessions.lock);
+				list_del(&inst->dsp_list);
+				frpc_node->session_cnt--;
+				mutex_unlock(&frpc_node->dsp_sessions.lock);
 			}
-
-			dprintk(CVP_DSP, "%s DEINIT_MSM_CVP_LIST 0x%x\n",
-					__func__, frpc_node->dsp_sessions);
-			DEINIT_MSM_CVP_LIST(&frpc_node->dsp_sessions);
-			dprintk(CVP_DSP, "%s list_del fastrpc node 0x%x\n",
-					__func__, frpc_node);
-			list_del(&frpc_node->list);
-			__fastrpc_driver_unregister(
-				&frpc_node->cvp_fastrpc_driver);
-			dprintk(CVP_DSP,
-				"%s Unregistered fastrpc handle 0x%x\n",
-				__func__, frpc_node->handle);
-			mutex_lock(&me->driver_name_lock);
-			eva_fastrpc_driver_release_name(frpc_node);
-			mutex_unlock(&me->driver_name_lock);
-			kfree(frpc_node);
-			frpc_node = NULL;
 		}
+
+		dprintk(CVP_DSP, "%s DEINIT_MSM_CVP_LIST 0x%x\n",
+				__func__, frpc_node->dsp_sessions);
+		DEINIT_MSM_CVP_LIST(&frpc_node->dsp_sessions);
+		dprintk(CVP_DSP, "%s list_del fastrpc node 0x%x\n",
+				__func__, frpc_node);
+		__fastrpc_driver_unregister(
+			&frpc_node->cvp_fastrpc_driver);
+		dprintk(CVP_DSP,
+			"%s Unregistered fastrpc handle 0x%x\n",
+			__func__, frpc_node->handle);
+		mutex_lock(&me->driver_name_lock);
+		eva_fastrpc_driver_release_name(frpc_node);
+		mutex_unlock(&me->driver_name_lock);
+		kfree(frpc_node);
+		frpc_node = NULL;
 	}
-	mutex_unlock(&me->fastrpc_driver_list.lock);
 	dprintk(CVP_WARN, "%s: CDSP SSR handled\n", __func__);
 }
 
@@ -449,6 +479,8 @@ retry:
 		goto fatal_exit;
 
 	if (rsp.ret == CPU2DSP_EFATAL) {
+		dprintk(CVP_ERR, "%s: suspend dsp got EFATAL error\n",
+				__func__);
 		if (!retried) {
 			mutex_unlock(&me->tx_lock);
 			retried = true;
@@ -488,12 +520,50 @@ int cvp_dsp_resume(uint32_t session_flag)
 	 * Probably get rid of this entirely as discussed before
 	 */
 	if (me->state != DSP_SUSPEND)
-		goto exit;
+		dprintk(CVP_WARN, "%s DSP not in SUSPEND state\n", __func__);
 
-	me->state = DSP_READY;
-
-exit:
 	return rc;
+}
+
+static void cvp_remove_dsp_process_sess(
+	struct cvp_dsp_fastrpc_driver_entry *frpc_node)
+{
+	struct msm_cvp_inst *inst = NULL;
+	struct list_head *s = NULL, *next_s = NULL;
+
+	s = &frpc_node->dsp_sessions.list;
+	list_for_each_safe(s, next_s, &frpc_node->dsp_sessions.list) {
+		inst = list_entry(s, struct msm_cvp_inst, dsp_list);
+		delete_dsp_session(inst, frpc_node);
+	}
+}
+
+static void cvp_remove_dsp_sessions(void)
+{
+	struct cvp_dsp_apps *me = &gfa_cv;
+	struct cvp_dsp_fastrpc_driver_entry *frpc_node = NULL;
+	struct list_head *ptr = NULL, *next = NULL;
+
+	dprintk(CVP_WARN, "%s: EVA SSR triggered, clean cdsp eva sessions\n",
+		__func__);
+
+	ptr = &me->fastrpc_driver_list.list;
+	mutex_lock(&me->fastrpc_driver_list.lock);
+	list_for_each_safe(ptr, next, &me->fastrpc_driver_list.list) {
+		frpc_node = list_entry(ptr,
+			struct cvp_dsp_fastrpc_driver_entry, list);
+		if (frpc_node) {
+			cvp_remove_dsp_process_sess(frpc_node);
+			list_del(&frpc_node->list);
+			__fastrpc_driver_unregister(&frpc_node->cvp_fastrpc_driver);
+			mutex_lock(&me->driver_name_lock);
+			eva_fastrpc_driver_release_name(frpc_node);
+			mutex_unlock(&me->driver_name_lock);
+			kfree(frpc_node);
+		}
+	}
+	mutex_unlock(&me->fastrpc_driver_list.lock);
+	dprintk(CVP_WARN, "%s: EVA SSR handled for CDSP\n", __func__);
 }
 
 int cvp_dsp_shutdown(uint32_t session_flag)
@@ -769,6 +839,11 @@ static int __reinit_dsp(void)
 	rc = cvp_dsp_shutdown(flag);
 	if (rc)
 		return rc;
+	/*
+	 * Workaround to force delete DSP session resources
+	 * To be removed after DSP optimization ready
+	 */
+	cvp_remove_dsp_sessions();
 
 	/* Resend HFI queue */
 	mutex_lock(&me->tx_lock);
@@ -1077,8 +1152,8 @@ static int eva_fastrpc_driver_register(uint32_t handle)
 		if (!wait_for_completion_timeout(
 				&frpc_node->fastrpc_probe_completion,
 				msecs_to_jiffies(CVP_DSP_RESPONSE_TIMEOUT))) {
-			dprintk(CVP_ERR, "%s fastrpc driver_register timeout\n",
-				__func__);
+			dprintk(CVP_ERR, "%s fastrpc driver_register timeout %#x\n",
+				__func__, frpc_node->handle);
 			skip_deregister = false;
 			goto fail_fastrpc_driver_register;
 		}
@@ -1317,14 +1392,31 @@ static void __dsp_cvp_sess_create(struct cvp_dsp_cmd_msg *cmd)
 		dsp2cpu_cmd->is_secure,
 		dsp2cpu_cmd->pid);
 
-	rc = eva_fastrpc_driver_register(dsp2cpu_cmd->pid);
-	if (rc) {
-		dprintk(CVP_ERR, "%s Register fastrpc driver fail\n", __func__);
+	pid_s = find_get_pid(dsp2cpu_cmd->pid);
+	if (pid_s == NULL) {
+		dprintk(CVP_WARN, "%s incorrect pid\n", __func__);
+		cmd->ret = -1;
+		return;
+	}
+	dprintk(CVP_DSP, "%s get pid_s 0x%x from pidA 0x%x\n", __func__,
+			pid_s, dsp2cpu_cmd->pid);
+
+	task = get_pid_task(pid_s, PIDTYPE_TGID);
+	if (!task) {
+		dprintk(CVP_WARN, "%s task doesn't exist\n", __func__);
 		cmd->ret = -1;
 		return;
 	}
 
-	inst = msm_cvp_open(MSM_CORE_CVP, MSM_CVP_DSP);
+	rc = eva_fastrpc_driver_register(dsp2cpu_cmd->pid);
+	if (rc) {
+		dprintk(CVP_ERR, "%s Register fastrpc driver fail\n", __func__);
+		put_task_struct(task);
+		cmd->ret = -1;
+		return;
+	}
+
+	inst = msm_cvp_open(MSM_CORE_CVP, MSM_CVP_DSP, task);
 	if (!inst) {
 		dprintk(CVP_ERR, "%s Failed create instance\n", __func__);
 		goto fail_msm_cvp_open;
@@ -1360,20 +1452,6 @@ static void __dsp_cvp_sess_create(struct cvp_dsp_cmd_msg *cmd)
 	if (frpc_node)
 		eva_fastrpc_driver_add_sess(frpc_node, inst);
 
-	pid_s = find_get_pid(inst->process_id);
-	if (pid_s == NULL) {
-		dprintk(CVP_WARN, "%s incorrect pid\n", __func__);
-		goto fail_get_pid;
-	}
-	dprintk(CVP_DSP, "%s get pid_s 0x%x from pidA 0x%x\n", __func__,
-			pid_s, inst->process_id);
-
-	task = get_pid_task(pid_s, PIDTYPE_TGID);
-	if (!task) {
-		dprintk(CVP_WARN, "%s task doesn't exist\n", __func__);
-		goto fail_get_task;
-	}
-
 	inst->task = task;
 	dprintk(CVP_DSP,
 		"%s CREATE_SESS id 0x%x, cpu_low 0x%x, cpu_high 0x%x\n",
@@ -1388,14 +1466,13 @@ static void __dsp_cvp_sess_create(struct cvp_dsp_cmd_msg *cmd)
 
 	return;
 
-fail_get_pid:
-fail_get_task:
 fail_get_session_info:
 fail_session_create:
 	msm_cvp_close(inst);
 fail_msm_cvp_open:
 	/* unregister fastrpc driver */
 	eva_fastrpc_driver_unregister(dsp2cpu_cmd->pid, false);
+	put_task_struct(task);
 	cmd->ret = -1;
 }
 
@@ -1431,13 +1508,6 @@ static void __dsp_cvp_sess_delete(struct cvp_dsp_cmd_msg *cmd)
 			dsp2cpu_cmd->session_cpu_low);
 	if (!inst || !is_cvp_inst_valid(inst)) {
 		dprintk(CVP_ERR, "%s incorrect session ID\n", __func__);
-		cmd->ret = -1;
-		goto dsp_fail_delete;
-	}
-
-	rc = msm_cvp_session_delete(inst);
-	if (rc) {
-		dprintk(CVP_ERR, "Warning: send Delete Session failed\n");
 		cmd->ret = -1;
 		goto dsp_fail_delete;
 	}
@@ -1767,8 +1837,6 @@ static void __dsp_cvp_mem_free(struct cvp_dsp_cmd_msg *cmd)
 	mutex_lock(&buf_list->lock);
 	list_for_each_safe(ptr, next, &buf_list->list) {
 		buf = list_entry(ptr, struct cvp_internal_buf, list);
-		dprintk(CVP_DSP, "fd in list 0x%x, fd from dsp 0x%x\n",
-					buf->fd, dsp2cpu_cmd->sbuf.fd);
 
 		if (!buf->smem) {
 			dprintk(CVP_DSP, "Empyt smem\n");
@@ -1779,6 +1847,8 @@ static void __dsp_cvp_mem_free(struct cvp_dsp_cmd_msg *cmd)
 		if (buf->smem->device_addr == dsp2cpu_cmd->sbuf.iova) {
 			dprintk(CVP_DSP, "%s find device addr 0x%x\n",
 				__func__, buf->smem->device_addr);
+			dprintk(CVP_DSP, "fd in list 0x%x, fd from dsp 0x%x\n",
+				buf->fd, dsp2cpu_cmd->sbuf.fd);
 
 			rc = eva_fastrpc_dev_unmap_dma(frpc_device, buf);
 			if (rc) {
@@ -1853,6 +1923,11 @@ wait_dsp:
 		dprintk(CVP_WARN, "%s received interrupt signal\n", __func__);
 	} else {
 		mutex_lock(&me->rx_lock);
+		if (me->state == DSP_UNINIT) {
+			/* DSP SSR may have happened */
+			mutex_unlock(&me->rx_lock);
+			goto wait_dsp;
+		}
 		switch (me->pending_dsp2cpu_cmd.type) {
 		case DSP2CPU_POWERON:
 		{
