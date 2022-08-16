@@ -12,6 +12,7 @@
 #include "cvp_hfi.h"
 #include "cvp_dump.h"
 
+static atomic_t nr_maps;
 struct cvp_dsp_apps gfa_cv;
 static int hlosVM[HLOS_VM_NUM] = {VMID_HLOS};
 static int dspVM[DSP_VM_NUM] = {VMID_HLOS, VMID_CDSP_Q6};
@@ -256,7 +257,7 @@ static int delete_dsp_session(struct msm_cvp_inst *inst,
 
 			list_del(&buf->list);
 
-			kmem_cache_free(cvp_driver->buf_cache, buf);
+			cvp_kmem_cache_free(&cvp_driver->buf_cache, buf);
 		}
 	}
 
@@ -428,7 +429,8 @@ static void cvp_dsp_rpmsg_remove(struct rpmsg_device *rpdev)
 
 	cvp_remove_dsp_sessions();
 
-	dprintk(CVP_WARN, "%s: CDSP SSR handled\n", __func__);
+	dprintk(CVP_WARN, "%s: CDSP SSR handled nr_maps %d\n", __func__,
+			atomic_read(&nr_maps));
 }
 
 static int cvp_dsp_rpmsg_callback(struct rpmsg_device *rpdev,
@@ -524,6 +526,7 @@ retry:
 	}
 
 	me->state = DSP_SUSPEND;
+	dprintk(CVP_DSP, "DSP suspended, nr_map: %d\n", atomic_read(&nr_maps));
 	goto exit;
 
 fatal_exit:
@@ -874,6 +877,9 @@ static int __reinit_dsp(void)
 	 */
 	cvp_remove_dsp_sessions();
 
+	dprintk(CVP_WARN, "Reinit EVA DSP interface: nr_map %d\n",
+			atomic_read(&nr_maps));
+
 	/* Resend HFI queue */
 	mutex_lock(&me->tx_lock);
 	if (!device->dsp_iface_q_table.align_virtual_addr) {
@@ -1029,6 +1035,7 @@ static int eva_fastrpc_dev_map_dma(struct fastrpc_device *frpc_device,
 		}
 		buf->fd = (s32)frpc_map_buf.v_dsp_addr;
 		*v_dsp_addr = frpc_map_buf.v_dsp_addr;
+		atomic_inc(&nr_maps);
 	} else {
 		dprintk(CVP_DSP, "%s Buffer not mapped to dsp\n", __func__);
 		buf->fd = 0;
@@ -1053,6 +1060,8 @@ static int eva_fastrpc_dev_unmap_dma(struct fastrpc_device *frpc_device,
 				__func__, rc);
 			return rc;
 		}
+		if (atomic_read(&nr_maps) > 0)
+			atomic_dec(&nr_maps);
 	} else {
 		dprintk(CVP_DSP, "%s buffer not mapped to dsp\n", __func__);
 	}
@@ -1581,7 +1590,8 @@ static void __dsp_cvp_sess_delete(struct cvp_dsp_cmd_msg *cmd)
 	if (task)
 		put_task_struct(task);
 
-	dprintk(CVP_DSP, "%s DSP2CPU_DETELE_SESSION Done\n", __func__);
+	dprintk(CVP_DSP, "%s DSP2CPU_DETELE_SESSION Done, nr_maps %d\n",
+			__func__, atomic_read(&nr_maps));
 dsp_fail_delete:
 	return;
 }
@@ -1786,7 +1796,7 @@ static void __dsp_cvp_mem_alloc(struct cvp_dsp_cmd_msg *cmd)
 			dsp2cpu_cmd->session_cpu_high,
 			dsp2cpu_cmd->session_cpu_low);
 
-	buf = kmem_cache_zalloc(cvp_driver->buf_cache, GFP_KERNEL);
+	buf = cvp_kmem_cache_zalloc(&cvp_driver->buf_cache, GFP_KERNEL);
 	if (!buf)
 		goto fail_kzalloc_buf;
 
@@ -1827,7 +1837,7 @@ static void __dsp_cvp_mem_alloc(struct cvp_dsp_cmd_msg *cmd)
 fail_fastrpc_dev_map_dma:
 	cvp_release_dsp_buffers(inst, buf);
 fail_allocate_dsp_buf:
-	kmem_cache_free(cvp_driver->buf_cache, buf);
+	cvp_kmem_cache_free(&cvp_driver->buf_cache, buf);
 fail_kzalloc_buf:
 fail_fastrpc_node:
 	cmd->ret = -1;
@@ -1914,7 +1924,7 @@ static void __dsp_cvp_mem_free(struct cvp_dsp_cmd_msg *cmd)
 
 			list_del(&buf->list);
 
-			kmem_cache_free(cvp_driver->buf_cache, buf);
+			cvp_kmem_cache_free(&cvp_driver->buf_cache, buf);
 			break;
 		}
 	}

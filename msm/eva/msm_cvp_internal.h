@@ -141,6 +141,11 @@ struct msm_cvp_platform_data {
 	struct msm_cvp_qos_setting *noc_qos;
 };
 
+struct cvp_kmem_cache {
+	struct kmem_cache *cache;
+	atomic_t nr_objs;
+};
+
 struct msm_cvp_drv {
 	struct mutex lock;
 	struct list_head cores;
@@ -148,10 +153,10 @@ struct msm_cvp_drv {
 	struct dentry *debugfs_root;
 	int thermal_level;
 	u32 sku_version;
-	struct kmem_cache *msg_cache;
-	struct kmem_cache *frame_cache;
-	struct kmem_cache *buf_cache;
-	struct kmem_cache *smem_cache;
+	struct cvp_kmem_cache msg_cache;
+	struct cvp_kmem_cache frame_cache;
+	struct cvp_kmem_cache buf_cache;
+	struct cvp_kmem_cache smem_cache;
 	char fw_version[CVP_VERSION_LENGTH];
 };
 
@@ -432,4 +437,6 @@ void msm_cvp_ssr_handler(struct work_struct *work);
  */
 int msm_cvp_destroy(struct msm_cvp_inst *inst);
 void *cvp_get_drv_data(struct device *dev);
+void *cvp_kmem_cache_zalloc(struct cvp_kmem_cache *k, gfp_t flags);
+void cvp_kmem_cache_free(struct cvp_kmem_cache *k, void *obj);
 #endif

@@ -285,13 +285,13 @@ int msm_cvp_map_buf_dsp(struct msm_cvp_inst *inst, struct eva_kmd_buffer *buf)
 
 	dprintk(CVP_MEM, "dma_buf from internal %llu\n", dma_buf);
 
-	cbuf = kmem_cache_zalloc(cvp_driver->buf_cache, GFP_KERNEL);
+	cbuf = cvp_kmem_cache_zalloc(&cvp_driver->buf_cache, GFP_KERNEL);
 	if (!cbuf) {
 		rc = -ENOMEM;
 		goto exit;
 	}
 
-	smem = kmem_cache_zalloc(cvp_driver->smem_cache, GFP_KERNEL);
+	smem = cvp_kmem_cache_zalloc(&cvp_driver->smem_cache, GFP_KERNEL);
 	if (!smem) {
 		rc = -ENOMEM;
 		goto exit;
@@ -329,10 +329,10 @@ exit:
 		if (smem->device_addr)
 			msm_cvp_unmap_smem(inst, smem, "unmap dsp");
 		msm_cvp_smem_put_dma_buf(smem->dma_buf);
-		kmem_cache_free(cvp_driver->smem_cache, smem);
+		cvp_kmem_cache_free(&cvp_driver->smem_cache, smem);
 	}
 	if (cbuf)
-		kmem_cache_free(cvp_driver->buf_cache, cbuf);
+		cvp_kmem_cache_free(&cvp_driver->buf_cache, cbuf);
 	return rc;
 }
 
@@ -377,8 +377,8 @@ int msm_cvp_unmap_buf_dsp(struct msm_cvp_inst *inst, struct eva_kmd_buffer *buf)
 	list_del(&cbuf->list);
 	mutex_unlock(&inst->cvpdspbufs.lock);
 
-	kmem_cache_free(cvp_driver->smem_cache, cbuf->smem);
-	kmem_cache_free(cvp_driver->buf_cache, cbuf);
+	cvp_kmem_cache_free(&cvp_driver->smem_cache, cbuf->smem);
+	cvp_kmem_cache_free(&cvp_driver->buf_cache, cbuf);
 	return rc;
 }
 
@@ -443,15 +443,15 @@ int msm_cvp_map_buf_wncc(struct msm_cvp_inst *inst,
 		return -EINVAL;
 	}
 
-	cbuf = kmem_cache_zalloc(cvp_driver->buf_cache, GFP_KERNEL);
+	cbuf = cvp_kmem_cache_zalloc(&cvp_driver->buf_cache, GFP_KERNEL);
 	if (!cbuf) {
 		msm_cvp_smem_put_dma_buf(dma_buf);
 		return -ENOMEM;
 	}
 
-	smem = kmem_cache_zalloc(cvp_driver->smem_cache, GFP_KERNEL);
+	smem = cvp_kmem_cache_zalloc(&cvp_driver->smem_cache, GFP_KERNEL);
 	if (!smem) {
-		kmem_cache_free(cvp_driver->buf_cache, cbuf);
+		cvp_kmem_cache_free(&cvp_driver->buf_cache, cbuf);
 		msm_cvp_smem_put_dma_buf(dma_buf);
 		return -ENOMEM;
 	}
@@ -536,9 +536,9 @@ exit:
 	if (smem->device_addr)
 		msm_cvp_unmap_smem(inst, smem, "unmap wncc");
 	msm_cvp_smem_put_dma_buf(smem->dma_buf);
-	kmem_cache_free(cvp_driver->buf_cache, cbuf);
+	cvp_kmem_cache_free(&cvp_driver->buf_cache, cbuf);
 	cbuf = NULL;
-	kmem_cache_free(cvp_driver->smem_cache, smem);
+	cvp_kmem_cache_free(&cvp_driver->smem_cache, smem);
 	smem = NULL;
 	return rc;
 }
@@ -625,8 +625,8 @@ int msm_cvp_unmap_buf_wncc(struct msm_cvp_inst *inst,
 	}
 	mutex_unlock(&inst->cvpwnccbufs.lock);
 
-	kmem_cache_free(cvp_driver->smem_cache, cbuf->smem);
-	kmem_cache_free(cvp_driver->buf_cache, cbuf);
+	cvp_kmem_cache_free(&cvp_driver->smem_cache, cbuf->smem);
+	cvp_kmem_cache_free(&cvp_driver->buf_cache, cbuf);
 	return rc;
 }
 
@@ -1121,7 +1121,7 @@ static int msm_cvp_session_add_smem(struct msm_cvp_inst *inst,
 			smem2 = inst->dma_cache.entries[i];
 			msm_cvp_unmap_smem(inst, smem2, "unmap cpu");
 			msm_cvp_smem_put_dma_buf(smem2->dma_buf);
-			kmem_cache_free(cvp_driver->smem_cache, smem2);
+			cvp_kmem_cache_free(&cvp_driver->smem_cache, smem2);
 
 			inst->dma_cache.entries[i] = smem;
 			smem->bitmap_index = i;
@@ -1163,7 +1163,7 @@ static struct msm_cvp_smem *msm_cvp_session_get_smem(struct msm_cvp_inst *inst,
 	}
 
 	if (is_persist) {
-		smem = kmem_cache_zalloc(cvp_driver->smem_cache, GFP_KERNEL);
+		smem = cvp_kmem_cache_zalloc(&cvp_driver->smem_cache, GFP_KERNEL);
 		if (!smem)
 			return NULL;
 
@@ -1187,7 +1187,7 @@ static struct msm_cvp_smem *msm_cvp_session_get_smem(struct msm_cvp_inst *inst,
 	smem = msm_cvp_session_find_smem(inst, dma_buf, pkt_type);
 	if (!smem) {
 		found = 0;
-		smem = kmem_cache_zalloc(cvp_driver->smem_cache, GFP_KERNEL);
+		smem = cvp_kmem_cache_zalloc(&cvp_driver->smem_cache, GFP_KERNEL);
 		if (!smem)
 			return NULL;
 
@@ -1227,7 +1227,7 @@ exit2:
 	msm_cvp_unmap_smem(inst, smem, "unmap cpu");
 exit:
 	msm_cvp_smem_put_dma_buf(dma_buf);
-	kmem_cache_free(cvp_driver->smem_cache, smem);
+	cvp_kmem_cache_free(&cvp_driver->smem_cache, smem);
 	smem = NULL;
 	return smem;
 }
@@ -1272,7 +1272,7 @@ static u32 msm_cvp_map_user_persist_buf(struct msm_cvp_inst *inst,
 
 	dma_buf_put(dma_buf);
 
-	pbuf = kmem_cache_zalloc(cvp_driver->buf_cache, GFP_KERNEL);
+	pbuf = cvp_kmem_cache_zalloc(&cvp_driver->buf_cache, GFP_KERNEL);
 	if (!pbuf) {
 		dprintk(CVP_ERR, "%s failed to allocate kmem obj\n",
 			__func__);
@@ -1302,7 +1302,7 @@ static u32 msm_cvp_map_user_persist_buf(struct msm_cvp_inst *inst,
 	return iova;
 
 exit:
-	kmem_cache_free(cvp_driver->buf_cache, pbuf);
+	cvp_kmem_cache_free(&cvp_driver->buf_cache, pbuf);
 	return 0;
 }
 
@@ -1370,7 +1370,7 @@ static void msm_cvp_unmap_frame_buf(struct msm_cvp_inst *inst,
 			msm_cvp_unmap_smem(inst, smem, "unmap cpu");
 			dma_heap_buffer_free(smem->dma_buf);
 			smem->pkt_type = smem->buf_idx = 0;
-			kmem_cache_free(cvp_driver->smem_cache, smem);
+			cvp_kmem_cache_free(&cvp_driver->smem_cache, smem);
 			buf->smem = NULL;
 		} else {
 			mutex_lock(&inst->dma_cache.lock);
@@ -1384,7 +1384,7 @@ static void msm_cvp_unmap_frame_buf(struct msm_cvp_inst *inst,
 		}
 	}
 
-	kmem_cache_free(cvp_driver->frame_cache, frame);
+	cvp_kmem_cache_free(&cvp_driver->frame_cache, frame);
 }
 
 void msm_cvp_unmap_frame(struct msm_cvp_inst *inst, u64 ktid)
@@ -1479,7 +1479,7 @@ int msm_cvp_map_frame(struct msm_cvp_inst *inst,
 	ktid &= (FENCE_BIT - 1);
 	cmd_hdr->client_data.kdata = ktid;
 
-	frame = kmem_cache_zalloc(cvp_driver->frame_cache, GFP_KERNEL);
+	frame = cvp_kmem_cache_zalloc(&cvp_driver->frame_cache, GFP_KERNEL);
 	if (!frame)
 		return -ENOMEM;
 
@@ -1542,7 +1542,7 @@ int msm_cvp_session_deinit_buffers(struct msm_cvp_inst *inst)
 		}
 		msm_cvp_unmap_smem(inst, smem, "unmap cpu");
 		msm_cvp_smem_put_dma_buf(smem->dma_buf);
-		kmem_cache_free(cvp_driver->smem_cache, smem);
+		cvp_kmem_cache_free(&cvp_driver->smem_cache, smem);
 		inst->dma_cache.entries[i] = NULL;
 	}
 	mutex_unlock(&inst->dma_cache.lock);
@@ -1575,7 +1575,7 @@ int msm_cvp_session_deinit_buffers(struct msm_cvp_inst *inst)
 					__func__, rc);
 		}
 		list_del(&cbuf->list);
-		kmem_cache_free(cvp_driver->buf_cache, cbuf);
+		cvp_kmem_cache_free(&cvp_driver->buf_cache, cbuf);
 	}
 	mutex_unlock(&inst->cvpdspbufs.lock);
 
@@ -1669,13 +1669,13 @@ struct cvp_internal_buf *cvp_allocate_arp_bufs(struct msm_cvp_inst *inst,
 	 */
 	 smem_flags |= SMEM_SECURE | SMEM_NON_PIXEL;
 
-	buf = kmem_cache_zalloc(cvp_driver->buf_cache, GFP_KERNEL);
+	buf = cvp_kmem_cache_zalloc(&cvp_driver->buf_cache, GFP_KERNEL);
 	if (!buf) {
 		dprintk(CVP_ERR, "%s Out of memory\n", __func__);
 		goto fail_kzalloc;
 	}
 
-	buf->smem = kmem_cache_zalloc(cvp_driver->smem_cache, GFP_KERNEL);
+	buf->smem = cvp_kmem_cache_zalloc(&cvp_driver->smem_cache, GFP_KERNEL);
 	if (!buf->smem) {
 		dprintk(CVP_ERR, "%s Out of memory\n", __func__);
 		goto fail_kzalloc;
@@ -1702,7 +1702,7 @@ struct cvp_internal_buf *cvp_allocate_arp_bufs(struct msm_cvp_inst *inst,
 	return buf;
 
 err_no_mem:
-	kmem_cache_free(cvp_driver->buf_cache, buf);
+	cvp_kmem_cache_free(&cvp_driver->buf_cache, buf);
 fail_kzalloc:
 	return NULL;
 }
@@ -1777,10 +1777,10 @@ int cvp_release_arp_buffers(struct msm_cvp_inst *inst)
 
 		atomic_dec(&smem->refcount);
 		msm_cvp_smem_free(smem);
-		kmem_cache_free(cvp_driver->smem_cache, smem);
+		cvp_kmem_cache_free(&cvp_driver->smem_cache, smem);
 
 		buf->smem = NULL;
-		kmem_cache_free(cvp_driver->buf_cache, buf);
+		cvp_kmem_cache_free(&cvp_driver->buf_cache, buf);
 	}
 	mutex_unlock(&inst->persistbufs.lock);
 	return rc;
@@ -1821,7 +1821,7 @@ int cvp_allocate_dsp_bufs(struct msm_cvp_inst *inst,
 	}
 
 	dprintk(CVP_MEM, "%s smem_flags 0x%x\n", __func__, smem_flags);
-	buf->smem = kmem_cache_zalloc(cvp_driver->smem_cache, GFP_KERNEL);
+	buf->smem = cvp_kmem_cache_zalloc(&cvp_driver->smem_cache, GFP_KERNEL);
 	if (!buf->smem) {
 		dprintk(CVP_ERR, "%s Out of memory\n", __func__);
 		goto fail_kzalloc_smem_cache;
@@ -1846,7 +1846,7 @@ int cvp_allocate_dsp_bufs(struct msm_cvp_inst *inst,
 	return rc;
 
 err_no_mem:
-	kmem_cache_free(cvp_driver->smem_cache, buf->smem);
+	cvp_kmem_cache_free(&cvp_driver->smem_cache, buf->smem);
 fail_kzalloc_smem_cache:
 	return rc;
 }
@@ -1880,7 +1880,7 @@ int cvp_release_dsp_buffers(struct msm_cvp_inst *inst,
 			smem->dma_buf->name, buf->size);
 		atomic_dec(&smem->refcount);
 		msm_cvp_smem_free(smem);
-		kmem_cache_free(cvp_driver->smem_cache, smem);
+		cvp_kmem_cache_free(&cvp_driver->smem_cache, smem);
 	} else {
 		dprintk(CVP_ERR,
 			"%s: wrong owner %d %x : fd %x %s size %d",
