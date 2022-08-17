@@ -3,7 +3,6 @@
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
-#if !IS_ENABLED(CONFIG_QSEECOM)
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/fdtable.h>
@@ -14,12 +13,15 @@
 #include <linux/firmware.h>
 #include <linux/elf.h>
 #include "smcinvoke.h"
-#include "linux/qseecom.h"
 #include "smcinvoke_object.h"
+#include "IClientEnv.h"
+
+#if !IS_ENABLED(CONFIG_QSEECOM)
+#include "linux/qseecom.h"
 #include "misc/qseecom_kernel.h"
 #include "IQSEEComCompat.h"
 #include "IQSEEComCompatAppLoader.h"
-#include "IClientEnv.h"
+#endif
 
 const uint32_t CQSEEComCompatAppLoader_UID = 122;
 
@@ -301,6 +303,8 @@ int32_t get_client_env_object(struct Object *clientEnvObj)
 	return ret;
 }
 EXPORT_SYMBOL(get_client_env_object);
+
+#if !IS_ENABLED(CONFIG_QSEECOM)
 
 static int load_app(struct qseecom_compat_context *cxt, const char *app_name)
 {
