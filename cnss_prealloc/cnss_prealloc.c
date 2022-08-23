@@ -195,8 +195,7 @@ void *wcnss_prealloc_get(size_t size)
 	gfp_t gfp_mask = __GFP_ZERO;
 	int i;
 
-	if (in_interrupt() || irqs_disabled() ||
-	    in_atomic() || rcu_preempt_depth())
+	if (in_interrupt() || !preemptible() || rcu_preempt_depth())
 		gfp_mask |= GFP_ATOMIC;
 	else
 		gfp_mask |= GFP_KERNEL;
