@@ -1291,13 +1291,29 @@ int hw_fence_process_fence(struct hw_fence_driver_data *drv_data,
 	return ret;
 }
 
+static void _signal_all_wait_clients(struct hw_fence_driver_data *drv_data,
+	struct msm_hw_fence *hw_fence, u64 hash, int error)
+{
+	enum hw_fence_client_id wait_client_id;
+	struct msm_hw_fence_client *hw_fence_wait_client;
+
+	/* signal with an error all the waiting clients for this fence */
+	for (wait_client_id = 0; wait_client_id < HW_FENCE_CLIENT_MAX; wait_client_id++) {
+		if (hw_fence->wait_client_mask & BIT(wait_client_id)) {
+			hw_fence_wait_client = drv_data->clients[wait_client_id];
+
+			if (hw_fence_wait_client)
+				_fence_ctl_signal(drv_data, hw_fence_wait_client, hw_fence,
+					hash, 0, error);
+		}
+	}
+}
+
 int hw_fence_utils_cleanup_fence(struct hw_fence_driver_data *drv_data,
 	struct msm_hw_fence_client *hw_fence_client, struct msm_hw_fence *hw_fence, u64 hash,
 	u32 reset_flags)
 {
 	int ret = 0;
-	enum hw_fence_client_id wait_client_id;
-	struct msm_hw_fence_client *hw_fence_wait_client;
 	int error = (reset_flags & MSM_HW_FENCE_RESET_WITHOUT_ERROR) ? 0 : MSM_HW_FENCE_ERROR_RESET;
 
 	GLOBAL_ATOMIC_STORE(&hw_fence->lock, 1); /* lock */
@@ -1314,16 +1330,9 @@ int hw_fence_utils_cleanup_fence(struct hw_fence_driver_data *drv_data,
 
 	if (hw_fence->fence_allocator == hw_fence_client->client_id) {
 
-		/* signal with an error all the waiting clients for this fence */
-		for (wait_client_id = 0; wait_client_id < HW_FENCE_CLIENT_MAX; wait_client_id++) {
-			if (hw_fence->wait_client_mask & BIT(wait_client_id)) {
-				hw_fence_wait_client = drv_data->clients[wait_client_id];
-
-				if (hw_fence_wait_client)
-					_fence_ctl_signal(drv_data, hw_fence_wait_client, hw_fence,
-						hash, 0, error);
-			}
-		}
+		/* if fence is not signaled, signal with error all the waiting clients */
+		if (!(hw_fence->flags & MSM_HW_FENCE_FLAG_SIGNAL))
+			_signal_all_wait_clients(drv_data, hw_fence, hash, error);
 
 		if (reset_flags & MSM_HW_FENCE_RESET_WITHOUT_DESTROY)
 			goto skip_destroy;
