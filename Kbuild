@@ -6,8 +6,8 @@ ifneq ($(CONFIG_ARCH_QTI_VM), y)
     include $(SSG_MODULE_ROOT)/config/sec-kernel_defconfig.conf
 endif
 
-#Enable Qseecom if CONFIG_ARCH_KHAJE OR CONFIG_ARCH_KHAJE is set to y
-ifneq (, $(filter y, $(CONFIG_ARCH_KHAJE) $(CONFIG_ARCH_SA8155)))
+#Enable Qseecom if CONFIG_ARCH_KHAJE OR CONFIG_ARCH_KHAJE or CONFIG_QTI_QUIN_GVM is set to y
+ifneq (, $(filter y, $(CONFIG_QTI_QUIN_GVM) $(CONFIG_ARCH_KHAJE) $(CONFIG_ARCH_SA8155)))
     include $(SSG_MODULE_ROOT)/config/sec-kernel_defconfig_qseecom.conf
     LINUXINCLUDE += -include $(SSG_MODULE_ROOT)/config/sec-kernel_defconfig_qseecom.h
 
