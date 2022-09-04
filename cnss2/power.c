@@ -69,6 +69,7 @@ static struct cnss_clk_cfg cnss_clk_list[] = {
 #define WLAN_SW_CTRL_GPIO		"qcom,wlan-sw-ctrl-gpio"
 #define WLAN_EN_ACTIVE			"wlan_en_active"
 #define WLAN_EN_SLEEP			"wlan_en_sleep"
+#define WLAN_VREGS_PROP			"wlan_vregs"
 
 #define BOOTSTRAP_DELAY			1000
 #define WLAN_ENABLE_DELAY		1000
@@ -131,8 +132,11 @@ static int cnss_get_vreg_single(struct cnss_plat_data *plat_priv,
 	const __be32 *prop;
 	char prop_name[MAX_PROP_SIZE] = {0};
 	int len;
+	struct device_node *dt_node;
 
 	dev = &plat_priv->plat_dev->dev;
+	dt_node = (plat_priv->dev_node ? plat_priv->dev_node : dev->of_node);
+
 	reg = devm_regulator_get_optional(dev, vreg->cfg.name);
 	if (IS_ERR(reg)) {
 		ret = PTR_ERR(reg);
@@ -152,7 +156,7 @@ static int cnss_get_vreg_single(struct cnss_plat_data *plat_priv,
 	snprintf(prop_name, MAX_PROP_SIZE, "qcom,%s-config",
 		 vreg->cfg.name);
 
-	prop = of_get_property(dev->of_node, prop_name, &len);
+	prop = of_get_property(dt_node, prop_name, &len);
 	if (!prop || len != (5 * sizeof(__be32))) {
 		cnss_pr_dbg("Property %s %s, use default\n", prop_name,
 			    prop ? "invalid format" : "doesn't exist");
@@ -315,6 +319,16 @@ static struct cnss_vreg_cfg *get_vreg_list(u32 *vreg_list_size,
 	}
 }
 
+/*
+ * For multi-exchg dt node, get the required vregs' names from property
+ * 'wlan_vregs', which is string array;
+ *
+ * if the property is present but no value is set, then no additional wlan
+ * verg is required.
+ *
+ * For non-multi-exchg dt, go through all vregs in the static array
+ * 'cnss_vreg_list'.
+ */
 static int cnss_get_vreg(struct cnss_plat_data *plat_priv,
 			 struct list_head *vreg_list,
 			 struct cnss_vreg_cfg *vreg_cfg,
@@ -324,18 +338,53 @@ static int cnss_get_vreg(struct cnss_plat_data *plat_priv,
 	int i;
 	struct cnss_vreg_info *vreg;
 	struct device *dev = &plat_priv->plat_dev->dev;
+	int id_n;
+	struct device_node *dt_node;
 
-	if (!list_empty(vreg_list)) {
+	if (!list_empty(vreg_list) &&
+	    (plat_priv->dt_type != CNSS_DTT_MULTIEXCHG)) {
 		cnss_pr_dbg("Vregs have already been updated\n");
 		return 0;
 	}
 
-	for (i = 0; i < vreg_list_size; i++) {
+	dt_node = (plat_priv->dev_node ? plat_priv->dev_node : dev->of_node);
+	if (plat_priv->dt_type == CNSS_DTT_MULTIEXCHG) {
+		id_n = of_property_count_strings(dt_node,
+						 WLAN_VREGS_PROP);
+		if (id_n <= 0) {
+			if (id_n == -ENODATA) {
+				cnss_pr_dbg("No additional vregs for: %s:%lx\n",
+					    dt_node->name,
+					    plat_priv->device_id);
+				return 0;
+			}
+
+			cnss_pr_err("property %s is invalid or missed: %s:%lx\n",
+				    WLAN_VREGS_PROP, dt_node->name,
+				    plat_priv->device_id);
+			return -EINVAL;
+		}
+	} else {
+		id_n = vreg_list_size;
+	}
+
+	for (i = 0; i < id_n; i++) {
 		vreg = devm_kzalloc(dev, sizeof(*vreg), GFP_KERNEL);
 		if (!vreg)
 			return -ENOMEM;
 
-		memcpy(&vreg->cfg, &vreg_cfg[i], sizeof(vreg->cfg));
+		if (plat_priv->dt_type == CNSS_DTT_MULTIEXCHG) {
+			ret = of_property_read_string_index(dt_node,
+							    WLAN_VREGS_PROP, i,
+							    &vreg->cfg.name);
+			if (ret) {
+				cnss_pr_err("Failed to read vreg ids\n");
+				return ret;
+			}
+		} else {
+			memcpy(&vreg->cfg, &vreg_cfg[i], sizeof(vreg->cfg));
+		}
+
 		ret = cnss_get_vreg_single(plat_priv, vreg);
 		if (ret != 0) {
 			if (ret == -ENODEV) {
@@ -1689,4 +1738,19 @@ int cnss_enable_int_pow_amp_vreg(struct cnss_plat_data *plat_priv)
 	config_done = true;
 
 	return 0;
+}
+
+int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv)
+{
+	int ret;
+
+	if (plat_priv->dt_type != CNSS_DTT_MULTIEXCHG)
+		return 0;
+
+	ret = cnss_get_vreg_type(plat_priv, CNSS_VREG_PRIM);
+	if (ret)
+		return ret;
+
+	plat_priv->powered_on = false;
+	return cnss_power_on_device(plat_priv);
 }
