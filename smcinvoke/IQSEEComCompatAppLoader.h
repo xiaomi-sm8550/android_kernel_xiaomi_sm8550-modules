@@ -1,9 +1,14 @@
 /* SPDX-License-Identifier: GPL-2.0-only
  *
  * Copyright (c) 2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "smcinvoke_object.h"
+
+#define IQSEEComCompatAppLoader_MAX_FILENAME_LEN UINT32_C(64)
+#define IQSEEComCompatAppLoader_ELFCLASS32 UINT32_C(1)
+#define IQSEEComCompatAppLoader_ELFCLASS64 UINT32_C(2)
 
 #define IQSEEComCompatAppLoader_ERROR_INVALID_BUFFER INT32_C(10)
 #define IQSEEComCompatAppLoader_ERROR_PIL_ROLLBACK_FAILURE INT32_C(11)
@@ -17,9 +22,11 @@
 #define IQSEEComCompatAppLoader_ERROR_TA_APP_REGION_MALLOC_FAILURE INT32_C(19)
 #define IQSEEComCompatAppLoader_ERROR_CLIENT_CRED_PARSING_FAILURE INT32_C(20)
 #define IQSEEComCompatAppLoader_ERROR_APP_UNTRUSTED_CLIENT INT32_C(21)
-#define IQSEEComCompatAppLoader_ERROR_APP_NOT_LOADED INT32_C(22)
-#define IQSEEComCompatAppLoader_ERROR_NOT_QSEECOM_COMPAT_APP INT32_C(23)
-#define IQSEEComCompatAppLoader_ERROR_FILENAME_TOO_LONG INT32_C(24)
+#define IQSEEComCompatAppLoader_ERROR_APP_BLACKLISTED INT32_C(22)
+#define IQSEEComCompatAppLoader_ERROR_APP_NOT_LOADED INT32_C(23)
+#define IQSEEComCompatAppLoader_ERROR_NOT_QSEECOM_COMPAT_APP INT32_C(24)
+#define IQSEEComCompatAppLoader_ERROR_FILENAME_TOO_LONG INT32_C(25)
+#define IQSEEComCompatAppLoader_ERROR_APP_ARCH_NOT_SUPPORTED INT32_C(26)
 
 #define IQSEEComCompatAppLoader_OP_loadFromRegion 0
 #define IQSEEComCompatAppLoader_OP_loadFromBuffer 1
