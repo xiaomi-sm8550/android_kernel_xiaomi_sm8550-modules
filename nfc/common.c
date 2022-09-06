@@ -80,6 +80,12 @@ int nfc_parse_dt(struct device *dev, struct platform_configs *nfc_configs,
 		nfc_configs->clk_pin_voting = true;
 	}
 
+	/* Read DTS_SZONE_STR to check secure zone support */
+	if (of_property_read_string(np, DTS_SZONE_STR, &nfc_configs->szone)) {
+		nfc_configs->CNSS_NFC_HW_SECURE_ENABLE = false;
+	}else
+		nfc_configs->CNSS_NFC_HW_SECURE_ENABLE = true;
+
 	pr_info("%s: irq %d, ven %d, dwl %d, clkreq %d, clk_pin_voting %d \n", __func__, nfc_gpio->irq, nfc_gpio->ven,
 		nfc_gpio->dwl_req, nfc_gpio->clkreq, nfc_configs->clk_pin_voting);
 
@@ -450,7 +456,9 @@ int nfc_post_init(struct nfc_dev *nfc_dev)
 	}
 
 	/*Initialising sempahore to disbale NFC Ven GPIO only after eSE is power off flag is set */
-	sema_init(&sem_eSE_pwr_off,0);
+	if (nfc_dev->configs.CNSS_NFC_HW_SECURE_ENABLE == true) {
+		sema_init(&sem_eSE_pwr_off,0);
+	}
 
 	post_init_success = 1;
 	pr_info("%s success\n", __func__);
@@ -477,7 +485,6 @@ int nfc_post_init(struct nfc_dev *nfc_dev)
 	int ret;
 	bool retstat = 1;
 	u8 state = 0;
-
 	/* get rootObj */
 	ret = get_client_env_object(&client_env);
 	if (ret) {
@@ -545,7 +552,6 @@ int nfc_dynamic_protection_ioctl(struct nfc_dev *nfc_dev, unsigned long sec_zone
 	static int init_flag=1;
 
 	struct platform_gpio *nfc_gpio = &nfc_dev->configs.gpio;
-
 	if(sec_zone_trans == 1) {
 		/*check NFC is disabled, only then set Ven GPIO low*/
 		if(nfc_dev->cold_reset.is_nfc_enabled == false) {
@@ -590,6 +596,7 @@ int nfc_dynamic_protection_ioctl(struct nfc_dev *nfc_dev, unsigned long sec_zone
 	return ret;
 }
 
+
 /**
  * nfc_dev_ioctl - used to set or get data from upper layer.
  * @pfile   file node for opened device.
@@ -610,13 +617,14 @@ long nfc_dev_ioctl(struct file *pfile, unsigned int cmd, unsigned long arg)
 
 	if (!nfc_dev)
 		return -ENODEV;
-
-	/*Avoiding ioctl call in secure zone*/
-	if(nfc_dev->secure_zone) {
-		if(cmd!=NFC_SECURE_ZONE) {
-			pr_debug("nfc_dev_ioctl failed\n");
-			return -1;
-		}
+	if( nfc_dev->configs.CNSS_NFC_HW_SECURE_ENABLE == true) {
+	    /*Avoiding ioctl call in secure zone*/
+	    if(nfc_dev->secure_zone) {
+		    if(cmd!=NFC_SECURE_ZONE) {
+			   pr_debug("nfc_dev_ioctl failed\n");
+			   return -1;
+		    }
+	    }
 	}
 
 	pr_debug("%s: cmd = %x arg = %zx\n", __func__, cmd, arg);
@@ -638,7 +646,9 @@ long nfc_dev_ioctl(struct file *pfile, unsigned int cmd, unsigned long arg)
 		ret = ese_cold_reset_ioctl(nfc_dev, arg);
 		break;
 	case NFC_SECURE_ZONE:
-		ret = nfc_dynamic_protection_ioctl(nfc_dev, arg);
+		if( nfc_dev->configs.CNSS_NFC_HW_SECURE_ENABLE == true) {
+		  ret = nfc_dynamic_protection_ioctl(nfc_dev, arg);
+		}
 		break;
 	default:
 		pr_err("%s: bad cmd %lu\n", __func__, arg);

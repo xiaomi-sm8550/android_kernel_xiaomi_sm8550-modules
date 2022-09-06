@@ -418,27 +418,31 @@ int nfc_i2c_dev_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		goto err_ldo_config_failed;
 	}
 
-	/*Check NFC Secure Zone status*/
-	if(!nfc_hw_secure_check()) {
+	if( nfc_dev->configs.CNSS_NFC_HW_SECURE_ENABLE == true) {
+	    /*Check NFC Secure Zone status*/
+	    if(!nfc_hw_secure_check()) {
+		   nfc_post_init(nfc_dev);
+		   nfc_dev->secure_zone = false;
+	    }
+	    else {
+		   nfc_dev->secure_zone = true;
+            }
+	    pr_info("%s:nfc_dev->secure_zone = %s", __func__, nfc_dev->secure_zone ? "true" : "false");
+	}else {
 		nfc_post_init(nfc_dev);
-		nfc_dev->secure_zone = false;
 	}
-	else
-		nfc_dev->secure_zone = true;
-	pr_info("%s:nfc_dev->secure_zone = %s", __func__, nfc_dev->secure_zone ? "true" : "false");
 
 	if(nfc_dev->configs.clk_pin_voting)
 		nfc_dev->clk_run = false;
 	else
 		nfc_dev->clk_run = true;
 
-
 	device_init_wakeup(&client->dev, true);
 	i2c_set_clientdata(client, nfc_dev);
 	i2c_dev->irq_wake_up = false;
 	nfc_dev->is_ese_session_active = false;
 
-	pr_info("%s: probing nfc i2c successfully\n", __func__);
+	pr_info("%s: probing nfc i2c success\n", __func__);
 	return 0;
 
 
