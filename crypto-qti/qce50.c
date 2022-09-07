@@ -1129,10 +1129,10 @@ static int _ce_setup_cipher(struct qce_device *pce_dev, struct qce_req *creq,
 	if (creq->is_copy_op) {
 		pce->data = 0;
 	} else {
-		if ((creq->mode == QCE_MODE_CCM) && (creq->dir == QCE_DECRYPT))
-			pce->data = (creq->cryptlen + creq->authsize);
-		else
-			pce->data = creq->cryptlen;
+	if ((creq->mode == QCE_MODE_CCM) && (creq->dir == QCE_DECRYPT))
+		pce->data = (creq->cryptlen + creq->authsize);
+	else
+		pce->data = creq->cryptlen;
 	}
 
 	/* write encr seg start */
@@ -1143,7 +1143,7 @@ static int _ce_setup_cipher(struct qce_device *pce_dev, struct qce_req *creq,
 	pce = cmdlistinfo->seg_size;
 	pce->data = totallen_in;
 
-	if (!is_des_cipher) {
+	if (is_offload_op(creq->offload_op)) {
 		/* pattern info */
 		pce = cmdlistinfo->pattern_info;
 		pce->data = creq->pattern_info;
@@ -1155,7 +1155,9 @@ static int _ce_setup_cipher(struct qce_device *pce_dev, struct qce_req *creq,
 
 		/* IV counter size */
 		qce_set_iv_ctr_mask(pce_dev, creq);
+	}
 
+	if (!is_des_cipher) {
 		pce = cmdlistinfo->encr_mask_3;
 		pce->data = pce_dev->reg.encr_cntr_mask_3;
 		pce = cmdlistinfo->encr_mask_2;
@@ -2362,11 +2364,8 @@ int qce_manage_timeout(void *handle, int req_info)
 	if (_qce_unlock_other_pipes(pce_dev, req_info))
 		pr_err("%s: fail unlock other pipes\n", __func__);
 
-	if (!atomic_read(&preq_info->in_use)) {
-		pr_err("request information %d already done\n", req_info);
-		return -ENXIO;
-	}
 	qce_free_req_info(pce_dev, req_info, true);
+	qce_callback(areq, NULL, NULL, 0);
 	return 0;
 }
 EXPORT_SYMBOL(qce_manage_timeout);
@@ -2434,10 +2433,6 @@ static int _aead_complete(struct qce_device *pce_dev, int req_info)
 		result_status = -ENXIO;
 	}
 
-	if (!atomic_read(&preq_info->in_use)) {
-		pr_err("request information %d already done\n", req_info);
-		return -ENXIO;
-	}
 	if (preq_info->mode == QCE_MODE_CCM) {
 		/*
 		 * Not from result dump, instead, use the status we just
@@ -2510,11 +2505,6 @@ static int _sha_complete(struct qce_device *pce_dev, int req_info)
 		pr_err("sha sps operation error. sps status %x\n",
 			pce_sps_data->consumer_status);
 		result_status = -ENXIO;
-	}
-
-	if (!atomic_read(&preq_info->in_use)) {
-		pr_err("request information %d already done\n", req_info);
-		return -ENXIO;
 	}
 	qce_free_req_info(pce_dev, req_info, true);
 	qce_callback(areq, digest, (char *)bytecount32, result_status);
@@ -2664,11 +2654,6 @@ static int _ablk_cipher_complete(struct qce_device *pce_dev, int req_info)
 			memcpy(iv,
 				(char *)(pce_sps_data->result->encr_cntr_iv),
 				sizeof(iv));
-		}
-
-		if (!atomic_read(&preq_info->in_use)) {
-			pr_err("request information %d already done\n", req_info);
-			return -ENXIO;
 		}
 		qce_free_req_info(pce_dev, req_info, true);
 		qce_callback(areq, NULL, iv, result_status);
@@ -3483,10 +3468,6 @@ static void _sps_producer_callback(struct sps_event_notify *notify)
 	}
 
 	preq_info = &pce_dev->ce_request_info[req_info];
-	if (!atomic_read(&preq_info->in_use)) {
-		pr_err("request information %d already done\n", req_info);
-		return;
-	}
 	op = pce_dev->ce_request_info[req_info].offload_op;
 
 	pce_sps_data = &preq_info->ce_sps;
