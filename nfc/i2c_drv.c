@@ -278,6 +278,9 @@ ssize_t nfc_i2c_dev_read(struct file *filp, char __user *buf, size_t count,
 		return -ENODEV;
 	}
 	mutex_lock(&nfc_dev->read_mutex);
+	if (count > MAX_NCI_BUFFER_SIZE)
+		count = MAX_NCI_BUFFER_SIZE;
+
 	if (filp->f_flags & O_NONBLOCK) {
 		ret = i2c_master_recv(nfc_dev->i2c_dev.client, nfc_dev->read_kbuf, count);
 		pr_debug("%s: NONBLOCK read ret = %d\n", __func__, ret);
