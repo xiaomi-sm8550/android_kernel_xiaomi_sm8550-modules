@@ -37,8 +37,6 @@ LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
 include $(DLKM_DIR)/Build_external_kernelmodule.mk
 ###################################################
 ###################################################
-ifneq ($(TARGET_BOARD_AUTO),true)
-#$(error $(SSG_SRC_FILES))
 include $(CLEAR_VARS)
 #LOCAL_SRC_FILES           := $(SSG_SRC_FILES)
 LOCAL_MODULE              := smcinvoke_dlkm.ko
@@ -48,7 +46,6 @@ LOCAL_MODULE_DEBUG_ENABLE := true
 LOCAL_HEADER_LIBRARIES    := smcinvoke_kernel_headers
 LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
 include $(DLKM_DIR)/Build_external_kernelmodule.mk
-endif #TARGET_BOARD_AUTO
 ###################################################
 ###################################################
 include $(CLEAR_VARS)
@@ -111,7 +108,7 @@ LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
 include $(DLKM_DIR)/Build_external_kernelmodule.mk
 ###################################################
 ###################################################
-ifeq ($(TARGET_BOARD_AUTO),true)
+ifneq (, $(filter true, $(TARGET_ENABLE_QSEECOM) $(TARGET_BOARD_AUTO)))
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES           := $(SSG_SRC_FILES)
 LOCAL_MODULE              := qseecom_dlkm.ko
@@ -120,6 +117,7 @@ LOCAL_MODULE_TAGS         := optional
 LOCAL_MODULE_DEBUG_ENABLE := true
 LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
 include $(DLKM_DIR)/Build_external_kernelmodule.mk
-endif #TARGET_BOARD_AUTO
+endif #TARGET_ENABLE_QSEECOM OR TARGET_BOARD_AUTO
+###################################################
 ###################################################
 endif #COMPILE_SECUREMSM_DLKM check

@@ -3,7 +3,6 @@
  * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved..
  */
 
-#define  CONFIG_QCOM_SMCINVOKE 1
 #define  CONFIG_QTI_TZ_LOG 1
 #define  CONFIG_CRYPTO_DEV_QCEDEV 1
 #define  CONFIG_CRYPTO_DEV_QCRYPTO 1
