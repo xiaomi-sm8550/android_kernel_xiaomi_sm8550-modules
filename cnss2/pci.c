@@ -2996,7 +2996,7 @@ int cnss_wlan_register_driver(struct cnss_wlan_driver *driver_ops)
 {
 	int ret = 0;
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(NULL);
-	struct cnss_pci_data *pci_priv = plat_priv->bus_priv;
+	struct cnss_pci_data *pci_priv;
 	const struct pci_device_id *id_table = driver_ops->id_table;
 	unsigned int timeout;
 
@@ -3009,6 +3009,8 @@ int cnss_wlan_register_driver(struct cnss_wlan_driver *driver_ops)
 		cnss_pr_buf("plat_priv is not ready for register driver\n");
 		return -EAGAIN;
 	}
+
+	pci_priv = plat_priv->bus_priv;
 
 	if (test_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state)) {
 		while (id_table && id_table->device) {
