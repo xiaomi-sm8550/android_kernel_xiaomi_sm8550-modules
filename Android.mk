@@ -1,5 +1,16 @@
 # Android Makefile for WLAN platform modules
 
+ENABLE_WLAN_PLATFORM_DLKM := false
+ifeq ($(TARGET_KERNEL_DLKM_DISABLE), true)
+  ifeq ($(TARGET_KERNEL_DLKM_WLAN_OVERRIDE), true)
+    ENABLE_WLAN_PLATFORM_DLKM := true
+  endif
+else
+  ENABLE_WLAN_PLATFORM_DLKM := true
+endif
+
+ifeq ($(ENABLE_WLAN_PLATFORM_DLKM), true)
+
 # LOCAL_PATH is a relative path to root build directory.
 LOCAL_PATH := $(call my-dir)
 DLKM_DIR := $(TOP)/device/qcom/common/dlkm
@@ -106,3 +117,4 @@ LOCAL_MODULE_TAGS         := optional
 LOCAL_MODULE_DEBUG_ENABLE := true
 LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
 include $(DLKM_DIR)/Build_external_kernelmodule.mk
+endif #ENABLE_WLAN_PLATFORM_DLKM
