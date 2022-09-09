@@ -56,7 +56,8 @@
 #define SMCINVOKE_MEM_RGN_OBJ			1
 #define SMCINVOKE_MEM_PERM_RW			6
 #define SMCINVOKE_SCM_EBUSY_WAIT_MS		30
-#define SMCINVOKE_SCM_EBUSY_MAX_RETRY		67
+#define SMCINVOKE_SCM_EBUSY_MAX_RETRY		200
+
 
 
 /* TZ defined values - Start */
