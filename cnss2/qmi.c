@@ -3246,15 +3246,48 @@ static int dms_new_server(struct qmi_handle *qmi_dms,
 					  service->port);
 }
 
+static void cnss_dms_server_exit_work(struct work_struct *work)
+{
+	int ret;
+	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(NULL);
+
+	cnss_dms_deinit(plat_priv);
+
+	cnss_pr_info("QMI DMS Server Exit");
+	clear_bit(CNSS_DMS_DEL_SERVER, &plat_priv->driver_state);
+
+	ret = cnss_dms_init(plat_priv);
+	if (ret < 0)
+		cnss_pr_err("QMI DMS service registraton failed, ret\n", ret);
+}
+
+static DECLARE_WORK(cnss_dms_del_work, cnss_dms_server_exit_work);
+
 static void dms_del_server(struct qmi_handle *qmi_dms,
 			   struct qmi_service *service)
 {
 	struct cnss_plat_data *plat_priv =
 		container_of(qmi_dms, struct cnss_plat_data, qmi_dms);
 
+	if (!plat_priv)
+		return;
+
+	if (test_bit(CNSS_DMS_DEL_SERVER, &plat_priv->driver_state)) {
+		cnss_pr_info("DMS server delete or cnss remove in progress, Ignore server delete: 0x%lx\n",
+			     plat_priv->driver_state);
+		return;
+	}
+
+	set_bit(CNSS_DMS_DEL_SERVER, &plat_priv->driver_state);
 	clear_bit(CNSS_QMI_DMS_CONNECTED, &plat_priv->driver_state);
 	cnss_pr_info("QMI DMS service disconnected, state: 0x%lx\n",
 		     plat_priv->driver_state);
+	schedule_work(&cnss_dms_del_work);
+}
+
+void cnss_cancel_dms_work(void)
+{
+	cancel_work_sync(&cnss_dms_del_work);
 }
 
 static struct qmi_ops qmi_dms_ops = {
@@ -3283,6 +3316,7 @@ out:
 
 void cnss_dms_deinit(struct cnss_plat_data *plat_priv)
 {
+	set_bit(CNSS_DMS_DEL_SERVER, &plat_priv->driver_state);
 	qmi_handle_release(&plat_priv->qmi_dms);
 }
 

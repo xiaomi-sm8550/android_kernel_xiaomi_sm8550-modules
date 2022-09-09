@@ -322,6 +322,7 @@ enum cnss_driver_state {
 	CNSS_WLAN_HW_DISABLED,
 	CNSS_FS_READY = 25,
 	CNSS_DRIVER_REGISTERED,
+	CNSS_DMS_DEL_SERVER,
 };
 
 struct cnss_recovery_data {
