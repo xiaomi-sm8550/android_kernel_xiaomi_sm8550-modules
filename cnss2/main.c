@@ -4074,7 +4074,8 @@ int cnss_wlan_hw_enable(void)
 
 	ret = cnss_wlan_device_init(plat_priv);
 	if (ret) {
-		CNSS_ASSERT(0);
+		if (!test_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state))
+			CNSS_ASSERT(0);
 		return ret;
 	}
 
