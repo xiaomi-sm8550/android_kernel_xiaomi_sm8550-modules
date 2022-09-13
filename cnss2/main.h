@@ -558,6 +558,7 @@ struct cnss_plat_data {
 	u8 hwid_bitmap;
 	enum cnss_driver_mode driver_mode;
 	uint32_t num_shadow_regs_v3;
+	bool sec_peri_feature_disable;
 };
 
 #if IS_ENABLED(CONFIG_ARCH_QCOM)

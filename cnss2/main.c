@@ -3738,6 +3738,12 @@ int cnss_wlan_hw_disable_check(struct cnss_plat_data *plat_priv)
 	int ret;
 	u8 state = 0;
 
+	/* Once this flag is set, secure peripheral feature
+	 * will not be supported till next reboot
+	 */
+	if (plat_priv->sec_peri_feature_disable)
+		return 0;
+
 	/* get rootObj */
 	ret = get_client_env_object(&client_env);
 	if (ret) {
@@ -3749,6 +3755,7 @@ int cnss_wlan_hw_disable_check(struct cnss_plat_data *plat_priv)
 		cnss_pr_dbg("Failed to get app_object, ret: %d\n",  ret);
 		if (ret == FEATURE_NOT_SUPPORTED) {
 			ret = 0; /* Do not Assert */
+			plat_priv->sec_peri_feature_disable = true;
 			cnss_pr_dbg("Secure HW feature not supported\n");
 		}
 		goto exit_release_clientenv;
@@ -3763,6 +3770,7 @@ int cnss_wlan_hw_disable_check(struct cnss_plat_data *plat_priv)
 	if (ret) {
 		if (ret == PERIPHERAL_NOT_FOUND) {
 			ret = 0; /* Do not Assert */
+			plat_priv->sec_peri_feature_disable = true;
 			cnss_pr_dbg("Secure HW mode is not updated. Peripheral not found\n");
 		}
 		goto exit_release_app_obj;
