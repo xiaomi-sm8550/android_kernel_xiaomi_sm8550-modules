@@ -1132,7 +1132,6 @@ static int iris_hfi_flush_debug_queue(void *dev)
 		return -EINVAL;
 	}
 
-	cvp_dump_csr(device);
 	mutex_lock(&device->lock);
 
 	if (!device->power_enabled) {
@@ -1140,6 +1139,7 @@ static int iris_hfi_flush_debug_queue(void *dev)
 		rc = -EINVAL;
 		goto exit;
 	}
+	cvp_dump_csr(device);
 	__flush_debug_queue(device, NULL);
 exit:
 	mutex_unlock(&device->lock);
