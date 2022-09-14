@@ -417,6 +417,9 @@ int msm_cvp_destroy(struct msm_cvp_inst *inst)
 		inst->proc_name, inst, hash32_ptr(inst->session),
 		inst->session_type);
 	inst->session = (void *)0xdeadbeef;
+	if (atomic_read(&inst->smem_count) != 0)
+		dprintk(CVP_WARN, "Session closed with %d unmapped smems\n",
+			atomic_read(&inst->smem_count));
 	kfree(inst);
 	dprintk(CVP_SESS,
 		"sys-stat: nr_insts %d msgs %d, frames %d, bufs %d, smems %d\n",

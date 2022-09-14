@@ -105,6 +105,9 @@ static int msm_dma_get_device_address(struct dma_buf *dbuf, u32 align,
 		table = dma_buf_map_attachment(attach, DMA_BIDIRECTIONAL);
 		if (IS_ERR_OR_NULL(table)) {
 			dprintk(CVP_ERR, "Failed to map table %d\n", PTR_ERR(table));
+			dprintk(CVP_ERR,
+				"Mapping detail dma_buf 0x%llx, %s, size %#x\n",
+				dbuf, dbuf->name, dbuf->size);
 			rc = PTR_ERR(table) ?: -ENOMEM;
 			goto mem_map_table_failed;
 		}
@@ -279,6 +282,7 @@ int msm_cvp_map_smem(struct msm_cvp_inst *inst,
 
 checksum_done:*/
 	print_smem(CVP_MEM, str, inst, smem);
+	atomic_inc(&inst->smem_count);
 	goto success;
 exit:
 	smem->device_addr = 0x0;
@@ -308,6 +312,7 @@ int msm_cvp_unmap_smem(struct msm_cvp_inst *inst,
 	}
 
 	smem->device_addr = 0x0;
+	atomic_dec(&inst->smem_count);
 
 exit:
 	return rc;
