@@ -375,6 +375,7 @@ struct msm_cvp_core {
 	u32 smmu_fault_count;
 	u32 last_fault_addr;
 	u32 ssr_count;
+	u32 smem_leak_count;
 	bool trigger_ssr;
 	unsigned long curr_freq;
 	unsigned long orig_core_sum;

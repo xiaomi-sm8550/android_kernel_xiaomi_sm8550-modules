@@ -413,13 +413,15 @@ int msm_cvp_destroy(struct msm_cvp_inst *inst)
 
 	pr_info(
 		CVP_DBG_TAG
-		"closed cvp instance: %pK session_id = %d type %d\n",
+		"closed cvp instance: %pK session_id = %d type %d %d\n",
 		inst->proc_name, inst, hash32_ptr(inst->session),
-		inst->session_type);
+		inst->session_type, core->smem_leak_count);
 	inst->session = (void *)0xdeadbeef;
-	if (atomic_read(&inst->smem_count) != 0)
+	if (atomic_read(&inst->smem_count) > 0) {
 		dprintk(CVP_WARN, "Session closed with %d unmapped smems\n",
 			atomic_read(&inst->smem_count));
+		core->smem_leak_count += atomic_read(&inst->smem_count);
+	}
 	kfree(inst);
 	dprintk(CVP_SESS,
 		"sys-stat: nr_insts %d msgs %d, frames %d, bufs %d, smems %d\n",
