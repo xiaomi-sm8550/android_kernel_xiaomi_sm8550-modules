@@ -47,8 +47,11 @@ int nfc_ese_pwr(struct nfc_dev *nfc_dev, unsigned long arg)
 			pr_debug("keep ven high as NFC is enabled\n");
 		}
 		nfc_dev->is_ese_session_active = false;
-		if(chk_eSE_pwr_off)
-			up(&sem_eSE_pwr_off);
+		if (nfc_dev->configs.CNSS_NFC_HW_SECURE_ENABLE == true) {
+			if(chk_eSE_pwr_off)
+			  up(&sem_eSE_pwr_off);
+		}
+
 	} else if (arg == ESE_POWER_STATE) {
 		/* get VEN gpio state for eSE, as eSE also enabled through same GPIO */
 		ret = gpio_get_value(nfc_dev->configs.gpio.ven);
@@ -79,6 +82,8 @@ static int send_ese_cmd(struct nfc_dev *nfc_dev)
 				"cannot send ese cmd as NFCC powered off\n");
 		return -ENODEV;
 	}
+	if (nfc_dev->cold_reset.cmd_buf == NULL)
+		return -EFAULT;
 
 	ret = nfc_dev->nfc_write(nfc_dev, nfc_dev->cold_reset.cmd_buf,
 						nfc_dev->cold_reset.cmd_len,
@@ -103,6 +108,13 @@ int read_cold_reset_rsp(struct nfc_dev *nfc_dev, char *header)
 	int ret = -EPERM;
 	struct cold_reset *cold_rst = &nfc_dev->cold_reset;
 	char *rsp_buf = NULL;
+
+	if (cold_rst->rsp_len < COLD_RESET_RSP_LEN) {
+		dev_err(nfc_dev->nfc_device,
+				"%s: received cold reset rsp buffer length is invalid \n",
+				__func__);
+		return -EINVAL;
+        }
 
 	rsp_buf = kzalloc(cold_rst->rsp_len, GFP_DMA | GFP_KERNEL);
 	if (!rsp_buf)
@@ -210,6 +222,7 @@ int ese_cold_reset_ioctl(struct nfc_dev *nfc_dev, unsigned long arg)
 	if (!cold_reset_arg)
 		return -ENOMEM;
 
+	mutex_lock(&nfc_dev->write_mutex);
 	ret = copy_struct_from_user(cold_reset_arg,
 				sizeof(struct ese_cold_reset_arg),
 				u64_to_user_ptr(ioctl_arg.buf),
@@ -375,11 +388,14 @@ int ese_cold_reset_ioctl(struct nfc_dev *nfc_dev, unsigned long arg)
 		pr_debug("ese cmd is %d\n", cold_reset_arg->sub_cmd);
 
 	ret = nfc_dev->cold_reset.status;
+
 err:
 	kfree(nfc_dev->cold_reset.cmd_buf);
+	nfc_dev->cold_reset.cmd_buf = NULL;
 	kfree(cold_reset_arg);
 	cold_reset_arg = NULL;
-	nfc_dev->cold_reset.cmd_buf = NULL;
+
+	mutex_unlock(&nfc_dev->write_mutex);
 
 	return ret;
 }

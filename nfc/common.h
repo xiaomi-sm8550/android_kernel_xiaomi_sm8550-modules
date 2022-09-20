@@ -110,6 +110,7 @@
 #define DTS_FWDN_GPIO_STR	"qcom,sn-firm"
 #define DTS_CLKREQ_GPIO_STR     "qcom,sn-clkreq"
 #define DTS_CLKSRC_GPIO_STR	"qcom,clk-src"
+#define DTS_SZONE_STR	        "qcom,sn-szone"
 #define NFC_LDO_SUPPLY_DT_NAME		"qcom,sn-vdd-1p8"
 #define NFC_LDO_SUPPLY_NAME		"qcom,sn-vdd-1p8-supply"
 #define NFC_LDO_VOL_DT_NAME		"qcom,sn-vdd-1p8-voltage"
@@ -126,7 +127,6 @@
 #define HW_NFC_UID			0x506
 #define FEATURE_NOT_SUPPORTED	12
 #define PERIPHERAL_NOT_FOUND	10
-
 
 #define NUM_OF_IPC_LOG_PAGES	(2)
 #define PKT_MAX_LEN		(4) // no of max bytes to print for cmd/resp
@@ -146,7 +146,6 @@ do { \
 
 static struct semaphore sem_eSE_pwr_off;
 static chk_eSE_pwr_off;
-
 
 enum ese_ioctl_request {
 	/* eSE POWER ON */
@@ -235,6 +234,8 @@ struct platform_configs {
         const char *clk_src_name;
 	/* NFC_CLK pin voting state */
 	bool clk_pin_voting;
+	const char *szone;
+	bool CNSS_NFC_HW_SECURE_ENABLE;
 };
 
 
@@ -274,7 +275,6 @@ struct nfc_dev {
 	u8 *kbuf;
 
 	union nqx_uinfo nqx_info;
-
 	/*secure zone state*/
 	bool secure_zone;
 
