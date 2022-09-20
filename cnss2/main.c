@@ -4074,7 +4074,8 @@ int cnss_wlan_hw_enable(void)
 
 	ret = cnss_wlan_device_init(plat_priv);
 	if (ret) {
-		CNSS_ASSERT(0);
+		if (!test_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state))
+			CNSS_ASSERT(0);
 		return ret;
 	}
 
@@ -4248,6 +4249,7 @@ static int cnss_remove(struct platform_device *plat_dev)
 	cnss_dms_deinit(plat_priv);
 	cnss_qmi_deinit(plat_priv);
 	cnss_event_work_deinit(plat_priv);
+	cnss_cancel_dms_work();
 	cnss_remove_sysfs(plat_priv);
 	cnss_unregister_bus_scale(plat_priv);
 	cnss_unregister_esoc(plat_priv);
