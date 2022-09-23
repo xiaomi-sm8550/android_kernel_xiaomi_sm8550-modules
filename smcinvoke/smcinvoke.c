@@ -64,7 +64,6 @@
 #define SMCINVOKE_SCM_EBUSY_MAX_RETRY		200
 
 
-
 /* TZ defined values - Start */
 #define SMCINVOKE_INVOKE_PARAM_ID		0x224
 #define SMCINVOKE_CB_RSP_PARAM_ID		0x22
@@ -80,7 +79,7 @@
  */
 #define SMCINVOKE_SERVER_STATE_DEFUNCT		1
 
-#define CBOBJ_MAX_RETRIES 5
+#define CBOBJ_MAX_RETRIES 50
 #define FOR_ARGS(ndxvar, counts, section) \
 	for (ndxvar = OBJECT_COUNTS_INDEX_##section(counts); \
 		ndxvar < (OBJECT_COUNTS_INDEX_##section(counts) \
@@ -1383,6 +1382,7 @@ static void process_tzcb_req(void *buf, size_t buf_len, struct file **arr_filp)
 	int ret = OBJECT_ERROR_DEFUNCT;
 	int cbobj_retries = 0;
 	long timeout_jiff;
+	bool wait_interrupted = false;
 	struct smcinvoke_cb_txn *cb_txn = NULL;
 	struct smcinvoke_tzcb_req *cb_req = NULL, *tmp_cb_req = NULL;
 	struct smcinvoke_server_info *srvr_info = NULL;
@@ -1467,14 +1467,20 @@ static void process_tzcb_req(void *buf, size_t buf_len, struct file **arr_filp)
 	 */
 	wake_up_interruptible_all(&srvr_info->req_wait_q);
 	/* timeout before 1s otherwise tzbusy would come */
-	timeout_jiff = msecs_to_jiffies(1000);
+	timeout_jiff = msecs_to_jiffies(100);
 
 	while (cbobj_retries < CBOBJ_MAX_RETRIES) {
-		ret = wait_event_timeout(srvr_info->rsp_wait_q,
-				(cb_txn->state == SMCINVOKE_REQ_PROCESSED) ||
-				(srvr_info->state == SMCINVOKE_SERVER_STATE_DEFUNCT),
-				timeout_jiff);
-
+		if (wait_interrupted) {
+			ret = wait_event_timeout(srvr_info->rsp_wait_q,
+					(cb_txn->state == SMCINVOKE_REQ_PROCESSED) ||
+					(srvr_info->state == SMCINVOKE_SERVER_STATE_DEFUNCT),
+					timeout_jiff);
+		} else {
+			ret = wait_event_interruptible_timeout(srvr_info->rsp_wait_q,
+					(cb_txn->state == SMCINVOKE_REQ_PROCESSED) ||
+					(srvr_info->state == SMCINVOKE_SERVER_STATE_DEFUNCT),
+					timeout_jiff);
+		}
 		if (ret == 0) {
 			pr_err("CBobj timed out cb-tzhandle:%d, retry:%d, op:%d counts :%d\n",
 					cb_req->hdr.tzhandle, cbobj_retries,
@@ -1484,7 +1490,13 @@ static void process_tzcb_req(void *buf, size_t buf_len, struct file **arr_filp)
 					current->tgid, srvr_info->state,
 					srvr_info->server_id);
 		} else {
-			break;
+			/* wait_event returned due to a signal */
+			if (srvr_info->state != SMCINVOKE_SERVER_STATE_DEFUNCT &&
+					cb_txn->state != SMCINVOKE_REQ_PROCESSED) {
+				wait_interrupted = true;
+			} else {
+				break;
+			}
 		}
 		cbobj_retries++;
 	}
