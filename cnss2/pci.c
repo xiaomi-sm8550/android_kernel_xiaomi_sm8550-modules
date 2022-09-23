@@ -4446,7 +4446,8 @@ static int cnss_pci_enable_msi(struct cnss_pci_data *pci_priv)
 					    msi_config->total_vectors,
 					    msi_config->total_vectors,
 					    PCI_IRQ_MSI);
-	if (num_vectors != msi_config->total_vectors) {
+	if ((num_vectors != msi_config->total_vectors) &&
+	    !cnss_pci_fallback_one_msi(pci_priv, &num_vectors)) {
 		cnss_pr_err("Failed to get enough MSI vectors (%d), available vectors = %d",
 			    msi_config->total_vectors, num_vectors);
 		if (num_vectors >= 0)
@@ -4534,6 +4535,17 @@ int cnss_get_msi_irq(struct device *dev, unsigned int vector)
 	return irq_num;
 }
 EXPORT_SYMBOL(cnss_get_msi_irq);
+
+bool cnss_is_one_msi(struct device *dev)
+{
+	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(to_pci_dev(dev));
+
+	if (!pci_priv)
+		return false;
+
+	return cnss_pci_is_one_msi(pci_priv);
+}
+EXPORT_SYMBOL(cnss_is_one_msi);
 
 void cnss_get_msi_address(struct device *dev, u32 *msi_addr_low,
 			  u32 *msi_addr_high)
@@ -5521,6 +5533,8 @@ static int cnss_pci_get_mhi_msi(struct cnss_pci_data *pci_priv)
 	int ret, num_vectors, i;
 	u32 user_base_data, base_vector;
 	int *irq;
+	unsigned int msi_data;
+	bool is_one_msi = false;
 
 	ret = cnss_get_user_msi_assignment(&pci_priv->pci_dev->dev,
 					   MHI_MSI_NAME, &num_vectors,
@@ -5528,6 +5542,10 @@ static int cnss_pci_get_mhi_msi(struct cnss_pci_data *pci_priv)
 	if (ret)
 		return ret;
 
+	if (cnss_pci_is_one_msi(pci_priv)) {
+		is_one_msi = true;
+		num_vectors = cnss_pci_get_one_msi_mhi_irq_array_size(pci_priv);
+	}
 	cnss_pr_dbg("Number of assigned MSI for MHI is %d, base vector is %d\n",
 		    num_vectors, base_vector);
 
@@ -5535,9 +5553,12 @@ static int cnss_pci_get_mhi_msi(struct cnss_pci_data *pci_priv)
 	if (!irq)
 		return -ENOMEM;
 
-	for (i = 0; i < num_vectors; i++)
-		irq[i] = cnss_get_msi_irq(&pci_priv->pci_dev->dev,
-					  base_vector + i);
+	for (i = 0; i < num_vectors; i++) {
+		msi_data = base_vector;
+		if (!is_one_msi)
+			msi_data += i;
+		irq[i] = cnss_get_msi_irq(&pci_priv->pci_dev->dev, msi_data);
+	}
 
 	pci_priv->mhi_ctrl->irq = irq;
 	pci_priv->mhi_ctrl->nr_irqs = num_vectors;
@@ -5670,6 +5691,9 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 		cnss_pr_err("Failed to get MSI for MHI, err = %d\n", ret);
 		goto free_mhi_ctrl;
 	}
+
+	if (cnss_pci_is_one_msi(pci_priv))
+		mhi_ctrl->irq_flags = IRQF_SHARED | IRQF_NOBALANCING;
 
 	if (pci_priv->smmu_s1_enable) {
 		mhi_ctrl->iova_start = pci_priv->smmu_iova_start;
