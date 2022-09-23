@@ -456,7 +456,7 @@ int cnss_pci_get_msi_assignment(struct cnss_pci_data *pci_priv)
 }
 
 #ifdef CONFIG_ONE_MSI_VECTOR
-static int cnss_pci_get_one_msi_assignment(struct cnss_pci_data *pci_priv)
+int cnss_pci_get_one_msi_assignment(struct cnss_pci_data *pci_priv)
 {
 	pci_priv->msi_config = &msi_config_one_msi;
 
@@ -499,7 +499,18 @@ int cnss_pci_get_one_msi_mhi_irq_array_size(struct cnss_pci_data *pci_priv)
 	return MHI_IRQ_NUMBER;
 }
 
+bool cnss_pci_is_force_one_msi(struct cnss_pci_data *pci_priv)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+
+	return test_bit(FORCE_ONE_MSI, &plat_priv->ctrl_params.quirks);
+}
 #else
+int cnss_pci_get_one_msi_assignment(struct cnss_pci_data *pci_priv)
+{
+	return 0;
+}
+
 bool cnss_pci_fallback_one_msi(struct cnss_pci_data *pci_priv,
 			       int *num_vectors)
 {
@@ -514,6 +525,11 @@ bool cnss_pci_is_one_msi(struct cnss_pci_data *pci_priv)
 int cnss_pci_get_one_msi_mhi_irq_array_size(struct cnss_pci_data *pci_priv)
 {
 	return 0;
+}
+
+bool cnss_pci_is_force_one_msi(struct cnss_pci_data *pci_priv)
+{
+	return false;
 }
 #endif
 

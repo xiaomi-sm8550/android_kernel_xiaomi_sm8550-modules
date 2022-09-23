@@ -4429,7 +4429,12 @@ static int cnss_pci_enable_msi(struct cnss_pci_data *pci_priv)
 	if (pci_priv->device_id == QCA6174_DEVICE_ID)
 		return 0;
 
-	ret = cnss_pci_get_msi_assignment(pci_priv);
+	if (cnss_pci_is_force_one_msi(pci_priv)) {
+		ret = cnss_pci_get_one_msi_assignment(pci_priv);
+		cnss_pr_dbg("force one msi\n");
+	} else {
+		ret = cnss_pci_get_msi_assignment(pci_priv);
+	}
 	if (ret) {
 		cnss_pr_err("Failed to get MSI assignment, err = %d\n", ret);
 		goto out;

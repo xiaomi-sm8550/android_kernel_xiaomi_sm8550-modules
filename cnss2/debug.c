@@ -816,6 +816,9 @@ static int cnss_show_quirks_state(struct seq_file *s,
 		case DISABLE_TIME_SYNC:
 			seq_puts(s, "DISABLE_TIME_SYNC");
 			continue;
+		case FORCE_ONE_MSI:
+			seq_puts(s, "FORCE_ONE_MSI");
+			continue;
 		default:
 			continue;
 		}
