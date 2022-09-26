@@ -1630,7 +1630,7 @@ int cnss_update_cpr_info(struct cnss_plat_data *plat_priv)
 		return cnss_aop_set_vreg_param(plat_priv,
 					       plat_priv->vreg_ol_cpr,
 					       CNSS_VREG_VOLTAGE,
-					       CNSS_TCS_UP_SEQ,
+					       CNSS_TCS_DOWN_SEQ,
 					       cpr_info->voltage);
 	}
 
