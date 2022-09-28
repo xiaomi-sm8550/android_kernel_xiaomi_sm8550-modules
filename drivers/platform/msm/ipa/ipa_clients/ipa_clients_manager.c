@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -29,6 +30,10 @@ static int __init ipa_clients_manager_init(void)
 	ipa_eth_register();
 
 	ipa3_notify_clients_registered();
+
+	if (ipa3_ctx->ipa_config_is_mhi || ipa3_ctx->ipa_config_is_apq_dma) {
+		ipa_dma_mhi_provide_ops();
+	}
 
 	ipa3_qdss_register();
 

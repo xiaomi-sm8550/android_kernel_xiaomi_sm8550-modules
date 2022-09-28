@@ -9298,6 +9298,7 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
         ipa3_ctx->ipa_gen_rx_cmn_temp_pool_sz_factor = get_ipa_gen_rx_cmn_temp_pool_size(
                         resource_p->ipa_gen_rx_cmn_temp_pool_sz_factor);
 	ipa3_ctx->ipa_config_is_auto = resource_p->ipa_config_is_auto;
+	ipa3_ctx->ipa_config_is_apq_dma = resource_p->ipa_config_is_apq_dma;
 	ipa3_ctx->ipa_mhi_proxy = resource_p->ipa_mhi_proxy;
 	ipa3_ctx->max_num_smmu_cb = resource_p->max_num_smmu_cb;
 	ipa3_ctx->hw_type_index = ipa3_get_hw_type_index();
@@ -10262,6 +10263,7 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 	ipa_drv_res->skip_ieob_mask_wa = false;
 	ipa_drv_res->ipa_gpi_event_rp_ddr = false;
 	ipa_drv_res->ipa_config_is_auto = false;
+	ipa_drv_res->ipa_config_is_apq_dma = false;
 	ipa_drv_res->max_num_smmu_cb = IPA_SMMU_CB_MAX;
 	ipa_drv_res->ipa_endp_delay_wa_v2 = false;
 	ipa_drv_res->use_tput_est_ep = false;
@@ -10405,6 +10407,13 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 		"qcom,ipa-config-is-auto");
 	IPADBG(": ipa-config-is-auto = %s\n",
 		ipa_drv_res->ipa_config_is_auto
+		? "True" : "False");
+
+	ipa_drv_res->ipa_config_is_apq_dma =
+		of_property_read_bool(pdev->dev.of_node,
+		"qcom,ipa-config-is-apq-dma");
+	IPADBG(": ipa-config-is-apq-dma = %s\n",
+		ipa_drv_res->ipa_config_is_apq_dma
 		? "True" : "False");
 
 	ipa_drv_res->ipa_wan_skb_page =
