@@ -4377,6 +4377,8 @@ int cnss_get_soc_info(struct device *dev, struct cnss_soc_info *info)
 	       sizeof(info->device_version));
 	memcpy(&info->dev_mem_info, &plat_priv->dev_mem_info,
 	       sizeof(info->dev_mem_info));
+	memcpy(&info->fw_build_id, &plat_priv->fw_build_id,
+	       sizeof(info->fw_build_id));
 
 	return 0;
 }
@@ -4542,6 +4544,30 @@ u32 cnss_pci_get_wake_msi(struct cnss_pci_data *pci_priv)
 	return user_base_data;
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0))
+static inline int cnss_pci_set_dma_mask(struct pci_dev *pci_dev, u64 mask)
+{
+	return dma_set_mask(&pci_dev->dev, mask);
+}
+
+static inline int cnss_pci_set_coherent_dma_mask(struct pci_dev *pci_dev,
+	u64 mask)
+{
+	return dma_set_coherent_mask(&pci_dev->dev, mask);
+}
+#else /* (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)) */
+static inline int cnss_pci_set_dma_mask(struct pci_dev *pci_dev, u64 mask)
+{
+	return pci_set_dma_mask(pci_dev, mask);
+}
+
+static inline int cnss_pci_set_coherent_dma_mask(struct pci_dev *pci_dev,
+	u64 mask)
+{
+	return pci_set_consistent_dma_mask(pci_dev, mask);
+}
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)) */
+
 static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -4591,15 +4617,15 @@ static int cnss_pci_enable_bus(struct cnss_pci_data *pci_priv)
 
 	cnss_pr_dbg("Set PCI DMA MASK (0x%llx)\n", pci_priv->dma_bit_mask);
 
-	ret = pci_set_dma_mask(pci_dev, pci_priv->dma_bit_mask);
+	ret = cnss_pci_set_dma_mask(pci_dev, pci_priv->dma_bit_mask);
 	if (ret) {
 		cnss_pr_err("Failed to set PCI DMA mask, err = %d\n", ret);
 		goto release_region;
 	}
 
-	ret = pci_set_consistent_dma_mask(pci_dev, pci_priv->dma_bit_mask);
+	ret = cnss_pci_set_coherent_dma_mask(pci_dev, pci_priv->dma_bit_mask);
 	if (ret) {
-		cnss_pr_err("Failed to set PCI consistent DMA mask, err = %d\n",
+		cnss_pr_err("Failed to set PCI coherent DMA mask, err = %d\n",
 			    ret);
 		goto release_region;
 	}
@@ -5834,6 +5860,52 @@ static struct dev_pm_domain cnss_pm_domain = {
 	}
 };
 
+static int cnss_pci_get_dev_cfg_node(struct cnss_plat_data *plat_priv)
+{
+	struct device_node *child;
+	u32 id, i;
+	int id_n, ret;
+
+	if (plat_priv->dt_type != CNSS_DTT_MULTIEXCHG)
+		return 0;
+
+	if (!plat_priv->device_id) {
+		cnss_pr_err("Invalid device id\n");
+		return -EINVAL;
+	}
+
+	for_each_available_child_of_node(plat_priv->plat_dev->dev.of_node,
+					 child) {
+		if (strcmp(child->name, "chip_cfg"))
+			continue;
+
+		id_n = of_property_count_u32_elems(child, "supported-ids");
+		if (id_n <= 0) {
+			cnss_pr_err("Device id is NOT set\n");
+			return -EINVAL;
+		}
+
+		for (i = 0; i < id_n; i++) {
+			ret = of_property_read_u32_index(child,
+							 "supported-ids",
+							 i, &id);
+			if (ret) {
+				cnss_pr_err("Failed to read supported ids\n");
+				return -EINVAL;
+			}
+
+			if (id == plat_priv->device_id) {
+				plat_priv->dev_node = child;
+				cnss_pr_dbg("got node[%s@%d] for device[0x%x]\n",
+					    child->name, i, id);
+				return 0;
+			}
+		}
+	}
+
+	return -EINVAL;
+}
+
 #ifdef CONFIG_CNSS2_CONDITIONAL_POWEROFF
 static bool cnss_should_suspend_pwroff(struct pci_dev *pci_dev)
 {
@@ -5904,6 +5976,16 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	mutex_init(&pci_priv->bus_lock);
 	if (plat_priv->use_pm_domain)
 		dev->pm_domain = &cnss_pm_domain;
+
+	ret = cnss_pci_get_dev_cfg_node(plat_priv);
+	if (ret) {
+		cnss_pr_err("Failed to get device cfg node, err = %d\n", ret);
+		goto reset_ctx;
+	}
+
+	ret = cnss_dev_specific_power_on(plat_priv);
+	if (ret)
+		goto reset_ctx;
 
 	cnss_pci_of_reserved_mem_device_init(pci_priv);
 

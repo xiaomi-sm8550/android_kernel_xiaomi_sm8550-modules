@@ -20,6 +20,7 @@
 #endif
 #include <linux/mailbox_client.h>
 #include <linux/pm_qos.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/time64.h>
 #ifdef CONFIG_CNSS_OUT_OF_TREE
@@ -66,9 +67,16 @@
 				CNSS_EVENT_UNINTERRUPTIBLE)
 #define CNSS_EVENT_SYNC_UNKILLABLE (CNSS_EVENT_SYNC | CNSS_EVENT_UNKILLABLE)
 
+enum cnss_dt_type {
+	CNSS_DTT_LEGACY = 0,
+	CNSS_DTT_CONVERGED = 1,
+	CNSS_DTT_MULTIEXCHG = 2
+};
+
 enum cnss_dev_bus_type {
 	CNSS_BUS_NONE = -1,
 	CNSS_BUS_PCI,
+	CNSS_BUS_MAX
 };
 
 struct cnss_vreg_cfg {
@@ -550,7 +558,7 @@ struct cnss_plat_data {
 	int pdc_init_table_len, vreg_pdc_map_len, pmu_vreg_map_len;
 	bool adsp_pc_enabled;
 	u64 feature_list;
-	u32 is_converged_dt;
+	u32 dt_type;
 	struct kobject *wifi_kobj;
 	u16 hang_event_data_len;
 	u32 hang_data_addr_offset;
@@ -558,6 +566,8 @@ struct cnss_plat_data {
 	u8 hwid_bitmap;
 	enum cnss_driver_mode driver_mode;
 	uint32_t num_shadow_regs_v3;
+	bool sec_peri_feature_disable;
+	struct device_node *dev_node;
 };
 
 #if IS_ENABLED(CONFIG_ARCH_QCOM)
@@ -650,4 +660,5 @@ int cnss_get_feature_list(struct cnss_plat_data *plat_priv,
 			  u64 *feature_list);
 int cnss_get_input_gpio_value(struct cnss_plat_data *plat_priv, int gpio_num);
 bool cnss_check_driver_loading_allowed(void);
+int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv);
 #endif /* _CNSS_MAIN_H */
