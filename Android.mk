@@ -9,6 +9,13 @@ else
 ENABLE_SECUREMSM_DLKM := true
 endif
 
+# Enable secure msm DLKM modules for target board auto
+ifeq ($(TARGET_BOARD_AUTO), true)
+ifeq ($(ENABLE_HYP), true)
+ENABLE_SECUREMSM_DLKM := true
+endif
+endif #TARGET_BOARD_AUTO
+
 ifeq ($(ENABLE_SECUREMSM_DLKM), true)
 
 LOCAL_PATH := $(call my-dir)
