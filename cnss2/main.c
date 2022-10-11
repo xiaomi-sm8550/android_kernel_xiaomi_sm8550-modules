@@ -2007,6 +2007,20 @@ static int cnss_cold_boot_cal_start_hdlr(struct cnss_plat_data *plat_priv)
 		}
 	}
 
+	switch (plat_priv->device_id) {
+	case QCA6290_DEVICE_ID:
+	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
+	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
+		break;
+	default:
+		cnss_pr_err("Not supported for device ID 0x%lx\n",
+			    plat_priv->device_id);
+		ret = -EINVAL;
+		goto mark_cal_fail;
+	}
+
 	set_bit(CNSS_IN_COLD_BOOT_CAL, &plat_priv->driver_state);
 	if (test_bit(CNSS_DRIVER_REGISTER, &plat_priv->driver_state)) {
 		timeout = cnss_get_timeout(plat_priv,
@@ -3528,19 +3542,6 @@ static ssize_t fs_ready_store(struct device *dev,
 
 	if (test_bit(QMI_BYPASS, &plat_priv->ctrl_params.quirks)) {
 		cnss_pr_dbg("QMI is bypassed\n");
-		return count;
-	}
-
-	switch (plat_priv->device_id) {
-	case QCA6290_DEVICE_ID:
-	case QCA6390_DEVICE_ID:
-	case QCA6490_DEVICE_ID:
-	case KIWI_DEVICE_ID:
-	case MANGO_DEVICE_ID:
-		break;
-	default:
-		cnss_pr_err("Not supported for device ID 0x%lx\n",
-			    plat_priv->device_id);
 		return count;
 	}
 
