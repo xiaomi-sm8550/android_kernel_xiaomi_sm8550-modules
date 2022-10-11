@@ -1265,9 +1265,6 @@ static struct msm_cvp_smem *msm_cvp_session_get_smem(struct msm_cvp_inst *inst,
 		goto exit2;
 	}
 
-	if (smem->fd != buf->fd)
-		dprintk(CVP_ERR, "%s Failed fd check\n", __func__);
-
 	return smem;
 
 exit2:
