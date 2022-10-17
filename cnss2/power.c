@@ -832,6 +832,8 @@ int cnss_get_pinctrl(struct cnss_plat_data *plat_priv)
 				    ret);
 			goto out;
 		}
+
+		cnss_set_feature_list(plat_priv, CNSS_WLAN_EN_SUPPORT_V01);
 	} else {
 		pinctrl_info->wlan_en_gpio = -EINVAL;
 	}
