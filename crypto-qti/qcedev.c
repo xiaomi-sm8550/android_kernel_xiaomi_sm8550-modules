@@ -319,7 +319,9 @@ static int qcedev_release(struct inode *inode, struct file *file)
 					__func__, podev);
 	}
 
-	qcedev_ce_high_bw_req(podev, false);
+	if (podev)
+		qcedev_ce_high_bw_req(podev, false);
+
 	if (qcedev_unmap_all_buffers(handle))
 		pr_err("%s: failed to unmap all ion buffers\n", __func__);
 
