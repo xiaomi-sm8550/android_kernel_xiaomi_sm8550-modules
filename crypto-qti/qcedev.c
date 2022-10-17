@@ -860,6 +860,8 @@ static int submit_req(struct qcedev_async_req *qcedev_areq,
 				pr_err("%s: waiting for req state to be done, retries = %d",
 						__func__, retries);
 			}
+			// This means there is no crypto error, timeout corner case.
+			qcedev_areq->offload_cipher_op_req.err = QCEDEV_OFFLOAD_NO_ERROR;
 			return 0;
 		}
 		tasklet_schedule(&podev->done_tasklet);
