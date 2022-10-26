@@ -2351,6 +2351,7 @@ int cnss_pci_call_driver_probe(struct cnss_pci_data *pci_priv)
 		}
 		clear_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
 		set_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state);
+		cnss_pci_free_blob_mem(pci_priv);
 		complete_all(&plat_priv->power_up_complete);
 	} else if (test_bit(CNSS_DRIVER_IDLE_RESTART,
 			    &plat_priv->driver_state)) {
@@ -4352,6 +4353,17 @@ static void cnss_pci_free_m3_mem(struct cnss_pci_data *pci_priv)
 	m3_mem->pa = 0;
 	m3_mem->size = 0;
 }
+
+#ifdef CONFIG_FREE_M3_BLOB_MEM
+void cnss_pci_free_blob_mem(struct cnss_pci_data *pci_priv)
+{
+	cnss_pci_free_m3_mem(pci_priv);
+}
+#else
+void cnss_pci_free_blob_mem(struct cnss_pci_data *pci_priv)
+{
+}
+#endif
 
 void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv)
 {
