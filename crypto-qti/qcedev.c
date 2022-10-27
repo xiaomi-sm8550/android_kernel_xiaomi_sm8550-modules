@@ -767,6 +767,7 @@ static int submit_req(struct qcedev_async_req *qcedev_areq,
 	bool print_sts = false;
 	struct qcedev_async_req *new_req = NULL;
 	int retries = 0;
+	int req_wait = MAX_REQUEST_TIME;
 
 	qcedev_areq->err = 0;
 	podev = handle->cntl;
@@ -804,12 +805,16 @@ static int submit_req(struct qcedev_async_req *qcedev_areq,
 			list_add_tail(&qcedev_areq->list,
 					&podev->ready_commands);
 			qcedev_areq->state = QCEDEV_REQ_WAITING;
-			if (wait_event_interruptible_lock_irq_timeout(
+			req_wait = wait_event_interruptible_lock_irq_timeout(
 				qcedev_areq->wait_q,
 				(qcedev_areq->state == QCEDEV_REQ_CURRENT),
 				podev->lock,
-				msecs_to_jiffies(MAX_REQUEST_TIME)) == 0) {
-				pr_err("%s: request timed out\n", __func__);
+				msecs_to_jiffies(MAX_REQUEST_TIME));
+			if ((req_wait == 0) || (req_wait == -ERESTARTSYS)) {
+				pr_err("%s: request timed out, req_wait = %d\n",
+						__func__, req_wait);
+				list_del(&qcedev_areq->list);
+				podev->active_command = NULL;
 				spin_unlock_irqrestore(&podev->lock, flags);
 				return qcedev_areq->err;
 			}
