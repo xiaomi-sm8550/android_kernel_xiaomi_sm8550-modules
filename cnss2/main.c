@@ -92,8 +92,6 @@ static struct cnss_plat_data *plat_env;
 
 static bool cnss_allow_driver_loading;
 
-static DECLARE_RWSEM(cnss_pm_sem);
-
 static struct cnss_fw_files FW_FILES_QCA6174_FW_3_0 = {
 	"qwlan30.bin", "bdwlan30.bin", "otp30.bin", "utf30.bin",
 	"utfbd30.bin", "epping30.bin", "evicted30.bin"
@@ -251,25 +249,6 @@ int cnss_get_feature_list(struct cnss_plat_data *plat_priv,
 	return 0;
 }
 
-static int cnss_pm_notify(struct notifier_block *b,
-			  unsigned long event, void *p)
-{
-	switch (event) {
-	case PM_SUSPEND_PREPARE:
-		down_write(&cnss_pm_sem);
-		break;
-	case PM_POST_SUSPEND:
-		up_write(&cnss_pm_sem);
-		break;
-	}
-
-	return NOTIFY_DONE;
-}
-
-static struct notifier_block cnss_pm_notifier = {
-	.notifier_call = cnss_pm_notify,
-};
-
 void cnss_pm_stay_awake(struct cnss_plat_data *plat_priv)
 {
 	if (atomic_inc_return(&plat_priv->pm_count) != 1)
@@ -295,18 +274,6 @@ void cnss_pm_relax(struct cnss_plat_data *plat_priv)
 		    atomic_read(&plat_priv->pm_count));
 	pm_relax(&plat_priv->plat_dev->dev);
 }
-
-void cnss_lock_pm_sem(struct device *dev)
-{
-	down_read(&cnss_pm_sem);
-}
-EXPORT_SYMBOL(cnss_lock_pm_sem);
-
-void cnss_release_pm_sem(struct device *dev)
-{
-	up_read(&cnss_pm_sem);
-}
-EXPORT_SYMBOL(cnss_release_pm_sem);
 
 int cnss_get_fw_files_for_target(struct device *dev,
 				 struct cnss_fw_files *pfw_files,
@@ -2007,6 +1974,20 @@ static int cnss_cold_boot_cal_start_hdlr(struct cnss_plat_data *plat_priv)
 		}
 	}
 
+	switch (plat_priv->device_id) {
+	case QCA6290_DEVICE_ID:
+	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
+	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
+		break;
+	default:
+		cnss_pr_err("Not supported for device ID 0x%lx\n",
+			    plat_priv->device_id);
+		ret = -EINVAL;
+		goto mark_cal_fail;
+	}
+
 	set_bit(CNSS_IN_COLD_BOOT_CAL, &plat_priv->driver_state);
 	if (test_bit(CNSS_DRIVER_REGISTER, &plat_priv->driver_state)) {
 		timeout = cnss_get_timeout(plat_priv,
@@ -3531,19 +3512,6 @@ static ssize_t fs_ready_store(struct device *dev,
 		return count;
 	}
 
-	switch (plat_priv->device_id) {
-	case QCA6290_DEVICE_ID:
-	case QCA6390_DEVICE_ID:
-	case QCA6490_DEVICE_ID:
-	case KIWI_DEVICE_ID:
-	case MANGO_DEVICE_ID:
-		break;
-	default:
-		cnss_pr_err("Not supported for device ID 0x%lx\n",
-			    plat_priv->device_id);
-		return count;
-	}
-
 	set_bit(CNSS_FS_READY, &plat_priv->driver_state);
 	if (fs_ready == FILE_SYSTEM_READY && plat_priv->cbc_enabled) {
 		cnss_driver_event_post(plat_priv,
@@ -3830,10 +3798,6 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 	timer_setup(&plat_priv->fw_boot_timer,
 		    cnss_bus_fw_boot_timeout_hdlr, 0);
 
-	ret = register_pm_notifier(&cnss_pm_notifier);
-	if (ret)
-		cnss_pr_err("Failed to register PM notifier, err = %d\n", ret);
-
 	plat_priv->reboot_nb.notifier_call = cnss_reboot_notifier;
 	ret = register_reboot_notifier(&plat_priv->reboot_nb);
 	if (ret)
@@ -3884,7 +3848,6 @@ static void cnss_misc_deinit(struct cnss_plat_data *plat_priv)
 	complete_all(&plat_priv->daemon_connected);
 	device_init_wakeup(&plat_priv->plat_dev->dev, false);
 	unregister_reboot_notifier(&plat_priv->reboot_nb);
-	unregister_pm_notifier(&cnss_pm_notifier);
 	del_timer(&plat_priv->fw_boot_timer);
 	wakeup_source_unregister(plat_priv->recovery_ws);
 	cnss_deinit_sol_gpio(plat_priv);

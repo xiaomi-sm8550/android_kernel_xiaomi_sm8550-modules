@@ -270,6 +270,7 @@ extern int cnss_get_user_msi_assignment(struct device *dev, char *user_name,
 					uint32_t *user_base_data,
 					uint32_t *base_vector);
 extern int cnss_get_msi_irq(struct device *dev, unsigned int vector);
+extern bool cnss_is_one_msi(struct device *dev);
 extern void cnss_get_msi_address(struct device *dev, uint32_t *msi_addr_low,
 				 uint32_t *msi_addr_high);
 extern int cnss_wlan_hw_enable(void);
