@@ -17,7 +17,11 @@
 
 inline u64 hw_fence_get_qtime(struct hw_fence_driver_data *drv_data)
 {
+#ifdef HWFENCE_USE_SLEEP_TIMER
 	return readl_relaxed(drv_data->qtime_io_mem);
+#else /* USE QTIMER */
+	return arch_timer_read_counter();
+#endif /* HWFENCE_USE_SLEEP_TIMER */
 }
 
 static int init_hw_fences_queues(struct hw_fence_driver_data *drv_data,
@@ -624,10 +628,9 @@ void hw_fence_cleanup_client(struct hw_fence_driver_data *drv_data,
 	 *  allocation, then we will need to notify FenceCTL about the client that is
 	 *  going-away here.
 	 */
-	mutex_lock(&drv_data->clients_mask_lock);
-	drv_data->client_id_mask &= ~BIT(hw_fence_client->client_id);
+	mutex_lock(&drv_data->clients_register_lock);
 	drv_data->clients[hw_fence_client->client_id] = NULL;
-	mutex_unlock(&drv_data->clients_mask_lock);
+	mutex_unlock(&drv_data->clients_register_lock);
 
 	/* Deallocate client's object */
 	HWFNC_DBG_LUT("freeing client_id:%d\n", hw_fence_client->client_id);
