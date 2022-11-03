@@ -191,6 +191,8 @@ static void qcedev_ce_high_bw_req(struct qcedev_control *podev,
 {
 	int ret = 0;
 
+        if(podev == NULL) return;
+
 	mutex_lock(&qcedev_sent_bw_req);
 	if (high_bw_req) {
 		if (podev->high_bw_req_count == 0) {
@@ -1782,6 +1784,8 @@ static int qcedev_smmu_ablk_offload_cipher(struct qcedev_async_req *areq,
 		}
 	}
 exit:
+	areq->cipher_req.creq.src = NULL;
+	areq->cipher_req.creq.dst = NULL;
 	return err;
 }
 
