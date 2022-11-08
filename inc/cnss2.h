@@ -204,6 +204,10 @@ enum cnss_recovery_reason {
 	CNSS_REASON_TIMEOUT,
 };
 
+enum cnss_fw_caps {
+	CNSS_FW_CAP_DIRECT_LINK_SUPPORT,
+};
+
 enum cnss_remote_mem_type {
 	CNSS_REMOTE_MEM_TYPE_FW,
 	CNSS_REMOTE_MEM_TYPE_QDSS,
@@ -299,4 +303,5 @@ extern struct kobject *cnss_get_wifi_kobj(struct device *dev);
 extern int cnss_send_buffer_to_afcmem(struct device *dev, char *afcdb,
 				      uint32_t len, uint8_t slotid);
 extern int cnss_reset_afcmem(struct device *dev, uint8_t slotid);
+extern bool cnss_get_fw_cap(struct device *dev, enum cnss_fw_caps fw_cap);
 #endif /* _NET_CNSS2_H */
