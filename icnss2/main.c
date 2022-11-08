@@ -2171,10 +2171,25 @@ static int icnss_modem_notifier_nb(struct notifier_block *nb,
 
 	switch (code) {
 	case QCOM_SSR_BEFORE_SHUTDOWN:
+		if (!notif->crashed &&
+		    priv->low_power_support) { /* Hibernate */
+			if (test_bit(ICNSS_MODE_ON, &priv->state))
+				icnss_driver_event_post(
+					priv, ICNSS_DRIVER_EVENT_IDLE_SHUTDOWN,
+					ICNSS_EVENT_SYNC_UNINTERRUPTIBLE, NULL);
+			set_bit(ICNSS_LOW_POWER, &priv->state);
+		}
 		break;
 	case QCOM_SSR_AFTER_SHUTDOWN:
-		icnss_pr_info("Collecting msa0 segment dump\n");
-		icnss_msa0_ramdump(priv);
+		/* Collect ramdump only when there was a crash. */
+		if (notif->crashed) {
+			icnss_pr_info("Collecting msa0 segment dump\n");
+			icnss_msa0_ramdump(priv);
+		}
+
+		if (test_bit(ICNSS_LOW_POWER, &priv->state) &&
+			     priv->low_power_support)
+			clear_bit(ICNSS_LOW_POWER, &priv->state);
 		goto out;
 	default:
 		goto out;
@@ -4047,6 +4062,12 @@ static int icnss_resource_parse(struct icnss_priv *priv)
 			} else {
 				priv->ce_irqs[i] = res->start;
 			}
+		}
+
+		if (of_property_read_bool(pdev->dev.of_node,
+					  "qcom,is_low_power")) {
+			priv->low_power_support = true;
+			icnss_pr_dbg("Deep Sleep/Hibernate mode supported\n");
 		}
 
 		if (of_property_read_u32(pdev->dev.of_node, "qcom,rf_subtype",

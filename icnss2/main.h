@@ -499,6 +499,7 @@ struct icnss_priv {
 	struct workqueue_struct *soc_update_wq;
 	unsigned long device_config;
 	bool wpss_supported;
+	u8 low_power_support;
 	bool is_rf_subtype_valid;
 	u32 rf_subtype;
 	u8 is_slate_rfa;
