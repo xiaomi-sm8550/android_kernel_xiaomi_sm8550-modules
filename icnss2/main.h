@@ -126,6 +126,7 @@ enum icnss_driver_state {
 	ICNSS_COLD_BOOT_CAL,
 	ICNSS_QMI_DMS_CONNECTED,
 	ICNSS_SLATE_SSR_REGISTERED,
+	ICNSS_SLATE_UP,
 };
 
 struct ce_irq_list {
@@ -499,6 +500,7 @@ struct icnss_priv {
 	bool is_rf_subtype_valid;
 	u32 rf_subtype;
 	u8 is_slate_rfa;
+	struct completion slate_boot_complete;
 };
 
 struct icnss_reg_info {
