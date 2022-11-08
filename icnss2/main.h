@@ -30,6 +30,8 @@
 #define ICNSS_PCI_EP_WAKE_OFFSET 4
 #define ICNSS_DISABLE_M3_SSR 0
 #define ICNSS_ENABLE_M3_SSR 1
+#define WLAN_RF_SLATE 0
+#define WLAN_RF_APACHE 1
 
 extern uint64_t dynamic_feature_mask;
 
@@ -490,6 +492,8 @@ struct icnss_priv {
 	struct workqueue_struct *soc_update_wq;
 	unsigned long device_config;
 	bool wpss_supported;
+	bool is_rf_subtype_valid;
+	u32 rf_subtype;
 };
 
 struct icnss_reg_info {
