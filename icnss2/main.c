@@ -2187,9 +2187,6 @@ static int icnss_modem_notifier_nb(struct notifier_block *nb,
 			icnss_msa0_ramdump(priv);
 		}
 
-		if (test_bit(ICNSS_LOW_POWER, &priv->state) &&
-			     priv->low_power_support)
-			clear_bit(ICNSS_LOW_POWER, &priv->state);
 		goto out;
 	default:
 		goto out;
