@@ -31,7 +31,9 @@ obj-$(CONFIG_CRYPTO_DEV_QCEDEV) += qce50_dlkm.o
 qce50_dlkm-objs := crypto-qti/qce50.o
 
 obj-$(CONFIG_CRYPTO_DEV_QCEDEV) += qcedev-mod_dlkm.o
-qcedev-mod_dlkm-objs := crypto-qti/qcedev.o crypto-qti/qcedev_smmu.o crypto-qti/compat_qcedev.o
+qcedev-mod_dlkm-objs := crypto-qti/qcedev.o crypto-qti/qcedev_smmu.o
+qcedev-mod_dlkm-$(CONFIG_COMPAT) += crypto-qti/compat_qcedev.o
+
 
 obj-$(CONFIG_CRYPTO_DEV_QCRYPTO) += qcrypto-msm_dlkm.o
 qcrypto-msm_dlkm-objs := crypto-qti/qcrypto.o
