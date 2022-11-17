@@ -6299,7 +6299,7 @@ static int ipa3_setup_apps_pipes(void)
 	ipa3_ctx->clnt_hdl_data_in = 0;
 
 	if (ipa3_ctx->ipa_hw_type >= IPA_HW_v5_5 &&
-		!ipa3_ctx->ipa_config_is_apq_dma) {
+		ipa3_ctx->lan_coal_enable) {
 		/*
 		 * LAN_COAL IN (IPA->AP)
 		 */
@@ -9289,6 +9289,7 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 	ipa3_ctx->tx_poll = resource_p->tx_poll;
 	ipa3_ctx->ipa_gpi_event_rp_ddr = resource_p->ipa_gpi_event_rp_ddr;
 	ipa3_ctx->rmnet_ctl_enable = resource_p->rmnet_ctl_enable;
+	ipa3_ctx->lan_coal_enable = resource_p->lan_coal_enable;
 	ipa3_ctx->rmnet_ll_enable = resource_p->rmnet_ll_enable;
 	ipa3_ctx->tx_wrapper_cache_max_size = get_tx_wrapper_cache_size(
 			resource_p->tx_wrapper_cache_max_size);
@@ -10578,6 +10579,14 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 			ipa_drv_res->rmnet_ll_enable
 			? "True" : "False");
 	}
+	ipa_drv_res->lan_coal_enable =
+		of_property_read_bool(pdev->dev.of_node,
+		"qcom,lan-coal-enable");
+	IPADBG(": Enable lan coal = %s\n",
+		ipa_drv_res->lan_coal_enable
+		? "True" : "False");
+
+
 
 	result = of_property_read_string(pdev->dev.of_node,
 			"qcom,use-gsi-ipa-fw", &ipa_drv_res->gsi_fw_file_name);

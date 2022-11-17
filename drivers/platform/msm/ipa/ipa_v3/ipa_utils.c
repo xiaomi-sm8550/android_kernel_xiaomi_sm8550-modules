@@ -6818,7 +6818,7 @@ void stop_coalescing()
 
 bool lan_coal_enabled()
 {
-	if ( ipa3_ctx->ipa_initialization_complete ) {
+	if ( ipa3_ctx->ipa_initialization_complete && ipa3_ctx->lan_coal_enable) {
 		int ep_idx;
 		if ( IPA_CLIENT_IS_MAPPED_VALID(IPA_CLIENT_APPS_LAN_COAL_CONS, ep_idx) ) {
 			return true;
