@@ -58,6 +58,7 @@ enum cnss_pci_reg_dev_mask {
 	REG_MASK_QCA6490,
 	REG_MASK_KIWI,
 	REG_MASK_MANGO,
+	REG_MASK_PEACH,
 };
 
 struct cnss_msi_user {
