@@ -224,6 +224,7 @@ struct cnss_wlan_enable_cfg {
 	struct cnss_rri_over_ddr_cfg rri_over_ddr_cfg;
 	u32 num_shadow_reg_v3_cfg;
 	struct cnss_shadow_reg_v3_cfg *shadow_reg_v3_cfg;
+	bool send_msi_ce;
 };
 
 enum cnss_driver_mode {
