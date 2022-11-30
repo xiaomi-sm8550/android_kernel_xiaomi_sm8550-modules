@@ -39,7 +39,7 @@
 #include <soc/qcom/subsystem_notif.h>
 #include <soc/qcom/subsystem_restart.h>
 #endif
-
+#include <linux/iommu.h>
 #include "qmi.h"
 
 #define MAX_NO_OF_MAC_ADDR		4
@@ -549,6 +549,7 @@ struct cnss_plat_data {
 	bool fw_pcie_gen_switch;
 	u64 fw_caps;
 	u8 pcie_gen_speed;
+	struct iommu_domain *audio_iommu_domain;
 	struct cnss_dms_data dms;
 	int power_up_error;
 	u32 hw_trc_override;
