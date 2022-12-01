@@ -122,6 +122,27 @@ enum hw_fence_loopback_id {
 #define HW_FENCE_MAX_DPU_LOOPBACK_CLIENTS (HW_FENCE_LOOPBACK_DPU_CTL_5 + 1)
 
 /**
+ * enum hw_fence_client_data_id - Enum with the clients having client_data, an optional
+ *                                parameter passed from the waiting client and returned
+ *                                to it upon fence signaling
+ * @HW_FENCE_CLIENT_DATA_ID_CTX0: GFX Client.
+ * @HW_FENCE_CLIENT_DATA_ID_IPE: IPE Client.
+ * @HW_FENCE_CLIENT_DATA_ID_VPU: VPU Client.
+ * @HW_FENCE_CLIENT_DATA_ID_VAL0: Debug validation client 0.
+ * @HW_FENCE_CLIENT_DATA_ID_VAL1: Debug validation client 1.
+ * @HW_FENCE_MAX_CLIENTS_WITH_DATA: Max number of clients with data, also indicates an
+ *                                  invalid hw_fence_client_data_id
+ */
+enum hw_fence_client_data_id {
+	HW_FENCE_CLIENT_DATA_ID_CTX0,
+	HW_FENCE_CLIENT_DATA_ID_IPE,
+	HW_FENCE_CLIENT_DATA_ID_VPU,
+	HW_FENCE_CLIENT_DATA_ID_VAL0,
+	HW_FENCE_CLIENT_DATA_ID_VAL1,
+	HW_FENCE_MAX_CLIENTS_WITH_DATA,
+};
+
+/**
  * struct msm_hw_fence_queue - Structure holding the data of the hw fence queues.
  * @va_queue: pointer to the virtual address of the queue elements
  * @q_size_bytes: size of the queue
@@ -148,8 +169,10 @@ enum payload_type {
  * @mem_descriptor: hfi header memory descriptor
  * @queues: queues descriptor
  * @ipc_signal_id: id of the signal to be triggered for this client
- * @ipc_client_id: id of the ipc client for this hw fence driver client
+ * @ipc_client_vid: virtual id of the ipc client for this hw fence driver client
+ * @ipc_client_pid: physical id of the ipc client for this hw fence driver client
  * @update_rxq: bool to indicate if client uses rx-queue
+ * @send_ipc: bool to indicate if client requires ipc interrupt for already signaled fences
  * @wait_queue: wait queue for the validation clients
  * @val_signal: doorbell flag to signal the validation clients in the wait queue
  */
@@ -158,8 +181,10 @@ struct msm_hw_fence_client {
 	struct msm_hw_fence_mem_addr mem_descriptor;
 	struct msm_hw_fence_queue queues[HW_FENCE_CLIENT_QUEUES];
 	int ipc_signal_id;
-	int ipc_client_id;
+	int ipc_client_vid;
+	int ipc_client_pid;
 	bool update_rxq;
+	bool send_ipc;
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 	wait_queue_head_t wait_queue;
 	atomic_t val_signal;
@@ -187,6 +212,7 @@ struct msm_hw_fence_mem_data {
  * @create_hw_fences: boolean to continuosly create hw-fences within debugfs
  * @clients_list: list of debug clients registered
  * @clients_list_lock: lock to synchronize access to the clients list
+ * @lock_wake_cnt: number of times that driver triggers wake-up ipcc to unlock inter-vm try-lock
  */
 struct msm_hw_fence_dbg_data {
 	struct dentry *root;
@@ -200,6 +226,8 @@ struct msm_hw_fence_dbg_data {
 
 	struct list_head clients_list;
 	struct mutex clients_list_lock;
+
+	u64 lock_wake_cnt;
 };
 
 /**
@@ -236,7 +264,8 @@ struct msm_hw_fence_dbg_data {
  * @ipcc_io_mem: base for the ipcc io mem map
  * @ipcc_size: size of the ipcc io mem mapping
  * @protocol_id: ipcc protocol id used by this driver
- * @ipcc_client_id: ipcc client id for this driver
+ * @ipcc_client_vid: ipcc client virtual-id for this driver
+ * @ipcc_client_pid: ipcc client physical-id for this driver
  * @ipc_clients_table: table with the ipcc mapping for each client of this driver
  * @qtime_reg_base: qtimer register base address
  * @qtime_io_mem: qtimer io mem map
@@ -302,7 +331,8 @@ struct hw_fence_driver_data {
 	void __iomem *ipcc_io_mem;
 	uint32_t ipcc_size;
 	u32 protocol_id;
-	u32 ipcc_client_id;
+	u32 ipcc_client_vid;
+	u32 ipcc_client_pid;
 
 	/* table with mapping of ipc client for each hw-fence client */
 	struct hw_fence_client_ipc_map *ipc_clients_table;
@@ -381,6 +411,8 @@ struct msm_hw_fence_queue_payload {
  * @fence_trigger_time: debug info with the trigger time timestamp
  * @fence_wait_time: debug info with the register-for-wait timestamp
  * @debug_refcount: refcount used for debugging
+ * @client_data: array of data optionally passed from and returned to clients waiting on the fence
+ *               during fence signaling
  */
 struct msm_hw_fence {
 	u32 valid;
@@ -399,6 +431,7 @@ struct msm_hw_fence {
 	u64 fence_trigger_time;
 	u64 fence_wait_time;
 	u64 debug_refcount;
+	u64 client_data[HW_FENCE_MAX_CLIENTS_WITH_DATA];
 };
 
 int hw_fence_init(struct hw_fence_driver_data *drv_data);
@@ -416,21 +449,26 @@ int hw_fence_create(struct hw_fence_driver_data *drv_data,
 int hw_fence_destroy(struct hw_fence_driver_data *drv_data,
 	struct msm_hw_fence_client *hw_fence_client,
 	u64 context, u64 seqno);
+int hw_fence_destroy_with_hash(struct hw_fence_driver_data *drv_data,
+	struct msm_hw_fence_client *hw_fence_client, u64 hash);
 int hw_fence_process_fence_array(struct hw_fence_driver_data *drv_data,
 	struct msm_hw_fence_client *hw_fence_client,
-	struct dma_fence_array *array);
+	struct dma_fence_array *array, u64 *hash_join_fence, u64 client_data);
 int hw_fence_process_fence(struct hw_fence_driver_data *drv_data,
-	struct msm_hw_fence_client *hw_fence_client, struct dma_fence *fence);
+	struct msm_hw_fence_client *hw_fence_client, struct dma_fence *fence, u64 *hash,
+	u64 client_data);
 int hw_fence_update_queue(struct hw_fence_driver_data *drv_data,
 	struct msm_hw_fence_client *hw_fence_client, u64 ctxt_id, u64 seqno, u64 hash,
-	u64 flags, u32 error, int queue_type);
+	u64 flags, u64 client_data, u32 error, int queue_type);
 inline u64 hw_fence_get_qtime(struct hw_fence_driver_data *drv_data);
 int hw_fence_read_queue(struct msm_hw_fence_client *hw_fence_client,
 	struct msm_hw_fence_queue_payload *payload, int queue_type);
 int hw_fence_register_wait_client(struct hw_fence_driver_data *drv_data,
-	struct msm_hw_fence_client *hw_fence_client, u64 context, u64 seqno);
+	struct dma_fence *fence, struct msm_hw_fence_client *hw_fence_client, u64 context,
+	u64 seqno, u64 *hash, u64 client_data);
 struct msm_hw_fence *msm_hw_fence_find(struct hw_fence_driver_data *drv_data,
 	struct msm_hw_fence_client *hw_fence_client,
 	u64 context, u64 seqno, u64 *hash);
+enum hw_fence_client_data_id hw_fence_get_client_data_id(enum hw_fence_client_id client_id);
 
 #endif /* __HW_FENCE_DRV_INTERNAL_H */
