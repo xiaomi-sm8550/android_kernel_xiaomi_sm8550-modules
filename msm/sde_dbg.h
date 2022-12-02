@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -543,7 +543,7 @@ void sde_rsc_debug_dump(u32 mux_sel);
 
 /**
  * sde_dbg_update_dump_mode - update dump mode to in_coredump mode if devcoredump
- *  fueature is enabled. Default dump mode is in_mem, if HW recovery feature is
+ *  feature is enabled. Default dump mode is in_mem, if HW recovery feature is
  *  enabled, this function will be called to set dump mode to in_coredump option.
  * @enable_coredump: if enable_coredump is true, update dump mode to in_coredump,
  *	otherwise reset the dump mode to default mode.
