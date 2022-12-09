@@ -4184,7 +4184,7 @@ static int cnss_wlan_device_init(struct cnss_plat_data *plat_priv)
 		return 0;
 
 retry:
-	ret = cnss_power_on_device(plat_priv);
+	ret = cnss_power_on_device(plat_priv, true);
 	if (ret)
 		goto end;
 

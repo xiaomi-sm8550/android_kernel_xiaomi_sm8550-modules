@@ -1112,7 +1112,7 @@ int cnss_get_input_gpio_value(struct cnss_plat_data *plat_priv, int gpio_num)
 	return gpio_get_value(gpio_num);
 }
 
-int cnss_power_on_device(struct cnss_plat_data *plat_priv)
+int cnss_power_on_device(struct cnss_plat_data *plat_priv, bool reset)
 {
 	int ret = 0;
 
@@ -1138,6 +1138,26 @@ int cnss_power_on_device(struct cnss_plat_data *plat_priv)
 		cnss_pr_err("Failed to turn on clocks, err = %d\n", ret);
 		goto vreg_off;
 	}
+
+#ifdef CONFIG_PULLDOWN_WLANEN
+	if (reset) {
+		/* The default state of wlan_en maybe not low,
+		 * according to datasheet, we should put wlan_en
+		 * to low first, and trigger high.
+		 * And the default delay for qca6390 is at least 4ms,
+		 * for qcn7605/qca6174, it is 10us. For safe, set 5ms delay
+		 * here.
+		 */
+		ret = cnss_select_pinctrl_state(plat_priv, false);
+		if (ret) {
+			cnss_pr_err("Failed to select pinctrl state, err = %d\n",
+				    ret);
+			goto clk_off;
+		}
+
+		usleep_range(4000, 5000);
+	}
+#endif
 
 	ret = cnss_select_pinctrl_enable(plat_priv);
 	if (ret) {
@@ -1796,6 +1816,5 @@ int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv)
 		return ret;
 
 	plat_priv->powered_on = false;
-	return cnss_power_on_device(plat_priv);
-
+	return cnss_power_on_device(plat_priv, false);
 }

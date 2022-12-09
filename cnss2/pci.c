@@ -2594,7 +2594,7 @@ static int cnss_qca6174_powerup(struct cnss_pci_data *pci_priv)
 	int ret = 0;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 
-	ret = cnss_power_on_device(plat_priv);
+	ret = cnss_power_on_device(plat_priv, false);
 	if (ret) {
 		cnss_pr_err("Failed to power on device, err = %d\n", ret);
 		goto out;
@@ -2704,7 +2704,7 @@ static int cnss_qca6290_powerup(struct cnss_pci_data *pci_priv)
 
 	cnss_get_driver_mode_update_fw_name(plat_priv);
 retry:
-	ret = cnss_power_on_device(plat_priv);
+	ret = cnss_power_on_device(plat_priv, false);
 	if (ret) {
 		cnss_pr_err("Failed to power on device, err = %d\n", ret);
 		goto out;

@@ -614,7 +614,7 @@ int cnss_vreg_unvote_type(struct cnss_plat_data *plat_priv,
 			  enum cnss_vreg_type type);
 int cnss_get_pinctrl(struct cnss_plat_data *plat_priv);
 int cnss_get_wlan_sw_ctrl(struct cnss_plat_data *plat_priv);
-int cnss_power_on_device(struct cnss_plat_data *plat_priv);
+int cnss_power_on_device(struct cnss_plat_data *plat_priv, bool reset);
 void cnss_power_off_device(struct cnss_plat_data *plat_priv);
 bool cnss_is_device_powered_on(struct cnss_plat_data *plat_priv);
 int cnss_enable_dev_sol_irq(struct cnss_plat_data *plat_priv);
