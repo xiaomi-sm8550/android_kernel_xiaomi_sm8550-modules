@@ -2138,6 +2138,18 @@ mark_cal_fail:
 		 */
 		plat_priv->cal_done = CNSS_CAL_FAILURE;
 		set_bit(CNSS_COLD_BOOT_CAL_DONE, &plat_priv->driver_state);
+
+		if (plat_priv->device_id == QCA6174_DEVICE_ID ||
+		    plat_priv->device_id == QCN7605_DEVICE_ID) {
+			if (!test_bit(CNSS_DRIVER_REGISTER, &plat_priv->driver_state))
+				goto out;
+
+			cnss_pr_info("Schedule WLAN driver load\n");
+
+			if (cancel_delayed_work_sync(&plat_priv->wlan_reg_driver_work))
+				schedule_delayed_work(&plat_priv->wlan_reg_driver_work,
+						      0);
+		}
 	}
 
 out:
@@ -4204,7 +4216,6 @@ int cnss_wlan_hw_enable(void)
 
 	if (test_bit(CNSS_PCI_PROBE_DONE, &plat_priv->driver_state))
 		goto register_driver;
-
 	ret = cnss_wlan_device_init(plat_priv);
 	if (ret) {
 		if (!test_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state))

@@ -76,6 +76,7 @@ static struct cnss_clk_cfg cnss_clk_list[] = {
 
 #define BOOTSTRAP_DELAY			1000
 #define WLAN_ENABLE_DELAY		1000
+#define WLAN_ENABLE_DELAY_ROME		10000
 
 #define TCS_CMD_DATA_ADDR_OFFSET	0x4
 #define TCS_OFFSET			0xC8
@@ -1012,12 +1013,19 @@ static int cnss_select_pinctrl_state(struct cnss_plat_data *plat_priv,
 					    ret);
 				goto out;
 			}
-			udelay(WLAN_ENABLE_DELAY);
+
+			if (plat_priv->device_id == QCA6174_DEVICE_ID ||
+			    plat_priv->device_id == 0)
+				udelay(WLAN_ENABLE_DELAY_ROME);
+			else
+				udelay(WLAN_ENABLE_DELAY);
+
 			cnss_set_xo_clk_gpio_state(plat_priv, false);
 		} else {
 			cnss_set_xo_clk_gpio_state(plat_priv, false);
 			goto out;
 		}
+
 	} else {
 		if (!IS_ERR_OR_NULL(pinctrl_info->wlan_en_sleep)) {
 			cnss_wlan_hw_disable_check(plat_priv);
@@ -1789,4 +1797,5 @@ int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv)
 
 	plat_priv->powered_on = false;
 	return cnss_power_on_device(plat_priv);
+
 }
