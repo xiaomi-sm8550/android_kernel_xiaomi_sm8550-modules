@@ -7695,7 +7695,7 @@ int ipa3_get_ep_mapping(enum ipa_client_type client)
 	hw_idx = ipa3_ctx->hw_type_index;
 
 	if (client >= IPA_CLIENT_MAX || client < 0) {
-		IPAERR_RL("Bad client number! client =%d\n", client);
+		IPAERR_RL("Bad client number! client = %d\n", client);
 		return IPA_EP_NOT_ALLOCATED;
 	}
 
