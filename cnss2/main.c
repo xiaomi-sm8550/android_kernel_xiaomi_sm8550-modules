@@ -407,9 +407,15 @@ int cnss_wlan_enable(struct device *dev,
 		     enum cnss_driver_mode mode,
 		     const char *host_version)
 {
-	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
 	int ret = 0;
+	struct cnss_plat_data *plat_priv;
 
+	if (!dev) {
+		cnss_pr_err("Invalid dev pointer\n");
+		return -EINVAL;
+	}
+
+	plat_priv = cnss_bus_dev_to_plat_priv(dev);
 	if (!plat_priv)
 		return -ENODEV;
 
