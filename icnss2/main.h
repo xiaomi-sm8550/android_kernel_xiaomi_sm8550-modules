@@ -21,7 +21,6 @@
 
 #define WCN6750_DEVICE_ID 0x6750
 #define ADRASTEA_DEVICE_ID 0xabcd
-#define QMI_WLFW_MAX_NUM_MEM_SEG 32
 #define THERMAL_NAME_LENGTH 20
 #define ICNSS_SMEM_VALUE_MASK 0xFFFFFFFF
 #define ICNSS_SMEM_SEQ_NO_POS 16
@@ -455,7 +454,7 @@ struct icnss_priv {
 	struct rproc *rproc;
 	atomic_t is_shutdown;
 	u32 qdss_mem_seg_len;
-	struct icnss_fw_mem qdss_mem[QMI_WLFW_MAX_NUM_MEM_SEG];
+	struct icnss_fw_mem qdss_mem[QMI_WLFW_MAX_NUM_MEM_SEG_V01];
 	void *get_info_cb_ctx;
 	int (*get_info_cb)(void *ctx, void *event, int event_len);
 	atomic_t soc_wake_ref_count;

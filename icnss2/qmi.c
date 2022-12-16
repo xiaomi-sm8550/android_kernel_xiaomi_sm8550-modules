@@ -2165,7 +2165,7 @@ int wlfw_qdss_trace_mem_info_send_sync(struct icnss_priv *priv)
 
 	req->mem_seg_len = priv->qdss_mem_seg_len;
 
-	if (priv->qdss_mem_seg_len > QMI_WLFW_MAX_NUM_MEM_SEG) {
+	if (priv->qdss_mem_seg_len >  QMI_WLFW_MAX_NUM_MEM_SEG_V01) {
 		icnss_pr_err("Invalid seg len %u\n",
 			     priv->qdss_mem_seg_len);
 		ret = -EINVAL;
@@ -2564,7 +2564,7 @@ static void wlfw_qdss_trace_req_mem_ind_cb(struct qmi_handle *qmi,
 
 	priv->qdss_mem_seg_len = ind_msg->mem_seg_len;
 
-	if (priv->qdss_mem_seg_len > QMI_WLFW_MAX_NUM_MEM_SEG) {
+	if (priv->qdss_mem_seg_len > QMI_WLFW_MAX_NUM_MEM_SEG_V01) {
 		icnss_pr_err("Invalid seg len %u\n",
 			     priv->qdss_mem_seg_len);
 		return;
