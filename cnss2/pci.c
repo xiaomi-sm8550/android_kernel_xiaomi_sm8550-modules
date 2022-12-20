@@ -6119,6 +6119,21 @@ exit:
 	return ret;
 }
 
+static bool cnss_is_tme_supported(struct cnss_pci_data *pci_priv)
+{
+	if (!pci_priv) {
+		cnss_pr_dbg("pci_priv is NULL");
+		return false;
+	}
+
+	switch (pci_priv->device_id) {
+	case PEACH_DEVICE_ID:
+		return true;
+	default:
+		return false;
+	}
+}
+
 static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 {
 	int ret = 0;
@@ -6196,6 +6211,8 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	    (plat_priv->device_id == KIWI_DEVICE_ID &&
 	     plat_priv->device_version.major_version == 1))
 		cnss_mhi_config = &cnss_mhi_config_no_satellite;
+
+	mhi_ctrl->tme_supported_image = cnss_is_tme_supported(pci_priv);
 
 	ret = mhi_register_controller(mhi_ctrl, cnss_mhi_config);
 	if (ret) {
