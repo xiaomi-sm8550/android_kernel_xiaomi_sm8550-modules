@@ -6205,7 +6205,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	}
 
 	ret = cnss_dev_specific_power_on(plat_priv);
-	if (ret)
+	if (ret < 0)
 		goto reset_ctx;
 
 	cnss_pci_of_reserved_mem_device_init(pci_priv);
