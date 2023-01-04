@@ -90,6 +90,13 @@ static DEFINE_SPINLOCK(time_sync_lock);
 #define HST_HANG_DATA_OFFSET		((3 * 1024 * 1024) - HANG_DATA_LENGTH)
 #define HSP_HANG_DATA_OFFSET		((2 * 1024 * 1024) - HANG_DATA_LENGTH)
 
+#define AFC_SLOT_SIZE                   0x1000
+#define AFC_MAX_SLOT                    2
+#define AFC_MEM_SIZE                    (AFC_SLOT_SIZE * AFC_MAX_SLOT)
+#define AFC_AUTH_STATUS_OFFSET          1
+#define AFC_AUTH_SUCCESS                1
+#define AFC_AUTH_ERROR                  0
+
 static const struct mhi_channel_config cnss_mhi_channels[] = {
 	{
 		.num = 0,
@@ -1329,8 +1336,11 @@ void cnss_pci_handle_linkdown(struct cnss_pci_data *pci_priv)
 	}
 	pci_priv->pci_link_down_ind = true;
 	spin_unlock_irqrestore(&pci_link_down_lock, flags);
-	/* Notify MHI about link down*/
-	mhi_report_error(pci_priv->mhi_ctrl);
+
+	if (pci_priv->mhi_ctrl) {
+		/* Notify MHI about link down*/
+		mhi_report_error(pci_priv->mhi_ctrl);
+	}
 
 	if (pci_dev->device == QCA6174_DEVICE_ID)
 		disable_irq(pci_dev->irq);
@@ -1700,6 +1710,9 @@ static int cnss_rddm_trigger_debug(struct cnss_pci_data *pci_priv)
 	if (!pci_priv || pci_priv->device_id != QCA6490_DEVICE_ID)
 		return -EOPNOTSUPP;
 
+	if (cnss_pci_check_link_status(pci_priv))
+		return -EINVAL;
+
 	cnss_pr_err("Write GCC Spare with ACE55 Pattern");
 	cnss_pci_reg_write(pci_priv, GCC_GCC_SPARE_REG_1, 0xACE55);
 	ret = cnss_pci_reg_read(pci_priv, GCC_GCC_SPARE_REG_1, &read_val);
@@ -1713,13 +1726,26 @@ static int cnss_rddm_trigger_debug(struct cnss_pci_data *pci_priv)
 static int cnss_rddm_trigger_check(struct cnss_pci_data *pci_priv)
 {
 	int read_val, ret;
+	u32 pbl_stage, sbl_log_start, sbl_log_size, pbl_wlan_boot_cfg;
 
 	if (!pci_priv || pci_priv->device_id != QCA6490_DEVICE_ID)
 		return -EOPNOTSUPP;
 
+	if (cnss_pci_check_link_status(pci_priv))
+		return -EINVAL;
+
 	ret = cnss_pci_reg_read(pci_priv, GCC_GCC_SPARE_REG_1, &read_val);
 	cnss_pr_err("Read GCC spare to check reset status: 0x%x, ret: %d",
 		    read_val, ret);
+
+	cnss_pci_reg_read(pci_priv, TCSR_PBL_LOGGING_REG, &pbl_stage);
+	cnss_pci_reg_read(pci_priv, PCIE_BHI_ERRDBG2_REG, &sbl_log_start);
+	cnss_pci_reg_read(pci_priv, PCIE_BHI_ERRDBG3_REG, &sbl_log_size);
+	cnss_pci_reg_read(pci_priv, PBL_WLAN_BOOT_CFG, &pbl_wlan_boot_cfg);
+	cnss_pr_dbg("TCSR_PBL_LOGGING: 0x%08x PCIE_BHI_ERRDBG: Start: 0x%08x Size:0x%08x \n",
+		    pbl_stage, sbl_log_start, sbl_log_size);
+	cnss_pr_dbg("PBL_WLAN_BOOT_CFG: 0x%08x\n", pbl_wlan_boot_cfg);
+
 	return ret;
 }
 
@@ -2325,6 +2351,7 @@ int cnss_pci_call_driver_probe(struct cnss_pci_data *pci_priv)
 		}
 		clear_bit(CNSS_DRIVER_LOADING, &plat_priv->driver_state);
 		set_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state);
+		cnss_pci_free_blob_mem(pci_priv);
 		complete_all(&plat_priv->power_up_complete);
 	} else if (test_bit(CNSS_DRIVER_IDLE_RESTART,
 			    &plat_priv->driver_state)) {
@@ -4039,6 +4066,94 @@ int cnss_pci_qmi_send_put(struct cnss_pci_data *pci_priv)
 	return ret;
 }
 
+int cnss_send_buffer_to_afcmem(struct device *dev, char *afcdb, uint32_t len,
+			       uint8_t slotid)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct cnss_fw_mem *fw_mem;
+	void *mem = NULL;
+	int i, ret;
+	u32 *status;
+
+	if (!plat_priv)
+		return -EINVAL;
+
+	fw_mem = plat_priv->fw_mem;
+	if (slotid >= AFC_MAX_SLOT) {
+		cnss_pr_err("Invalid slot id %d\n", slotid);
+		ret = -EINVAL;
+		goto err;
+	}
+	if (len > AFC_SLOT_SIZE) {
+		cnss_pr_err("len %d greater than slot size", len);
+		ret = -EINVAL;
+		goto err;
+	}
+
+	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
+		if (fw_mem[i].type == QMI_WLFW_AFC_MEM_V01) {
+			mem = fw_mem[i].va;
+			status = mem + (slotid * AFC_SLOT_SIZE);
+			break;
+		}
+	}
+
+	if (!mem) {
+		cnss_pr_err("AFC mem is not available\n");
+		ret = -ENOMEM;
+		goto err;
+	}
+
+	memcpy(mem + (slotid * AFC_SLOT_SIZE), afcdb, len);
+	if (len < AFC_SLOT_SIZE)
+		memset(mem + (slotid * AFC_SLOT_SIZE) + len,
+		       0, AFC_SLOT_SIZE - len);
+	status[AFC_AUTH_STATUS_OFFSET] = cpu_to_le32(AFC_AUTH_SUCCESS);
+
+	return 0;
+err:
+	return ret;
+}
+EXPORT_SYMBOL(cnss_send_buffer_to_afcmem);
+
+int cnss_reset_afcmem(struct device *dev, uint8_t slotid)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct cnss_fw_mem *fw_mem;
+	void *mem = NULL;
+	int i, ret;
+
+	if (!plat_priv)
+		return -EINVAL;
+
+	fw_mem = plat_priv->fw_mem;
+	if (slotid >= AFC_MAX_SLOT) {
+		cnss_pr_err("Invalid slot id %d\n", slotid);
+		ret = -EINVAL;
+		goto err;
+	}
+
+	for (i = 0; i < plat_priv->fw_mem_seg_len; i++) {
+		if (fw_mem[i].type == QMI_WLFW_AFC_MEM_V01) {
+			mem = fw_mem[i].va;
+			break;
+		}
+	}
+
+	if (!mem) {
+		cnss_pr_err("AFC mem is not available\n");
+		ret = -ENOMEM;
+		goto err;
+	}
+
+	memset(mem + (slotid * AFC_SLOT_SIZE), 0, AFC_SLOT_SIZE);
+	return 0;
+
+err:
+	return ret;
+}
+EXPORT_SYMBOL(cnss_reset_afcmem);
+
 int cnss_pci_alloc_fw_mem(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -4239,6 +4354,17 @@ static void cnss_pci_free_m3_mem(struct cnss_pci_data *pci_priv)
 	m3_mem->size = 0;
 }
 
+#ifdef CONFIG_FREE_M3_BLOB_MEM
+void cnss_pci_free_blob_mem(struct cnss_pci_data *pci_priv)
+{
+	cnss_pci_free_m3_mem(pci_priv);
+}
+#else
+void cnss_pci_free_blob_mem(struct cnss_pci_data *pci_priv)
+{
+}
+#endif
+
 void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv;
@@ -4294,6 +4420,13 @@ int cnss_pci_get_iova_ipa(struct cnss_pci_data *pci_priv, u64 *addr, u64 *size)
 	return 0;
 }
 
+bool cnss_pci_is_smmu_s1_enabled(struct cnss_pci_data *pci_priv)
+{
+	if (pci_priv)
+		return pci_priv->smmu_s1_enable;
+
+	return false;
+}
 struct iommu_domain *cnss_smmu_get_domain(struct device *dev)
 {
 	struct cnss_pci_data *pci_priv = cnss_get_pci_priv(to_pci_dev(dev));
@@ -5107,7 +5240,6 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 	cnss_mhi_debug_reg_dump(pci_priv);
 	cnss_pci_soc_scratch_reg_dump(pci_priv);
 	cnss_pci_dump_misc_reg(pci_priv);
-	cnss_pci_dump_shadow_reg(pci_priv);
 
 	cnss_rddm_trigger_debug(pci_priv);
 	ret = mhi_download_rddm_image(pci_priv->mhi_ctrl, in_panic);

@@ -240,7 +240,7 @@ void *wcnss_prealloc_get(size_t size)
 	if (size >= cnss_pool_alloc_threshold()) {
 
 		for (i = 0; i < ARRAY_SIZE(cnss_pools); i++) {
-			if (cnss_pools[i].size >= size) {
+			if (cnss_pools[i].size >= size && cnss_pools[i].mp) {
 				mem = mempool_alloc(cnss_pools[i].mp, gfp_mask);
 				if (mem) {
 					cnss_pool_put_cache_in_mem(mem, cnss_pools[i].cache);
@@ -277,8 +277,7 @@ int wcnss_prealloc_put(void *mem)
 		return 0;
 
 	i = cnss_pool_get_index(mem);
-
-	if (i >= 0 && i < ARRAY_SIZE(cnss_pools)) {
+	if (i >= 0 && i < ARRAY_SIZE(cnss_pools) && cnss_pools[i].mp) {
 		mempool_free(mem, cnss_pools[i].mp);
 		return 1;
 	}

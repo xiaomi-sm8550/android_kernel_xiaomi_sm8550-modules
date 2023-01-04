@@ -98,6 +98,15 @@ enum cnss_bus_event_type {
 	BUS_EVENT_INVALID = 0xFFFF,
 };
 
+enum cnss_wfc_mode {
+	CNSS_WFC_MODE_OFF,
+	CNSS_WFC_MODE_ON,
+};
+
+struct cnss_wfc_cfg {
+	enum cnss_wfc_mode mode;
+};
+
 struct cnss_hang_event {
 	void *hang_event_data;
 	u16 hang_event_data_len;
@@ -204,6 +213,10 @@ enum cnss_recovery_reason {
 	CNSS_REASON_TIMEOUT,
 };
 
+enum cnss_fw_caps {
+	CNSS_FW_CAP_DIRECT_LINK_SUPPORT,
+};
+
 enum cnss_remote_mem_type {
 	CNSS_REMOTE_MEM_TYPE_FW,
 	CNSS_REMOTE_MEM_TYPE_QDSS,
@@ -292,8 +305,17 @@ extern int cnss_get_mem_seg_count(enum cnss_remote_mem_type type, u32 *seg);
 extern int cnss_get_mem_segment_info(enum cnss_remote_mem_type type,
 				     struct cnss_mem_segment segment[],
 				     u32 segment_count);
+extern int cnss_audio_smmu_map(struct device *dev, phys_addr_t paddr,
+			       dma_addr_t iova, size_t size);
+extern void cnss_audio_smmu_unmap(struct device *dev, dma_addr_t iova,
+				 size_t size);
 extern int cnss_get_pci_slot(struct device *dev);
 extern int cnss_pci_get_reg_dump(struct device *dev, uint8_t *buffer,
 				 uint32_t len);
 extern struct kobject *cnss_get_wifi_kobj(struct device *dev);
+extern int cnss_send_buffer_to_afcmem(struct device *dev, char *afcdb,
+				      uint32_t len, uint8_t slotid);
+extern int cnss_reset_afcmem(struct device *dev, uint8_t slotid);
+extern bool cnss_get_fw_cap(struct device *dev, enum cnss_fw_caps fw_cap);
+extern int cnss_set_wfc_mode(struct device *dev, struct cnss_wfc_cfg cfg);
 #endif /* _NET_CNSS2_H */

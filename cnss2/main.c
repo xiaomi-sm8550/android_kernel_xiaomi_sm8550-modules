@@ -219,6 +219,36 @@ int cnss_get_mem_segment_info(enum cnss_remote_mem_type type,
 }
 EXPORT_SYMBOL(cnss_get_mem_segment_info);
 
+static int cnss_get_audio_iommu_domain(struct cnss_plat_data *plat_priv)
+{
+	struct device_node *audio_ion_node;
+	struct platform_device *audio_ion_pdev;
+
+	audio_ion_node = of_find_compatible_node(NULL, NULL,
+						 "qcom,msm-audio-ion");
+	if (!audio_ion_node) {
+		cnss_pr_err("Unable to get Audio ion node");
+		return -EINVAL;
+	}
+
+	audio_ion_pdev = of_find_device_by_node(audio_ion_node);
+	of_node_put(audio_ion_node);
+	if (!audio_ion_pdev) {
+		cnss_pr_err("Unable to get Audio ion platform device");
+		return -EINVAL;
+	}
+
+	plat_priv->audio_iommu_domain =
+				iommu_get_domain_for_dev(&audio_ion_pdev->dev);
+	put_device(&audio_ion_pdev->dev);
+	if (!plat_priv->audio_iommu_domain) {
+		cnss_pr_err("Unable to get Audio ion iommu domain");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 int cnss_set_feature_list(struct cnss_plat_data *plat_priv,
 			  enum cnss_feature_v01 feature)
 {
@@ -315,6 +345,41 @@ int cnss_get_platform_cap(struct device *dev, struct cnss_platform_cap *cap)
 }
 EXPORT_SYMBOL(cnss_get_platform_cap);
 
+/**
+ * cnss_get_fw_cap - Check whether FW supports specific capability or not
+ * @dev: Device
+ * @fw_cap: FW Capability which needs to be checked
+ *
+ * Return: TRUE if supported, FALSE on failure or if not supported
+ */
+bool cnss_get_fw_cap(struct device *dev, enum cnss_fw_caps fw_cap)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	bool is_supported = false;
+
+	if (!plat_priv)
+		return is_supported;
+
+	if (!plat_priv->fw_caps)
+		return is_supported;
+
+	switch (fw_cap) {
+	case CNSS_FW_CAP_DIRECT_LINK_SUPPORT:
+		is_supported = !!(plat_priv->fw_caps &
+				  QMI_WLFW_DIRECT_LINK_SUPPORT_V01);
+		if (is_supported && cnss_get_audio_iommu_domain(plat_priv))
+			is_supported = false;
+		break;
+	default:
+		cnss_pr_err("Invalid FW Capability: 0x%x\n", fw_cap);
+	}
+
+	cnss_pr_dbg("FW Capability 0x%x is %s\n", fw_cap,
+		    is_supported ? "supported" : "not supported");
+	return is_supported;
+}
+EXPORT_SYMBOL(cnss_get_fw_cap);
+
 void cnss_request_pm_qos(struct device *dev, u32 qos_val)
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
@@ -396,6 +461,52 @@ int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode)
 	return ret;
 }
 EXPORT_SYMBOL(cnss_wlan_disable);
+
+int cnss_audio_smmu_map(struct device *dev, phys_addr_t paddr,
+			dma_addr_t iova, size_t size)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	uint32_t page_offset;
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	if (!plat_priv->audio_iommu_domain)
+		return -EINVAL;
+
+	page_offset = iova & (PAGE_SIZE - 1);
+	if (page_offset + size > PAGE_SIZE)
+		size += PAGE_SIZE;
+
+	iova -= page_offset;
+	paddr -= page_offset;
+
+	return iommu_map(plat_priv->audio_iommu_domain, iova, paddr,
+			 roundup(size, PAGE_SIZE), IOMMU_READ | IOMMU_WRITE);
+}
+EXPORT_SYMBOL(cnss_audio_smmu_map);
+
+void cnss_audio_smmu_unmap(struct device *dev, dma_addr_t iova, size_t size)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	uint32_t page_offset;
+
+	if (!plat_priv)
+		return;
+
+	if (!plat_priv->audio_iommu_domain)
+		return;
+
+	page_offset = iova & (PAGE_SIZE - 1);
+	if (page_offset + size > PAGE_SIZE)
+		size += PAGE_SIZE;
+
+	iova -= page_offset;
+
+	iommu_unmap(plat_priv->audio_iommu_domain, iova,
+		    roundup(size, PAGE_SIZE));
+}
+EXPORT_SYMBOL(cnss_audio_smmu_unmap);
 
 int cnss_athdiag_read(struct device *dev, u32 offset, u32 mem_type,
 		      u32 data_len, u8 *output)
@@ -4096,6 +4207,26 @@ register_driver:
 }
 EXPORT_SYMBOL(cnss_wlan_hw_enable);
 
+int cnss_set_wfc_mode(struct device *dev, struct cnss_wfc_cfg cfg)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	int ret = 0;
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	/* If IMS server is connected, return success without QMI send */
+	if (test_bit(CNSS_IMS_CONNECTED, &plat_priv->driver_state)) {
+		cnss_pr_dbg("Ignore host request as IMS server is connected");
+		return ret;
+	}
+
+	ret = cnss_wlfw_send_host_wfc_call_status(plat_priv, cfg);
+
+	return ret;
+}
+EXPORT_SYMBOL(cnss_set_wfc_mode);
+
 static int cnss_probe(struct platform_device *plat_dev)
 {
 	int ret = 0;
@@ -4248,6 +4379,7 @@ static int cnss_remove(struct platform_device *plat_dev)
 {
 	struct cnss_plat_data *plat_priv = platform_get_drvdata(plat_dev);
 
+	plat_priv->audio_iommu_domain = NULL;
 	cnss_genl_exit();
 	cnss_unregister_ims_service(plat_priv);
 	cnss_unregister_coex_service(plat_priv);

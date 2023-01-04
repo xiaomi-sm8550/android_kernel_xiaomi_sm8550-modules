@@ -12,6 +12,7 @@
 #include <linux/of.h>
 #include <linux/of_gpio.h>
 #include <linux/pinctrl/consumer.h>
+#include <linux/pinctrl/qcom-pinctrl.h>
 #include <linux/regulator/consumer.h>
 #if IS_ENABLED(CONFIG_QCOM_COMMAND_DB)
 #include <soc/qcom/cmd-db.h>
@@ -25,6 +26,8 @@
 static struct cnss_vreg_cfg cnss_vreg_list[] = {
 	{"vdd-wlan-core", 1300000, 1300000, 0, 0, 0},
 	{"vdd-wlan-io", 1800000, 1800000, 0, 0, 0},
+	{"vdd-wlan-io12", 1200000, 1200000, 0, 0, 0},
+	{"vdd-wlan-ant-share", 1800000, 1800000, 0, 0, 0},
 	{"vdd-wlan-xtal-aon", 0, 0, 0, 0, 0},
 	{"vdd-wlan-xtal", 1800000, 1800000, 0, 2, 0},
 	{"vdd-wlan", 0, 0, 0, 0, 0},
@@ -772,6 +775,8 @@ int cnss_get_pinctrl(struct cnss_plat_data *plat_priv)
 	int ret = 0;
 	struct device *dev;
 	struct cnss_pinctrl_info *pinctrl_info;
+	u32 gpio_id, i;
+	int gpio_id_n;
 
 	dev = &plat_priv->plat_dev->dev;
 	pinctrl_info = &plat_priv->pinctrl_info;
@@ -866,6 +871,35 @@ int cnss_get_pinctrl(struct cnss_plat_data *plat_priv)
 			    pinctrl_info->sw_ctrl_gpio);
 	} else {
 		pinctrl_info->sw_ctrl_gpio = -EINVAL;
+	}
+
+	/* Find out and configure all those GPIOs which need to be setup
+	 * for interrupt wakeup capable
+	 */
+	gpio_id_n = of_property_count_u32_elems(dev->of_node, "mpm_wake_set_gpios");
+	if (gpio_id_n > 0) {
+		cnss_pr_dbg("Num of GPIOs to be setup for interrupt wakeup capable: %d\n",
+			    gpio_id_n);
+		for (i = 0; i < gpio_id_n; i++) {
+			ret = of_property_read_u32_index(dev->of_node,
+							 "mpm_wake_set_gpios",
+							 i, &gpio_id);
+			if (ret) {
+				cnss_pr_err("Failed to read gpio_id at index: %d\n", i);
+				continue;
+			}
+
+			ret = msm_gpio_mpm_wake_set(gpio_id, 1);
+			if (ret < 0) {
+				cnss_pr_err("Failed to setup gpio_id: %d as interrupt wakeup capable, ret: %d\n",
+					    ret);
+			} else {
+				cnss_pr_dbg("gpio_id: %d successfully setup for interrupt wakeup capable\n",
+					    gpio_id);
+			}
+		}
+	} else {
+		cnss_pr_dbg("No GPIOs to be setup for interrupt wakeup capable\n");
 	}
 
 	return 0;

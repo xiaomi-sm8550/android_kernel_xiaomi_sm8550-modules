@@ -307,7 +307,8 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 	req->cal_done = plat_priv->cal_done;
 	cnss_pr_dbg("Calibration done is %d\n", plat_priv->cal_done);
 
-	if (!cnss_bus_get_iova(plat_priv, &iova_start, &iova_size) &&
+	if (cnss_bus_is_smmu_s1_enabled(plat_priv) &&
+	    !cnss_bus_get_iova(plat_priv, &iova_start, &iova_size) &&
 	    !cnss_bus_get_iova_ipa(plat_priv, &iova_ipa_start,
 				   &iova_ipa_size)) {
 		req->ddr_range_valid = 1;
@@ -565,9 +566,11 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 				    plat_priv->dev_mem_info[i].size);
 		}
 	}
-	if (resp->fw_caps_valid)
+	if (resp->fw_caps_valid) {
 		plat_priv->fw_pcie_gen_switch =
 			!!(resp->fw_caps & QMI_WLFW_HOST_PCIE_GEN_SWITCH_V01);
+		plat_priv->fw_caps = resp->fw_caps;
+	}
 
 	if (resp->hang_data_length_valid &&
 	    resp->hang_data_length &&
@@ -2162,6 +2165,74 @@ out:
 	return ret;
 }
 
+int cnss_wlfw_send_host_wfc_call_status(struct cnss_plat_data *plat_priv,
+					struct cnss_wfc_cfg cfg)
+{
+	struct wlfw_wfc_call_status_req_msg_v01 *req;
+	struct wlfw_wfc_call_status_resp_msg_v01 *resp;
+	struct qmi_txn txn;
+	int ret = 0;
+
+	if (!test_bit(CNSS_FW_READY, &plat_priv->driver_state)) {
+		cnss_pr_err("Drop host WFC indication as FW not initialized\n");
+		return -EINVAL;
+	}
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
+
+	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
+	if (!resp) {
+		kfree(req);
+		return -ENOMEM;
+	}
+
+	req->wfc_call_active_valid = 1;
+	req->wfc_call_active = cfg.mode;
+
+	cnss_pr_dbg("CNSS->FW: WFC_CALL_REQ: state: 0x%lx\n",
+		    plat_priv->driver_state);
+
+	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
+			   wlfw_wfc_call_status_resp_msg_v01_ei, resp);
+	if (ret < 0) {
+		cnss_pr_err("CNSS->FW: WFC_CALL_REQ: QMI Txn Init: Err %d\n",
+			    ret);
+		goto out;
+	}
+
+	cnss_pr_dbg("Send WFC Mode: %d\n", cfg.mode);
+	ret = qmi_send_request(&plat_priv->qmi_wlfw, NULL, &txn,
+			       QMI_WLFW_WFC_CALL_STATUS_REQ_V01,
+			       WLFW_WFC_CALL_STATUS_REQ_MSG_V01_MAX_MSG_LEN,
+			       wlfw_wfc_call_status_req_msg_v01_ei, req);
+	if (ret < 0) {
+		qmi_txn_cancel(&txn);
+		cnss_pr_err("CNSS->FW: WFC_CALL_REQ: QMI Send Err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
+	if (ret < 0) {
+		cnss_pr_err("FW->CNSS: WFC_CALL_RSP: QMI Wait Err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
+		cnss_pr_err("FW->CNSS: WFC_CALL_RSP: Result: %d Err: %d\n",
+			    resp->resp.result, resp->resp.error);
+		ret = -EINVAL;
+		goto out;
+	}
+	ret = 0;
+out:
+	kfree(req);
+	kfree(resp);
+	return ret;
+
+}
 static int cnss_wlfw_wfc_call_status_send_sync
 	(struct cnss_plat_data *plat_priv,
 	 const struct ims_private_service_wfc_call_status_ind_msg_v01 *ind_msg)
