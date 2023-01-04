@@ -53,6 +53,9 @@
 #else
 #include "misc/qseecom_kernel.h"
 #endif
+#if IS_ENABLED(CONFIG_COMPAT)
+#include "qseecom_32bit_impl.h"
+#endif
 
 #define QSEECOM_DEV			"qseecom"
 #define QSEOS_VERSION_14		0x14
@@ -114,6 +117,25 @@
 
 #define FDE_FLAG_POS    4
 #define ENABLE_KEY_WRAP_IN_KS    (1 << FDE_FLAG_POS)
+
+#define K_COPY_FROM_USER(err, dst, src, size) \
+	do {\
+		if (!(CONFIG_COMPAT))\
+			err = copy_from_user((dst),\
+			(void const __user *)(src),\
+			(size));\
+		else\
+			memmove((dst), (src), (size));\
+	} while (0)
+
+#define K_COPY_TO_USER(err, dst, src, size) \
+	do {\
+		if(!(CONFIG_COMPAT))\
+			err = copy_to_user((void __user *)(dst),\
+			(src), (size));\
+		else\
+			memmove((dst), (src), (size));\
+	} while (0)
 
 enum qseecom_clk_definitions {
 	CLK_DFAB = 0,
@@ -294,6 +316,7 @@ struct qseecom_control {
 	bool  whitelist_support;
 	bool  commonlib_loaded;
 	bool  commonlib64_loaded;
+	bool  commonlib_loaded_by_hostvm;
 	struct ce_hw_usage_info ce_info;
 
 	int qsee_bw_count;
@@ -1511,7 +1534,7 @@ static int qseecom_register_listener(struct qseecom_dev_handle *data,
 	struct qseecom_registered_listener_list *new_entry;
 	struct qseecom_registered_listener_list *ptr_svc;
 
-	ret = copy_from_user(&rcvd_lstnr, argp, sizeof(rcvd_lstnr));
+	K_COPY_FROM_USER(ret, &rcvd_lstnr, argp, sizeof(rcvd_lstnr));
 	if (ret) {
 		pr_err("copy_from_user failed\n");
 		return ret;
@@ -1926,7 +1949,7 @@ static int qseecom_scale_bus_bandwidth(struct qseecom_dev_handle *data,
 	if (qseecom.no_clock_support)
 		return 0;
 
-	ret = copy_from_user(&req_mode, argp, sizeof(req_mode));
+	K_COPY_FROM_USER(ret, &req_mode, argp, sizeof(req_mode));
 	if (ret) {
 		pr_err("copy_from_user failed\n");
 		return ret;
@@ -2003,12 +2026,13 @@ static int __qseecom_enable_clk_scale_up(struct qseecom_dev_handle *data)
 static int qseecom_set_client_mem_param(struct qseecom_dev_handle *data,
 						void __user *argp)
 {
-	int32_t ret;
+	int32_t ret = 0;
 	struct qseecom_set_sb_mem_param_req req;
 	size_t len;
 
 	/* Copy the relevant information needed for loading the image */
-	if (copy_from_user(&req, (void __user *)argp, sizeof(req)))
+	K_COPY_FROM_USER(ret, &req, argp, sizeof(req));
+	if(ret)
 		return -EFAULT;
 
 	if ((req.ifd_data_fd <= 0) || (req.virt_sb_base == NULL) ||
@@ -2757,16 +2781,16 @@ static int qseecom_load_app(struct qseecom_dev_handle *data, void __user *argp)
 	bool first_time = false;
 
 	/* Copy the relevant information needed for loading the image */
-	if (copy_from_user(&load_img_req,
-				(void __user *)argp,
-				sizeof(struct qseecom_load_img_req))) {
+	K_COPY_FROM_USER(ret, &load_img_req, argp,
+						sizeof(struct qseecom_load_img_req));
+	if(ret) {
 		pr_err("copy_from_user failed\n");
 		return -EFAULT;
 	}
-
 	/* Check and load cmnlib */
 	if (qseecom.qsee_version > QSEEE_VERSION_00) {
-		if (!qseecom.commonlib_loaded &&
+		if (!(qseecom.commonlib_loaded ||
+				qseecom.commonlib_loaded_by_hostvm) &&
 				load_img_req.app_arch == ELFCLASS32) {
 			ret = qseecom_load_commonlib_image(data, "cmnlib");
 			if (ret) {
@@ -2777,7 +2801,8 @@ static int qseecom_load_app(struct qseecom_dev_handle *data, void __user *argp)
 			pr_debug("cmnlib is loaded\n");
 		}
 
-		if (!qseecom.commonlib64_loaded &&
+		if (!(qseecom.commonlib64_loaded ||
+				qseecom.commonlib_loaded_by_hostvm) &&
 				load_img_req.app_arch == ELFCLASS64) {
 			ret = qseecom_load_commonlib_image(data, "cmnlib64");
 			if (ret) {
@@ -2979,7 +3004,9 @@ static int qseecom_load_app(struct qseecom_dev_handle *data, void __user *argp)
 		strlcpy(data->client.app_name, load_img_req.img_name,
 					MAX_APP_NAME_SIZE);
 	load_img_req.app_id = app_id;
-	if (copy_to_user(argp, &load_img_req, sizeof(load_img_req))) {
+
+	K_COPY_TO_USER(ret, argp, &load_img_req, sizeof(load_img_req));
+	if(ret) {
 		pr_err("copy_to_user failed\n");
 		ret = -EFAULT;
 		if (first_time) {
@@ -3445,10 +3472,8 @@ static int qseecom_send_service_cmd(struct qseecom_dev_handle *data,
 	size_t req_buf_size;
 
 	/*struct qseecom_command_scm_resp resp;*/
-
-	if (copy_from_user(&req,
-				(void __user *)argp,
-				sizeof(req))) {
+	K_COPY_FROM_USER(ret, &req, argp, sizeof(req));
+	if(ret) {
 		pr_err("copy_from_user failed\n");
 		return -EFAULT;
 	}
@@ -3846,7 +3871,7 @@ static int qseecom_send_cmd(struct qseecom_dev_handle *data, void __user *argp)
 	int ret = 0;
 	struct qseecom_send_cmd_req req;
 
-	ret = copy_from_user(&req, argp, sizeof(req));
+	K_COPY_FROM_USER(ret, &req, argp, sizeof(req));
 	if (ret) {
 		pr_err("copy_from_user failed\n");
 		return ret;
@@ -4343,7 +4368,7 @@ static int __qseecom_send_modfd_cmd(struct qseecom_dev_handle *data,
 	phys_addr_t pa;
 	u8 *va = NULL;
 
-	ret = copy_from_user(&req, argp, sizeof(req));
+	K_COPY_FROM_USER(ret, &req, argp, sizeof(req));
 	if (ret) {
 		pr_err("copy_from_user failed\n");
 		return ret;
@@ -4738,7 +4763,9 @@ static int __qseecom_load_fw(struct qseecom_dev_handle *data, char *appname,
 
 	/* Check and load cmnlib */
 	if (qseecom.qsee_version > QSEEE_VERSION_00) {
-		if (!qseecom.commonlib_loaded && app_arch == ELFCLASS32) {
+		if (!(qseecom.commonlib_loaded ||
+				qseecom.commonlib_loaded_by_hostvm) &&
+				app_arch == ELFCLASS32) {
 			ret = qseecom_load_commonlib_image(data, "cmnlib");
 			if (ret) {
 				pr_err("failed to load cmnlib\n");
@@ -4748,7 +4775,9 @@ static int __qseecom_load_fw(struct qseecom_dev_handle *data, char *appname,
 			pr_debug("cmnlib is loaded\n");
 		}
 
-		if (!qseecom.commonlib64_loaded && app_arch == ELFCLASS64) {
+		if (!(qseecom.commonlib64_loaded ||
+				qseecom.commonlib_loaded_by_hostvm) &&
+				app_arch == ELFCLASS64) {
 			ret = qseecom_load_commonlib_image(data, "cmnlib64");
 			if (ret) {
 				pr_err("failed to load cmnlib64\n");
@@ -5281,8 +5310,10 @@ static int __qseecom_send_command(struct qseecom_handle *handle, void *send_buf,
 		}
 		perf_enabled = true;
 	}
-	if (!strcmp(data->client.app_name, "securemm"))
+	if (!strcmp(data->client.app_name, "securemm") ||
+		!strcmp(data->client.app_name, "slateapp")) {
 		data->use_legacy_cmd = true;
+	}
 
 	ret = __qseecom_send_cmd(data, &req, false);
 
@@ -5505,8 +5536,10 @@ static int __qseecom_send_modfd_resp(struct qseecom_dev_handle *data,
 {
 	struct qseecom_send_modfd_listener_resp resp;
 	struct qseecom_registered_listener_list *this_lstnr = NULL;
+	int err = 0;
 
-	if (copy_from_user(&resp, argp, sizeof(resp))) {
+	K_COPY_FROM_USER(err, &resp, argp, sizeof(resp));
+	if(err) {
 		pr_err("copy_from_user failed\n");
 		return -EINVAL;
 	}
@@ -5547,13 +5580,16 @@ static int qseecom_get_qseos_version(struct qseecom_dev_handle *data,
 						void __user *argp)
 {
 	struct qseecom_qseos_version_req req;
+	int err = 0;
 
-	if (copy_from_user(&req, argp, sizeof(req))) {
+	K_COPY_FROM_USER(err, &req, argp, sizeof(req));
+	if(err) {
 		pr_err("copy_from_user failed\n");
 		return -EINVAL;
 	}
 	req.qseos_version = qseecom.qseos_version;
-	if (copy_to_user(argp, &req, sizeof(req))) {
+	K_COPY_TO_USER(err, argp, &req, sizeof(req));
+	if(err) {
 		pr_err("copy_to_user failed\n");
 		return -EINVAL;
 	}
@@ -5844,13 +5880,12 @@ static int qseecom_load_external_elf(struct qseecom_dev_handle *data,
 	void *va = NULL;
 
 	/* Copy the relevant information needed for loading the image */
-	if (copy_from_user(&load_img_req,
-				(void __user *)argp,
-				sizeof(struct qseecom_load_img_req))) {
+	K_COPY_FROM_USER(ret, &load_img_req, argp,
+						sizeof(struct qseecom_load_img_req));
+	if(ret) {
 		pr_err("copy_from_user failed\n");
 		return -EFAULT;
 	}
-
 	/* Get the handle of the shared fd */
 	ret = qseecom_vaddr_map(load_img_req.ifd_data_fd, &pa, &va,
 					&sgt, &attach, &len, &dmabuf);
@@ -6015,8 +6050,9 @@ static int qseecom_query_app_loaded(struct qseecom_dev_handle *data,
 	bool found_app = false;
 
 	/* Copy the relevant information needed for loading the image */
-	if (copy_from_user(&query_req, (void __user *)argp,
-				sizeof(struct qseecom_qseos_app_load_query))) {
+	K_COPY_FROM_USER(ret, &query_req, argp,
+				sizeof(struct qseecom_qseos_app_load_query));
+	if(ret) {
 		pr_err("copy_from_user failed\n");
 		ret = -EFAULT;
 		goto exit_free;
@@ -6093,7 +6129,8 @@ static int qseecom_query_app_loaded(struct qseecom_dev_handle *data,
 			spin_unlock_irqrestore(
 				&qseecom.registered_app_list_lock, flags);
 		}
-		if (copy_to_user(argp, &query_req, sizeof(query_req))) {
+		K_COPY_TO_USER(ret, argp, &query_req, sizeof(query_req));
+		if(ret) {
 			pr_err("copy_to_user failed\n");
 			ret = -EFAULT;
 			goto exit_free;
@@ -6499,12 +6536,11 @@ static int qseecom_create_key(struct qseecom_dev_handle *data,
 	struct qseecom_key_select_ireq set_key_ireq;
 	uint32_t entries = 0;
 
-	ret = copy_from_user(&create_key_req, argp, sizeof(create_key_req));
-	if (ret) {
+	K_COPY_FROM_USER(ret, &create_key_req, argp, sizeof(create_key_req));
+	if(ret) {
 		pr_err("copy_from_user failed\n");
 		return ret;
 	}
-
 	if (create_key_req.usage < QSEOS_KM_USAGE_DISK_ENCRYPTION ||
 		create_key_req.usage >= QSEOS_KM_USAGE_MAX) {
 		pr_err("unsupported usage %d\n", create_key_req.usage);
@@ -6644,8 +6680,8 @@ static int qseecom_wipe_key(struct qseecom_dev_handle *data,
 	struct qseecom_key_select_ireq clear_key_ireq;
 	uint32_t entries = 0;
 
-	ret = copy_from_user(&wipe_key_req, argp, sizeof(wipe_key_req));
-	if (ret) {
+	K_COPY_FROM_USER(ret, &wipe_key_req, argp, sizeof(wipe_key_req));
+	if(ret) {
 		pr_err("copy_from_user failed\n");
 		return ret;
 	}
@@ -6753,8 +6789,8 @@ static int qseecom_update_key_user_info(struct qseecom_dev_handle *data,
 	struct qseecom_update_key_userinfo_req update_key_req;
 	struct qseecom_key_userinfo_update_ireq ireq;
 
-	ret = copy_from_user(&update_key_req, argp, sizeof(update_key_req));
-	if (ret) {
+	K_COPY_FROM_USER(ret, &update_key_req, argp, sizeof(update_key_req));
+	if(ret) {
 		pr_err("copy_from_user failed\n");
 		return ret;
 	}
@@ -6807,7 +6843,7 @@ static int qseecom_is_es_activated(void __user *argp)
 {
 	struct qseecom_is_es_activated_req req = {0};
 	struct qseecom_command_scm_resp resp;
-	int ret;
+	int ret = 0;
 
 	if (qseecom.qsee_version < QSEE_VERSION_04) {
 		pr_err("invalid qsee version\n");
@@ -6827,8 +6863,8 @@ static int qseecom_is_es_activated(void __user *argp)
 	}
 
 	req.is_activated = resp.result;
-	ret = copy_to_user(argp, &req, sizeof(req));
-	if (ret) {
+	K_COPY_TO_USER(ret, argp, &req, sizeof(req));
+	if(ret) {
 		pr_err("copy_to_user failed\n");
 		return ret;
 	}
@@ -6876,7 +6912,7 @@ static int qseecom_mdtp_cipher_dip(void __user *argp)
 	u32 tzbuflenin, tzbuflenout;
 	char *tzbufin = NULL, *tzbufout = NULL;
 	struct qseecom_scm_desc desc = {0};
-	int ret;
+	int ret = 0;
 	phys_addr_t pain, paout;
 	struct qtee_shm shmin = {0}, shmout = {0};
 
@@ -6888,7 +6924,7 @@ static int qseecom_mdtp_cipher_dip(void __user *argp)
 			break;
 		}
 
-		ret = copy_from_user(&req, argp, sizeof(req));
+		K_COPY_FROM_USER(ret, &req, argp, sizeof(req));
 		if (ret) {
 			pr_err("copy_from_user failed, ret= %d\n", ret);
 			break;
@@ -6912,10 +6948,9 @@ static int qseecom_mdtp_cipher_dip(void __user *argp)
 			break;
 		}
 
-		ret = copy_from_user(tzbufin, (void __user *)req.in_buf,
-					req.in_buf_size);
+		K_COPY_FROM_USER(ret, tzbufin, (void __user *)req.in_buf, req.in_buf_size);
 		if (ret) {
-			pr_err("copy_from_user failed, ret=%d\n", ret);
+			pr_err("copy_from_user failed, ret= %d\n", ret);
 			break;
 		}
 
@@ -6956,8 +6991,7 @@ static int qseecom_mdtp_cipher_dip(void __user *argp)
 
 		/* Copy the output buffer from kernel space to userspace */
 		qtee_shmbridge_flush_shm_buf(&shmout);
-		ret = copy_to_user((void __user *)req.out_buf,
-				tzbufout, req.out_buf_size);
+		K_COPY_TO_USER(ret, (void __user *)req.out_buf, tzbufout, req.out_buf_size);
 		if (ret) {
 			pr_err("copy_to_user failed, ret=%d\n", ret);
 			break;
@@ -7390,9 +7424,8 @@ static int qseecom_qteec_open_session(struct qseecom_dev_handle *data,
 	struct qseecom_qteec_modfd_req req;
 	int ret = 0;
 
-	ret = copy_from_user(&req, argp,
-				sizeof(struct qseecom_qteec_modfd_req));
-	if (ret) {
+	K_COPY_FROM_USER(ret, &req, argp, sizeof(struct qseecom_qteec_modfd_req));
+	if(ret) {
 		pr_err("copy_from_user failed\n");
 		return ret;
 	}
@@ -7408,8 +7441,8 @@ static int qseecom_qteec_close_session(struct qseecom_dev_handle *data,
 	struct qseecom_qteec_req req;
 	int ret = 0;
 
-	ret = copy_from_user(&req, argp, sizeof(struct qseecom_qteec_req));
-	if (ret) {
+	K_COPY_FROM_USER(ret, &req, argp, sizeof(struct qseecom_qteec_req));
+	if(ret) {
 		pr_err("copy_from_user failed\n");
 		return ret;
 	}
@@ -7436,9 +7469,8 @@ static int qseecom_qteec_invoke_modfd_cmd(struct qseecom_dev_handle *data,
 	void *req_ptr = NULL;
 	void *resp_ptr = NULL;
 
-	ret = copy_from_user(&req, argp,
-			sizeof(struct qseecom_qteec_modfd_req));
-	if (ret) {
+	K_COPY_FROM_USER(ret, &req, argp, sizeof(struct qseecom_qteec_modfd_req));
+	if(ret) {
 		pr_err("copy_from_user failed\n");
 		return ret;
 	}
@@ -7575,9 +7607,8 @@ static int qseecom_qteec_request_cancellation(struct qseecom_dev_handle *data,
 	struct qseecom_qteec_modfd_req req;
 	int ret = 0;
 
-	ret = copy_from_user(&req, argp,
-				sizeof(struct qseecom_qteec_modfd_req));
-	if (ret) {
+	K_COPY_FROM_USER(ret, &req, argp, sizeof(struct qseecom_qteec_modfd_req));
+		if(ret) {
 		pr_err("copy_from_user failed\n");
 		return ret;
 	}
@@ -8300,8 +8331,8 @@ long qseecom_ioctl(struct file *file,
 	case QSEECOM_IOCTL_SET_ICE_INFO: {
 		struct qseecom_ice_data_t ice_data;
 
-		ret = copy_from_user(&ice_data, argp, sizeof(ice_data));
-		if (ret) {
+		K_COPY_FROM_USER(ret, &ice_data, argp, sizeof(ice_data));
+		if(ret) {
 			pr_err("copy_from_user failed\n");
 			return -EFAULT;
 		}
@@ -8428,6 +8459,9 @@ static int qseecom_release(struct inode *inode, struct file *file)
 static const struct file_operations qseecom_fops = {
 	.owner = THIS_MODULE,
 	.unlocked_ioctl = qseecom_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl = qseecom_ioctl_32bit,
+#endif
 	.open = qseecom_open,
 	.release = qseecom_release
 };
@@ -8942,13 +8976,11 @@ static int qseecom_get_ce_info(struct qseecom_dev_handle *data,
 	bool found = false;
 	struct qseecom_ce_pipe_entry *pce_entry;
 
-	ret = copy_from_user(pinfo, argp,
-				sizeof(struct qseecom_ce_info_req));
-	if (ret) {
+	K_COPY_FROM_USER(ret, pinfo, argp, sizeof(struct qseecom_ce_info_req));
+	if(ret) {
 		pr_err("copy_from_user failed\n");
 		return ret;
 	}
-
 	switch (pinfo->usage) {
 	case QSEOS_KM_USAGE_DISK_ENCRYPTION:
 	case QSEOS_KM_USAGE_UFS_ICE_DISK_ENCRYPTION:
@@ -9009,7 +9041,8 @@ static int qseecom_get_ce_info(struct qseecom_dev_handle *data,
 	for (; i < MAX_CE_PIPE_PAIR_PER_UNIT; i++)
 		pinfo->ce_pipe_entry[i].valid = 0;
 
-	if (copy_to_user(argp, pinfo, sizeof(struct qseecom_ce_info_req))) {
+	K_COPY_TO_USER(ret, argp, pinfo, sizeof(struct qseecom_ce_info_req));
+	if(ret) {
 		pr_err("copy_to_user failed\n");
 		ret = -EFAULT;
 	}
@@ -9027,10 +9060,11 @@ static int qseecom_free_ce_info(struct qseecom_dev_handle *data,
 	int i;
 	bool found = false;
 
-	ret = copy_from_user(pinfo, argp,
-				sizeof(struct qseecom_ce_info_req));
-	if (ret)
+	K_COPY_FROM_USER(ret, pinfo, argp, sizeof(struct qseecom_ce_info_req));
+	if(ret) {
+		pr_err("copy_from_user failed\n");
 		return ret;
+	}
 
 	switch (pinfo->usage) {
 	case QSEOS_KM_USAGE_DISK_ENCRYPTION:
@@ -9085,11 +9119,11 @@ static int qseecom_query_ce_info(struct qseecom_dev_handle *data,
 	bool found = false;
 	struct qseecom_ce_pipe_entry *pce_entry;
 
-	ret = copy_from_user(pinfo, argp,
-				sizeof(struct qseecom_ce_info_req));
-	if (ret)
+	K_COPY_FROM_USER(ret, pinfo, argp, sizeof(struct qseecom_ce_info_req));
+	if(ret) {
+		pr_err("copy_from_user failed\n");
 		return ret;
-
+	}
 	switch (pinfo->usage) {
 	case QSEOS_KM_USAGE_DISK_ENCRYPTION:
 	case QSEOS_KM_USAGE_UFS_ICE_DISK_ENCRYPTION:
@@ -9147,7 +9181,8 @@ static int qseecom_query_ce_info(struct qseecom_dev_handle *data,
 	for (; i < MAX_CE_PIPE_PAIR_PER_UNIT; i++)
 		pinfo->ce_pipe_entry[i].valid = 0;
 out:
-	if (copy_to_user(argp, pinfo, sizeof(struct qseecom_ce_info_req))) {
+	K_COPY_TO_USER(ret, argp, pinfo, sizeof(struct qseecom_ce_info_req));
+	if(ret) {
 		pr_err("copy_to_user failed\n");
 		ret = -EFAULT;
 	}
@@ -9436,6 +9471,7 @@ static int qseecom_init_control(void)
 	qseecom.qseos_version = QSEOS_VERSION_14;
 	qseecom.commonlib_loaded = false;
 	qseecom.commonlib64_loaded = false;
+	qseecom.commonlib_loaded_by_hostvm = false;
 	qseecom.whitelist_support = qseecom_check_whitelist_feature();
 
 	return rc;
@@ -9457,6 +9493,9 @@ static int qseecom_parse_dt(struct platform_device *pdev)
 	qseecom.commonlib64_loaded =
 			of_property_read_bool((&pdev->dev)->of_node,
 			"qcom,commonlib64-loaded-by-uefi");
+	qseecom.commonlib_loaded_by_hostvm =
+			of_property_read_bool((&pdev->dev)->of_node,
+			"qcom,commonlib-loaded-by-hostvm");
 	qseecom.fde_key_size =
 			of_property_read_bool((&pdev->dev)->of_node,
 			"qcom,fde-key-size");
