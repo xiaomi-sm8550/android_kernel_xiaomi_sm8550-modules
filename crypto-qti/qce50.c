@@ -90,19 +90,19 @@ static LIST_HEAD(qce50_bam_list);
 
 // Crypto Engines 5.7 and below
 // Key timer expiry for pipes 1-15 (Status3)
-#define CRYPTO5_LEGACY_TIMER_EXPIRED_STATUS3	0x000000FF
+#define CRYPTO5_LEGACY_TIMER_EXPIRED_STATUS3	0x0000FF00
 // Key timer expiry for pipes 16-19 (Status6)
-#define CRYPTO5_LEGACY_TIMER_EXPIRED_STATUS6	0x00000003
+#define CRYPTO5_LEGACY_TIMER_EXPIRED_STATUS6	0x00000300
 // Key pause for pipes 1-15 (Status3)
-#define CRYPTO5_LEGACY_KEY_PAUSE_STATUS3		0xFF0000
+#define CRYPTO5_LEGACY_KEY_PAUSE_STATUS3		0xFF000000
 // Key pause for pipes 16-19 (Status6)
-#define CRYPTO5_LEGACY_KEY_PAUSE_STATUS6		0x30000
+#define CRYPTO5_LEGACY_KEY_PAUSE_STATUS6		0x3000000
 
 // Crypto Engines 5.8 and above
 // Key timer expiry for all pipes (Status3)
-#define CRYPTO58_TIMER_EXPIRED		0x00000011
+#define CRYPTO58_TIMER_EXPIRED		0x00000010
 // Key pause for all pipes (Status3)
-#define CRYPTO58_KEY_PAUSE			0x00001100
+#define CRYPTO58_KEY_PAUSE			0x00001000
 // Key index for Status3 (Timer and Key Pause)
 #define KEY_INDEX_SHIFT				16
 
