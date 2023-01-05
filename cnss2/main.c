@@ -1251,7 +1251,7 @@ static int cnss_get_resources(struct cnss_plat_data *plat_priv)
 	int ret = 0;
 
 	ret = cnss_get_vreg_type(plat_priv, CNSS_VREG_PRIM);
-	if (ret) {
+	if (ret < 0) {
 		cnss_pr_err("Failed to get vreg, err = %d\n", ret);
 		goto out;
 	}

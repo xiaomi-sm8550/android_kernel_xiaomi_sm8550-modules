@@ -91,6 +91,7 @@ static struct cnss_clk_cfg cnss_clk_list[] = {
 #define CNSS_PMIC_AUTO_HEADROOM 16
 #define CNSS_IR_DROP_WAKE 30
 #define CNSS_IR_DROP_SLEEP 10
+#define VREG_NOTFOUND 1
 
 /**
  * enum cnss_aop_vreg_param: Voltage regulator TCS param
@@ -327,8 +328,10 @@ static struct cnss_vreg_cfg *get_vreg_list(u32 *vreg_list_size,
  * For multi-exchg dt node, get the required vregs' names from property
  * 'wlan_vregs', which is string array;
  *
- * if the property is present but no value is set, then no additional wlan
- * verg is required.
+ * If the property is not present or present but no value is set, then no
+ * additional wlan verg is required, function return VREG_NOTFOUND.
+ * If property is present with valid value, function return 0.
+ * Other cases a negative value is returned.
  *
  * For non-multi-exchg dt, go through all vregs in the static array
  * 'cnss_vreg_list'.
@@ -356,14 +359,19 @@ static int cnss_get_vreg(struct cnss_plat_data *plat_priv,
 		id_n = of_property_count_strings(dt_node,
 						 WLAN_VREGS_PROP);
 		if (id_n <= 0) {
-			if (id_n == -ENODATA) {
+			if (id_n == -ENODATA || id_n == -EINVAL) {
 				cnss_pr_dbg("No additional vregs for: %s:%lx\n",
 					    dt_node->name,
 					    plat_priv->device_id);
-				return 0;
+				/* By returning a positive value, give the caller a
+				 * chance to know no additional regulator is needed
+				 * by this device, and shall not treat this case as
+				 * an error.
+				 */
+				return VREG_NOTFOUND;
 			}
 
-			cnss_pr_err("property %s is invalid or missed: %s:%lx\n",
+			cnss_pr_err("property %s is invalid: %s:%lx\n",
 				    WLAN_VREGS_PROP, dt_node->name,
 				    plat_priv->device_id);
 			return -EINVAL;
