@@ -88,7 +88,13 @@ enum cnss_recovery_type {
 	CNSS_PCSS_RECOVERY = 0x2,
 };
 
+#ifdef CONFIG_CNSS_SUPPORT_DUAL_DEV
+#define CNSS_MAX_DEV_NUM		2
+static struct cnss_plat_data *plat_env[CNSS_MAX_DEV_NUM];
+static int plat_env_count;
+#else
 static struct cnss_plat_data *plat_env;
+#endif
 
 static bool cnss_allow_driver_loading;
 
@@ -111,20 +117,172 @@ struct cnss_driver_event {
 	void *data;
 };
 
+bool cnss_check_driver_loading_allowed(void)
+{
+	return cnss_allow_driver_loading;
+}
+
+#ifdef CONFIG_CNSS_SUPPORT_DUAL_DEV
+static void cnss_set_plat_priv(struct platform_device *plat_dev,
+			       struct cnss_plat_data *plat_priv)
+{
+	cnss_pr_dbg("Set plat_priv at %d", plat_env_count);
+	if (plat_priv) {
+		plat_priv->plat_idx = plat_env_count;
+		plat_env[plat_priv->plat_idx] = plat_priv;
+		plat_env_count++;
+	}
+}
+
+struct cnss_plat_data *cnss_get_plat_priv(struct platform_device
+						 *plat_dev)
+{
+	int i;
+
+	if (!plat_dev)
+		return NULL;
+
+	for (i = 0; i < plat_env_count; i++) {
+		if (plat_env[i]->plat_dev == plat_dev)
+			return plat_env[i];
+	}
+	return NULL;
+}
+
+static void cnss_clear_plat_priv(struct cnss_plat_data *plat_priv)
+{
+	cnss_pr_dbg("Clear plat_priv at %d", plat_priv->plat_idx);
+	plat_env[plat_priv->plat_idx] = NULL;
+	plat_env_count--;
+}
+
+static int cnss_set_device_name(struct cnss_plat_data *plat_priv)
+{
+	snprintf(plat_priv->device_name, sizeof(plat_priv->device_name),
+		 "wlan_%d", plat_priv->plat_idx);
+
+	return 0;
+}
+
+static int cnss_plat_env_available(void)
+{
+	int ret = 0;
+
+	if (plat_env_count >= CNSS_MAX_DEV_NUM) {
+		cnss_pr_err("ERROR: No space to store plat_priv\n");
+		ret = -ENOMEM;
+	}
+	return ret;
+}
+
+int cnss_get_plat_env_count(void)
+{
+	return plat_env_count;
+}
+
+struct cnss_plat_data *cnss_get_plat_env(int index)
+{
+	return plat_env[index];
+}
+
+struct cnss_plat_data *cnss_get_plat_priv_by_rc_num(int rc_num)
+{
+	int i;
+
+	for (i = 0; i < plat_env_count; i++) {
+		if (plat_env[i]->rc_num == rc_num)
+			return plat_env[i];
+	}
+	return NULL;
+}
+
+static inline int
+cnss_get_qrtr_node_id(struct cnss_plat_data *plat_priv)
+{
+	return of_property_read_u32(plat_priv->dev_node,
+		"qcom,qrtr_node_id", &plat_priv->qrtr_node_id);
+}
+
+void cnss_get_qrtr_info(struct cnss_plat_data *plat_priv)
+{
+	int ret = 0;
+
+	ret = cnss_get_qrtr_node_id(plat_priv);
+	if (ret) {
+		cnss_pr_warn("Failed to find qrtr_node_id err=%d\n", ret);
+		plat_priv->qrtr_node_id = 0;
+		plat_priv->wlfw_service_instance_id = 0;
+	} else {
+		plat_priv->wlfw_service_instance_id = plat_priv->qrtr_node_id +
+						      QRTR_NODE_FW_ID_BASE;
+		cnss_pr_dbg("service_instance_id=0x%x\n",
+			    plat_priv->wlfw_service_instance_id);
+	}
+}
+
+static inline int
+cnss_get_pld_bus_ops_name(struct cnss_plat_data *plat_priv)
+{
+	return of_property_read_string(plat_priv->plat_dev->dev.of_node,
+				       "qcom,pld_bus_ops_name",
+				       &plat_priv->pld_bus_ops_name);
+}
+
+#else
 static void cnss_set_plat_priv(struct platform_device *plat_dev,
 			       struct cnss_plat_data *plat_priv)
 {
 	plat_env = plat_priv;
 }
 
-bool cnss_check_driver_loading_allowed(void)
-{
-	return cnss_allow_driver_loading;
-}
-
 struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev)
 {
 	return plat_env;
+}
+
+static void cnss_clear_plat_priv(struct cnss_plat_data *plat_priv)
+{
+	plat_env = NULL;
+}
+
+static int cnss_set_device_name(struct cnss_plat_data *plat_priv)
+{
+	snprintf(plat_priv->device_name, sizeof(plat_priv->device_name),
+		 "wlan");
+	return 0;
+}
+
+static int cnss_plat_env_available(void)
+{
+	return 0;
+}
+
+struct cnss_plat_data *cnss_get_plat_priv_by_rc_num(int rc_num)
+{
+	return cnss_bus_dev_to_plat_priv(NULL);
+}
+
+void cnss_get_qrtr_info(struct cnss_plat_data *plat_priv)
+{
+}
+
+static int
+cnss_get_pld_bus_ops_name(struct cnss_plat_data *plat_priv)
+{
+	return 0;
+}
+#endif
+
+static inline int
+cnss_get_rc_num(struct cnss_plat_data *plat_priv)
+{
+	return of_property_read_u32(plat_priv->plat_dev->dev.of_node,
+		"qcom,wlan-rc-num", &plat_priv->rc_num);
+}
+
+bool cnss_is_dual_wlan_enabled(void)
+{
+	return IS_ENABLED(CONFIG_CNSS_SUPPORT_DUAL_DEV);
 }
 
 /**
@@ -2482,7 +2640,7 @@ int cnss_register_subsys(struct cnss_plat_data *plat_priv)
 
 	subsys_info = &plat_priv->subsys_info;
 
-	subsys_info->subsys_desc.name = "wlan";
+	subsys_info->subsys_desc.name = plat_priv->device_name;
 	subsys_info->subsys_desc.owner = THIS_MODULE;
 	subsys_info->subsys_desc.powerup = cnss_subsys_powerup;
 	subsys_info->subsys_desc.shutdown = cnss_subsys_shutdown;
@@ -3861,8 +4019,21 @@ static int cnss_create_sysfs_link(struct cnss_plat_data *plat_priv)
 {
 	struct device *dev = &plat_priv->plat_dev->dev;
 	int ret;
+	char cnss_name[CNSS_FS_NAME_SIZE];
+	char shutdown_name[32];
 
-	ret = sysfs_create_link(kernel_kobj, &dev->kobj, "cnss");
+	if (cnss_is_dual_wlan_enabled()) {
+		snprintf(cnss_name, CNSS_FS_NAME_SIZE,
+			 CNSS_FS_NAME "_%d", plat_priv->plat_idx);
+		snprintf(shutdown_name, sizeof(shutdown_name),
+			 "shutdown_wlan_%d", plat_priv->plat_idx);
+	} else {
+		snprintf(cnss_name, CNSS_FS_NAME_SIZE, CNSS_FS_NAME);
+		snprintf(shutdown_name, sizeof(shutdown_name),
+			 "shutdown_wlan");
+	}
+
+	ret = sysfs_create_link(kernel_kobj, &dev->kobj, cnss_name);
 	if (ret) {
 		cnss_pr_err("Failed to create cnss link, err = %d\n",
 			    ret);
@@ -3870,7 +4041,7 @@ static int cnss_create_sysfs_link(struct cnss_plat_data *plat_priv)
 	}
 
 	/* This is only for backward compatibility. */
-	ret = sysfs_create_link(kernel_kobj, &dev->kobj, "shutdown_wlan");
+	ret = sysfs_create_link(kernel_kobj, &dev->kobj, shutdown_name);
 	if (ret) {
 		cnss_pr_err("Failed to create shutdown_wlan link, err = %d\n",
 			    ret);
@@ -3880,15 +4051,29 @@ static int cnss_create_sysfs_link(struct cnss_plat_data *plat_priv)
 	return 0;
 
 rm_cnss_link:
-	sysfs_remove_link(kernel_kobj, "cnss");
+	sysfs_remove_link(kernel_kobj, cnss_name);
 out:
 	return ret;
 }
 
 static void cnss_remove_sysfs_link(struct cnss_plat_data *plat_priv)
 {
-	sysfs_remove_link(kernel_kobj, "shutdown_wlan");
-	sysfs_remove_link(kernel_kobj, "cnss");
+	char cnss_name[CNSS_FS_NAME_SIZE];
+	char shutdown_name[32];
+
+	if (cnss_is_dual_wlan_enabled()) {
+		snprintf(cnss_name, CNSS_FS_NAME_SIZE,
+			 CNSS_FS_NAME "_%d", plat_priv->plat_idx);
+		snprintf(shutdown_name, sizeof(shutdown_name),
+			 "shutdown_wlan_%d", plat_priv->plat_idx);
+	} else {
+		snprintf(cnss_name, CNSS_FS_NAME_SIZE, CNSS_FS_NAME);
+		snprintf(shutdown_name, sizeof(shutdown_name),
+			 "shutdown_wlan");
+	}
+
+	sysfs_remove_link(kernel_kobj, shutdown_name);
+	sysfs_remove_link(kernel_kobj, cnss_name);
 }
 
 static int cnss_create_sysfs(struct cnss_plat_data *plat_priv)
@@ -4371,6 +4556,10 @@ static int cnss_probe(struct platform_device *plat_dev)
 		goto out;
 	}
 
+	ret = cnss_plat_env_available();
+	if (ret)
+		goto out;
+
 	of_id = of_match_device(cnss_of_match_table, &plat_dev->dev);
 	if (!of_id || !of_id->data) {
 		cnss_pr_err("Failed to find of match device!\n");
@@ -4403,10 +4592,23 @@ static int cnss_probe(struct platform_device *plat_dev)
 		goto reset_plat_dev;
 	}
 
+	ret = cnss_get_pld_bus_ops_name(plat_priv);
+	if (ret)
+		cnss_pr_err("Failed to find bus ops name, err = %d\n",
+			    ret);
+
+	ret = cnss_get_rc_num(plat_priv);
+
+	if (ret)
+		cnss_pr_err("Failed to find PCIe RC number, err = %d\n", ret);
+
+	cnss_pr_dbg("rc_num=%d\n", plat_priv->rc_num);
+
 	plat_priv->bus_type = cnss_get_bus_type(plat_priv);
 	plat_priv->use_nv_mac = cnss_use_nv_mac(plat_priv);
 	plat_priv->driver_mode = CNSS_DRIVER_MODE_MAX;
 	cnss_set_plat_priv(plat_dev, plat_priv);
+	cnss_set_device_name(plat_priv);
 	platform_set_drvdata(plat_dev, plat_priv);
 	INIT_LIST_HEAD(&plat_priv->vreg_list);
 	INIT_LIST_HEAD(&plat_priv->clk_list);
@@ -4439,13 +4641,9 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret)
 		goto remove_sysfs;
 
-	ret = cnss_qmi_init(plat_priv);
-	if (ret)
-		goto deinit_event_work;
-
 	ret = cnss_dms_init(plat_priv);
 	if (ret)
-		goto deinit_qmi;
+		goto deinit_event_work;
 
 	ret = cnss_debugfs_create(plat_priv);
 	if (ret)
@@ -4472,10 +4670,6 @@ static int cnss_probe(struct platform_device *plat_dev)
 	cnss_register_coex_service(plat_priv);
 	cnss_register_ims_service(plat_priv);
 
-	ret = cnss_genl_init();
-	if (ret < 0)
-		cnss_pr_err("CNSS genl init failed %d\n", ret);
-
 	cnss_pr_info("Platform driver probed successfully.\n");
 
 	return 0;
@@ -4486,8 +4680,6 @@ destroy_debugfs:
 	cnss_debugfs_destroy(plat_priv);
 deinit_dms:
 	cnss_dms_deinit(plat_priv);
-deinit_qmi:
-	cnss_qmi_deinit(plat_priv);
 deinit_event_work:
 	cnss_event_work_deinit(plat_priv);
 remove_sysfs:
@@ -4501,7 +4693,7 @@ free_res:
 reset_ctx:
 	platform_set_drvdata(plat_dev, NULL);
 reset_plat_dev:
-	cnss_set_plat_priv(plat_dev, NULL);
+	cnss_clear_plat_priv(plat_priv);
 out:
 	return ret;
 }
@@ -4530,7 +4722,7 @@ static int cnss_remove(struct platform_device *plat_dev)
 		mbox_free_channel(plat_priv->mbox_chan);
 
 	platform_set_drvdata(plat_dev, NULL);
-	plat_env = NULL;
+	cnss_clear_plat_priv(plat_priv);
 
 	return 0;
 }
@@ -4599,11 +4791,16 @@ static int __init cnss_initialize(void)
 	if (ret)
 		cnss_debug_deinit();
 
+	ret = cnss_genl_init();
+	if (ret < 0)
+		cnss_pr_err("CNSS genl init failed %d\n", ret);
+
 	return ret;
 }
 
 static void __exit cnss_exit(void)
 {
+	cnss_genl_exit();
 	platform_driver_unregister(&cnss_platform_driver);
 	cnss_debug_deinit();
 }
