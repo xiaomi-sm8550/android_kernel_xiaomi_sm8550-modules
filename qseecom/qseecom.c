@@ -146,6 +146,9 @@
 		}\
 	} while (0)
 
+#define DS_ENTERED 0x1
+#define DS_EXITED  0x0
+
 enum qseecom_clk_definitions {
 	CLK_DFAB = 0,
 	CLK_SFPB,
@@ -374,6 +377,7 @@ struct qseecom_control {
 	struct notifier_block reboot_nb;
 	wait_queue_head_t unload_app_kthread_wq;
 	atomic_t unload_app_kthread_state;
+	uint32_t qseecom_ds_state;
 };
 
 struct qseecom_unload_app_pending_list {
@@ -490,6 +494,11 @@ static int qseecom_query_ce_info(struct qseecom_dev_handle *data,
 						void __user *argp);
 static int __qseecom_unload_app(struct qseecom_dev_handle *data,
 				uint32_t app_id);
+
+#ifdef ENABLE_DSQB_SYSFS_NODE
+int qseecom_set_ds_state(uint32_t state);
+int dsqb_sysfs_init(void);
+#endif
 
 static int __maybe_unused get_qseecom_keymaster_status(char *str)
 {
@@ -3142,7 +3151,8 @@ static int qseecom_unload_app(struct qseecom_dev_handle *data,
 	pr_debug("unload app %d(%s), app_crash flag %d\n", data->client.app_id,
 			data->client.app_name, app_crash);
 
-	if (!memcmp(data->client.app_name, "keymaste", strlen("keymaste"))) {
+	if (!memcmp(data->client.app_name, "keymaste", strlen("keymaste"))
+		&& !(qseecom.qseecom_ds_state == DS_ENTERED)) {
 		pr_debug("Do not unload keymaster app from tz\n");
 		goto unload_exit;
 	}
@@ -3181,7 +3191,7 @@ static int qseecom_unload_app(struct qseecom_dev_handle *data,
 		goto unload_exit;
 	}
 
-	if (!ptr_app->ref_cnt) {
+	if (!ptr_app->ref_cnt || (qseecom.qseecom_ds_state == DS_ENTERED)) {
 		ret = __qseecom_unload_app(data, data->client.app_id);
 		if (ret == -EBUSY) {
 			/*
@@ -9346,6 +9356,24 @@ out:
 	return ret;
 }
 
+/* Set Deep Sleep state. By default DS-state is DS_EXITED
+ * If DS State will be set as DS_ENTERERD, then Keymatser TA can be unloaded.
+ */
+#ifdef ENABLE_DSQB_SYSFS_NODE
+int qseecom_set_ds_state(uint32_t state)
+{
+	int ret = 0;
+
+	if (state == DS_ENTERED || state == DS_EXITED) {
+		qseecom.qseecom_ds_state = state;
+	} else {
+		qseecom.qseecom_ds_state = -EINVAL;
+		pr_err("Invalid deep sleep state = %d\n", state);
+		ret = -EINVAL;
+	}
+	return ret;
+}
+#endif
 /*
  * Check whitelist feature, and if TZ feature version is < 1.0.0,
  * then whitelist feature is not supported.
@@ -9908,6 +9936,12 @@ static int qseecom_probe(struct platform_device *pdev)
 	if (rc)
 		goto exit_deinit_bus;
 
+#ifdef ENABLE_DSQB_SYSFS_NODE
+	rc = dsqb_sysfs_init();
+	if (rc)
+		goto exit_deinit_bus;
+#endif
+
 #if IS_ENABLED(CONFIG_QSEECOM_PROXY)
 	/*If the api fails to get the func ops, print the error and continue
 	* Do not treat it as fatal*/
@@ -9915,6 +9949,7 @@ static int qseecom_probe(struct platform_device *pdev)
 	if (rc)
 		pr_err("failed to provide qseecom ops %d", rc);
 #endif
+	qseecom.qseecom_ds_state = DS_EXITED;
 	atomic_set(&qseecom.qseecom_state, QSEECOM_STATE_READY);
 	return 0;
 

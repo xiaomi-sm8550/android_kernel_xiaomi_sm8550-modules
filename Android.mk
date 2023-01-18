@@ -32,6 +32,11 @@ SSG_SRC_FILES := \
 # This is set once per LOCAL_PATH, not per (kernel) module
 KBUILD_OPTIONS := SSG_ROOT=$(SEC_KERNEL_DIR)
 KBUILD_OPTIONS += BOARD_PLATFORM=$(TARGET_BOARD_PLATFORM)
+ifeq ($(TARGET_ENABLE_QSEECOM), true)
+ifeq ($(TARGET_ENABLE_DSQB), true)
+KBUILD_OPTIONS += CONFIG_DSQB=y
+endif
+endif
 
 ###################################################
 include $(CLEAR_VARS)
