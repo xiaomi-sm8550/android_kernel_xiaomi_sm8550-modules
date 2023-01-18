@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /*
@@ -3949,9 +3950,13 @@ static int ipa3_lcl_mdm_ssr_notifier_cb(struct notifier_block *this,
 	}
 
 	switch (code) {
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 #if IS_ENABLED(CONFIG_DEEPSLEEP)
 	case SUBSYS_BEFORE_DS_ENTRY:
 #endif
+#endif
+
 #if IS_ENABLED(CONFIG_QCOM_Q6V5_PAS)
 	case QCOM_SSR_BEFORE_SHUTDOWN:
 #else
@@ -3978,6 +3983,8 @@ static int ipa3_lcl_mdm_ssr_notifier_cb(struct notifier_block *this,
 		ipa3_odl_pipe_cleanup(true);
 		IPAWANINFO("IPA BEFORE_SHUTDOWN handling is complete\n");
 		break;
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 #if IS_ENABLED(CONFIG_DEEPSLEEP)
 	case SUBSYS_AFTER_DS_ENTRY:
 		IPAWANINFO("IPA Received AFTER DEEPSLEEP ENTRY\n");
@@ -3987,6 +3994,7 @@ static int ipa3_lcl_mdm_ssr_notifier_cb(struct notifier_block *this,
 
 		IPAWANINFO("AFTER DEEPSLEEP ENTRY handling is complete\n");
 		break;
+#endif
 #endif
 
 #if IS_ENABLED(CONFIG_QCOM_Q6V5_PAS)
@@ -4014,6 +4022,8 @@ static int ipa3_lcl_mdm_ssr_notifier_cb(struct notifier_block *this,
 			ipa3_client_prod_post_shutdown_cleanup();
 		IPAWANINFO("IPA AFTER_SHUTDOWN handling is complete\n");
 		break;
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 #if IS_ENABLED(CONFIG_DEEPSLEEP)
 	case SUBSYS_BEFORE_DS_EXIT:
 		IPAWANINFO("IPA received BEFORE DEEPSLEEP EXIT\n");
@@ -4027,6 +4037,7 @@ static int ipa3_lcl_mdm_ssr_notifier_cb(struct notifier_block *this,
 		ipa3_reset_freeze_vote();
 		IPAWANINFO("BEFORE DEEPSLEEP EXIT handling is complete\n");
 		break;
+#endif
 #endif
 
 #if IS_ENABLED(CONFIG_QCOM_Q6V5_PAS)
@@ -4045,9 +4056,13 @@ static int ipa3_lcl_mdm_ssr_notifier_cb(struct notifier_block *this,
 		ipa3_reset_freeze_vote();
 		IPAWANINFO("IPA BEFORE_POWERUP handling is complete\n");
 		break;
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 #if IS_ENABLED(CONFIG_DEEPSLEEP)
 	case SUBSYS_AFTER_DS_EXIT:
 #endif
+#endif
+
 #if IS_ENABLED(CONFIG_QCOM_Q6V5_PAS)
 	case QCOM_SSR_AFTER_POWERUP:
 #else
