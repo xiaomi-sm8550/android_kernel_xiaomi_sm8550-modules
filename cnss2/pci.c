@@ -1248,15 +1248,15 @@ int cnss_resume_pci_link(struct cnss_pci_data *pci_priv)
 		}
 	}
 
+	ret = cnss_set_pci_config_space(pci_priv, RESTORE_PCI_CONFIG_SPACE);
+	if (ret)
+		goto out;
+
 	ret = pci_enable_device(pci_priv->pci_dev);
 	if (ret) {
 		cnss_pr_err("Failed to enable PCI device, err = %d\n", ret);
 		goto out;
 	}
-
-	ret = cnss_set_pci_config_space(pci_priv, RESTORE_PCI_CONFIG_SPACE);
-	if (ret)
-		goto out;
 
 	pci_set_master(pci_priv->pci_dev);
 
@@ -2594,7 +2594,7 @@ static int cnss_qca6174_powerup(struct cnss_pci_data *pci_priv)
 	int ret = 0;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 
-	ret = cnss_power_on_device(plat_priv);
+	ret = cnss_power_on_device(plat_priv, false);
 	if (ret) {
 		cnss_pr_err("Failed to power on device, err = %d\n", ret);
 		goto out;
@@ -2704,7 +2704,7 @@ static int cnss_qca6290_powerup(struct cnss_pci_data *pci_priv)
 
 	cnss_get_driver_mode_update_fw_name(plat_priv);
 retry:
-	ret = cnss_power_on_device(plat_priv);
+	ret = cnss_power_on_device(plat_priv, false);
 	if (ret) {
 		cnss_pr_err("Failed to power on device, err = %d\n", ret);
 		goto out;
@@ -3097,7 +3097,6 @@ int cnss_wlan_register_driver(struct cnss_wlan_driver *driver_ops)
 	}
 
 	pci_priv = plat_priv->bus_priv;
-
 	if (test_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state)) {
 		while (id_table && id_table->device) {
 			if (plat_priv->device_id == id_table->device) {
@@ -6206,7 +6205,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	}
 
 	ret = cnss_dev_specific_power_on(plat_priv);
-	if (ret)
+	if (ret < 0)
 		goto reset_ctx;
 
 	cnss_pci_of_reserved_mem_device_init(pci_priv);

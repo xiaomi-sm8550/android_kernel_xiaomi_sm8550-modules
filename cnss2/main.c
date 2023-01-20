@@ -407,9 +407,15 @@ int cnss_wlan_enable(struct device *dev,
 		     enum cnss_driver_mode mode,
 		     const char *host_version)
 {
-	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
 	int ret = 0;
+	struct cnss_plat_data *plat_priv;
 
+	if (!dev) {
+		cnss_pr_err("Invalid dev pointer\n");
+		return -EINVAL;
+	}
+
+	plat_priv = cnss_bus_dev_to_plat_priv(dev);
 	if (!plat_priv)
 		return -ENODEV;
 
@@ -443,9 +449,15 @@ EXPORT_SYMBOL(cnss_wlan_enable);
 
 int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode)
 {
-	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
 	int ret = 0;
+	struct cnss_plat_data *plat_priv;
 
+	if (!dev) {
+		cnss_pr_err("Invalid dev pointer\n");
+		return -EINVAL;
+	}
+
+	plat_priv = cnss_bus_dev_to_plat_priv(dev);
 	if (!plat_priv)
 		return -ENODEV;
 
@@ -568,8 +580,14 @@ EXPORT_SYMBOL(cnss_athdiag_write);
 
 int cnss_set_fw_log_mode(struct device *dev, u8 fw_log_mode)
 {
-	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	struct cnss_plat_data *plat_priv;
 
+	if (!dev) {
+		cnss_pr_err("Invalid dev pointer\n");
+		return -EINVAL;
+	}
+
+	plat_priv = cnss_bus_dev_to_plat_priv(dev);
 	if (!plat_priv)
 		return -ENODEV;
 
@@ -1233,7 +1251,7 @@ static int cnss_get_resources(struct cnss_plat_data *plat_priv)
 	int ret = 0;
 
 	ret = cnss_get_vreg_type(plat_priv, CNSS_VREG_PRIM);
-	if (ret) {
+	if (ret < 0) {
 		cnss_pr_err("Failed to get vreg, err = %d\n", ret);
 		goto out;
 	}
@@ -2120,6 +2138,18 @@ mark_cal_fail:
 		 */
 		plat_priv->cal_done = CNSS_CAL_FAILURE;
 		set_bit(CNSS_COLD_BOOT_CAL_DONE, &plat_priv->driver_state);
+
+		if (plat_priv->device_id == QCA6174_DEVICE_ID ||
+		    plat_priv->device_id == QCN7605_DEVICE_ID) {
+			if (!test_bit(CNSS_DRIVER_REGISTER, &plat_priv->driver_state))
+				goto out;
+
+			cnss_pr_info("Schedule WLAN driver load\n");
+
+			if (cancel_delayed_work_sync(&plat_priv->wlan_reg_driver_work))
+				schedule_delayed_work(&plat_priv->wlan_reg_driver_work,
+						      0);
+		}
 	}
 
 out:
@@ -4154,7 +4184,7 @@ static int cnss_wlan_device_init(struct cnss_plat_data *plat_priv)
 		return 0;
 
 retry:
-	ret = cnss_power_on_device(plat_priv);
+	ret = cnss_power_on_device(plat_priv, true);
 	if (ret)
 		goto end;
 
@@ -4186,7 +4216,6 @@ int cnss_wlan_hw_enable(void)
 
 	if (test_bit(CNSS_PCI_PROBE_DONE, &plat_priv->driver_state))
 		goto register_driver;
-
 	ret = cnss_wlan_device_init(plat_priv);
 	if (ret) {
 		if (!test_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state))
