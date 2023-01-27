@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -711,8 +711,6 @@ int cnss_wlfw_ini_file_send_sync(struct cnss_plat_data *plat_priv,
 	unsigned int remaining;
 	bool backup_supported = false;
 
-	cnss_pr_info("INI File %u download\n", file_type);
-
 	req = kzalloc(sizeof(*req), GFP_KERNEL);
 	if (!req)
 		return -ENOMEM;
@@ -739,10 +737,6 @@ int cnss_wlfw_ini_file_send_sync(struct cnss_plat_data *plat_priv,
 	/* Fetch the file */
 	ret = firmware_request_nowarn(&fw, filename, &plat_priv->plat_dev->dev);
 	if (ret) {
-		cnss_pr_err("Failed to get INI file %s (%d), Backup file: %s",
-			    filename, ret,
-			    backup_supported ? "Supported" : "Not Supported");
-
 		if (!backup_supported)
 			goto err_req_fw;
 
@@ -751,11 +745,8 @@ int cnss_wlfw_ini_file_send_sync(struct cnss_plat_data *plat_priv,
 
 		ret = firmware_request_nowarn(&fw, filename,
 					      &plat_priv->plat_dev->dev);
-		if (ret) {
-			cnss_pr_err("Failed to get INI file %s (%d)", filename,
-				    ret);
+		if (ret)
 			goto err_req_fw;
-		}
 	}
 
 	temp = fw->data;
