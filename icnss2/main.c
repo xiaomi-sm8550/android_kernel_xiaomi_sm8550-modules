@@ -45,7 +45,7 @@
 #include <linux/soc/qcom/pdr.h>
 #include <linux/remoteproc.h>
 #include <trace/hooks/remoteproc.h>
-#include <../drivers/soc/qcom/slatecom_interface.h>
+#include <linux/soc/qcom/slatecom_interface.h>
 #include "main.h"
 #include "qmi.h"
 #include "debug.h"
