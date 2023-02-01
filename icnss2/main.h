@@ -503,6 +503,8 @@ struct icnss_priv {
 	u8 is_slate_rfa;
 	struct completion slate_boot_complete;
 	struct timer_list recovery_timer;
+	struct timer_list wpss_ssr_timer;
+	bool wpss_self_recovery_enabled;
 };
 
 struct icnss_reg_info {
@@ -531,5 +533,6 @@ void icnss_add_fw_prefix_name(struct icnss_priv *priv, char *prefix_name,
 			      char *name);
 int icnss_aop_mbox_init(struct icnss_priv *priv);
 void icnss_recovery_timeout_hdlr(struct timer_list *t);
+void icnss_wpss_ssr_timeout_hdlr(struct timer_list *t);
 #endif
 
