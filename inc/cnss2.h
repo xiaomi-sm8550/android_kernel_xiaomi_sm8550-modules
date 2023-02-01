@@ -173,6 +173,9 @@ struct cnss_wlan_driver {
 	int (*collect_driver_dump)(struct pci_dev *pdev,
 				   struct cnss_ssr_driver_dump_entry *input_array,
 				   size_t *num_entries_loaded);
+	int (*set_therm_cdev_state)(struct pci_dev *pci_dev,
+				    unsigned long thermal_state,
+				    int tcdev_id);
 };
 
 struct cnss_ce_tgt_pipe_cfg {
@@ -347,4 +350,11 @@ extern int cnss_send_buffer_to_afcmem(struct device *dev, char *afcdb,
 extern int cnss_reset_afcmem(struct device *dev, uint8_t slotid);
 extern bool cnss_get_fw_cap(struct device *dev, enum cnss_fw_caps fw_cap);
 extern int cnss_set_wfc_mode(struct device *dev, struct cnss_wfc_cfg cfg);
+extern int cnss_thermal_cdev_register(struct device *dev,
+				      unsigned long max_state,
+				      int tcdev_id);
+extern void cnss_thermal_cdev_unregister(struct device *dev, int tcdev_id);
+extern int cnss_get_curr_therm_cdev_state(struct device *dev,
+					  unsigned long *thermal_state,
+					  int tcdev_id);
 #endif /* _NET_CNSS2_H */

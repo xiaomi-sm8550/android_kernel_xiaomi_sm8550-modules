@@ -77,4 +77,7 @@ bool cnss_bus_is_smmu_s1_enabled(struct cnss_plat_data *plat_priv);
 int cnss_bus_update_time_sync_period(struct cnss_plat_data *plat_priv,
 				     unsigned int time_sync_period);
 void cnss_bus_disable_mhi_satellite_cfg(struct cnss_plat_data *plat_priv);
+int cnss_bus_set_therm_cdev_state(struct cnss_plat_data *plat_priv,
+				  unsigned long thermal_state,
+				  int tcdev_id);
 #endif /* _CNSS_BUS_H */
