@@ -83,6 +83,9 @@ module_param(qmi_timeout, ulong, 0600);
 #define WLFW_TIMEOUT                    msecs_to_jiffies(3000)
 #endif
 
+#define ICNSS_RECOVERY_TIMEOUT		60000
+#define ICNSS_CAL_TIMEOUT		40000
+
 static struct icnss_priv *penv;
 static struct work_struct wpss_loader;
 uint64_t dynamic_feature_mask = ICNSS_DEFAULT_FEATURE_MASK;
@@ -1136,6 +1139,7 @@ static int icnss_driver_event_fw_ready_ind(struct icnss_priv *priv, void *data)
 	if (!priv)
 		return -ENODEV;
 
+	del_timer(&priv->recovery_timer);
 	set_bit(ICNSS_FW_READY, &priv->state);
 	clear_bit(ICNSS_MODE_ON, &priv->state);
 	atomic_set(&priv->soc_wake_ref_count, 0);
@@ -1184,11 +1188,14 @@ static int icnss_driver_event_fw_init_done(struct icnss_priv *priv, void *data)
 	if (icnss_wlfw_qdss_dnld_send_sync(priv))
 		icnss_pr_info("Failed to download qdss configuration file");
 
-	if (test_bit(ICNSS_COLD_BOOT_CAL, &priv->state))
+	if (test_bit(ICNSS_COLD_BOOT_CAL, &priv->state)) {
+		mod_timer(&priv->recovery_timer,
+			  jiffies + msecs_to_jiffies(ICNSS_CAL_TIMEOUT));
 		ret = wlfw_wlan_mode_send_sync_msg(priv,
 			(enum wlfw_driver_mode_enum_v01)ICNSS_CALIBRATION);
-	else
+	} else {
 		icnss_driver_event_fw_ready_ind(priv, NULL);
+	}
 
 	return ret;
 }
@@ -2108,6 +2115,10 @@ static int icnss_wpss_notifier_nb(struct notifier_block *nb,
 	}
 	icnss_driver_event_post(priv, ICNSS_DRIVER_EVENT_PD_SERVICE_DOWN,
 				ICNSS_EVENT_SYNC, event_data);
+
+	if (notif->crashed)
+		mod_timer(&priv->recovery_timer,
+			  jiffies + msecs_to_jiffies(ICNSS_RECOVERY_TIMEOUT));
 out:
 	icnss_pr_vdbg("Exit %s,state: 0x%lx\n", __func__, priv->state);
 	return NOTIFY_OK;
@@ -2185,6 +2196,10 @@ static int icnss_modem_notifier_nb(struct notifier_block *nb,
 	}
 	icnss_driver_event_post(priv, ICNSS_DRIVER_EVENT_PD_SERVICE_DOWN,
 				ICNSS_EVENT_SYNC, event_data);
+
+	if (notif->crashed)
+		mod_timer(&priv->recovery_timer,
+			  jiffies + msecs_to_jiffies(ICNSS_RECOVERY_TIMEOUT));
 out:
 	icnss_pr_vdbg("Exit %s,state: 0x%lx\n", __func__, priv->state);
 	return NOTIFY_OK;
@@ -2409,6 +2424,11 @@ static void icnss_pdr_notifier_cb(int state, char *service_path, void *priv_cb)
 		clear_bit(ICNSS_HOST_TRIGGERED_PDR, &priv->state);
 		icnss_driver_event_post(priv, ICNSS_DRIVER_EVENT_PD_SERVICE_DOWN,
 					ICNSS_EVENT_SYNC, event_data);
+
+		if (event_data->crashed)
+			mod_timer(&priv->recovery_timer,
+				  jiffies +
+				  msecs_to_jiffies(ICNSS_RECOVERY_TIMEOUT));
 		break;
 	case SERVREG_SERVICE_STATE_UP:
 		clear_bit(ICNSS_FW_DOWN, &priv->state);
@@ -4483,6 +4503,9 @@ static int icnss_probe(struct platform_device *pdev)
 		INIT_WORK(&wpss_loader, icnss_wpss_load);
 	}
 
+	timer_setup(&priv->recovery_timer,
+		    icnss_recovery_timeout_hdlr, 0);
+
 	INIT_LIST_HEAD(&priv->icnss_tcdev_list);
 
 	icnss_pr_info("Platform driver probed successfully\n");
@@ -4532,6 +4555,8 @@ static int icnss_remove(struct platform_device *pdev)
 	struct icnss_priv *priv = dev_get_drvdata(&pdev->dev);
 
 	icnss_pr_info("Removing driver: state: 0x%lx\n", priv->state);
+
+	del_timer(&priv->recovery_timer);
 
 	device_init_wakeup(&priv->pdev->dev, false);
 
@@ -4589,6 +4614,14 @@ static int icnss_remove(struct platform_device *pdev)
 	dev_set_drvdata(&pdev->dev, NULL);
 
 	return 0;
+}
+
+void icnss_recovery_timeout_hdlr(struct timer_list *t)
+{
+	struct icnss_priv *priv = from_timer(priv, t, recovery_timer);
+
+	icnss_pr_err("Timeout waiting for FW Ready 0x%lx\n", priv->state);
+	ICNSS_ASSERT(0);
 }
 
 #ifdef CONFIG_PM_SLEEP

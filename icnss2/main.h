@@ -19,6 +19,7 @@
 #endif
 #include "wlan_firmware_service_v01.h"
 #include <linux/mailbox_client.h>
+#include <linux/timer.h>
 
 #define WCN6750_DEVICE_ID 0x6750
 #define ADRASTEA_DEVICE_ID 0xabcd
@@ -501,6 +502,7 @@ struct icnss_priv {
 	u32 rf_subtype;
 	u8 is_slate_rfa;
 	struct completion slate_boot_complete;
+	struct timer_list recovery_timer;
 };
 
 struct icnss_reg_info {
@@ -528,5 +530,6 @@ int icnss_update_cpr_info(struct icnss_priv *priv);
 void icnss_add_fw_prefix_name(struct icnss_priv *priv, char *prefix_name,
 			      char *name);
 int icnss_aop_mbox_init(struct icnss_priv *priv);
+void icnss_recovery_timeout_hdlr(struct timer_list *t);
 #endif
 
