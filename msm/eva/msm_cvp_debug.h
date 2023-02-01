@@ -68,6 +68,7 @@ extern bool msm_cvp_dsp_disable;
 extern bool msm_cvp_mmrm_enabled;
 extern bool msm_cvp_dcvs_disable;
 extern int msm_cvp_minidump_enable;
+extern int msm_cvp_hw_wd_recovery;
 
 #define dprintk(__level, __fmt, arg...)	\
 	do { \
