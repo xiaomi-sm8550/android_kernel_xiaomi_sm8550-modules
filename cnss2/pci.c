@@ -47,6 +47,7 @@
 #define MANGO_PATH_PREFIX		"mango/"
 #define PEACH_PATH_PREFIX		"peach/"
 #define DEFAULT_PHY_M3_FILE_NAME	"m3.bin"
+#define DEFAULT_AUX_FILE_NAME		"aux_ucode.elf"
 #define DEFAULT_PHY_UCODE_FILE_NAME	"phy_ucode.elf"
 #define PHY_UCODE_V2_FILE_NAME		"phy_ucode20.elf"
 #define DEFAULT_FW_FILE_NAME		"amss.bin"
@@ -4855,6 +4856,61 @@ void cnss_pci_free_blob_mem(struct cnss_pci_data *pci_priv)
 }
 #endif
 
+int cnss_pci_load_aux(struct cnss_pci_data *pci_priv)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_fw_mem *aux_mem = &plat_priv->aux_mem;
+	char filename[MAX_FIRMWARE_NAME_LEN];
+	char *aux_filename = DEFAULT_AUX_FILE_NAME;
+	const struct firmware *fw_entry;
+	int ret = 0;
+
+	if (!aux_mem->va && !aux_mem->size) {
+		cnss_pci_add_fw_prefix_name(pci_priv, filename,
+					    aux_filename);
+
+		ret = firmware_request_nowarn(&fw_entry, filename,
+					      &pci_priv->pci_dev->dev);
+		if (ret) {
+			cnss_pr_err("Failed to load AUX image: %s\n", filename);
+			return ret;
+		}
+
+		aux_mem->va = dma_alloc_coherent(&pci_priv->pci_dev->dev,
+						fw_entry->size, &aux_mem->pa,
+						GFP_KERNEL);
+		if (!aux_mem->va) {
+			cnss_pr_err("Failed to allocate memory for AUX, size: 0x%zx\n",
+				    fw_entry->size);
+			release_firmware(fw_entry);
+			return -ENOMEM;
+		}
+
+		memcpy(aux_mem->va, fw_entry->data, fw_entry->size);
+		aux_mem->size = fw_entry->size;
+		release_firmware(fw_entry);
+	}
+
+	return 0;
+}
+
+static void cnss_pci_free_aux_mem(struct cnss_pci_data *pci_priv)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_fw_mem *aux_mem = &plat_priv->aux_mem;
+
+	if (aux_mem->va && aux_mem->size) {
+		cnss_pr_dbg("Freeing memory for AUX, va: 0x%pK, pa: %pa, size: 0x%zx\n",
+			    aux_mem->va, &aux_mem->pa, aux_mem->size);
+		dma_free_coherent(&pci_priv->pci_dev->dev, aux_mem->size,
+				  aux_mem->va, aux_mem->pa);
+	}
+
+	aux_mem->va = NULL;
+	aux_mem->pa = 0;
+	aux_mem->size = 0;
+}
+
 void cnss_pci_fw_boot_timeout_hdlr(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv;
@@ -7001,6 +7057,7 @@ static void cnss_pci_remove(struct pci_dev *pci_dev)
 
 	clear_bit(CNSS_PCI_PROBE_DONE, &plat_priv->driver_state);
 	cnss_pci_unregister_driver_hdlr(pci_priv);
+	cnss_pci_free_aux_mem(pci_priv);
 	cnss_pci_free_m3_mem(pci_priv);
 	cnss_pci_free_fw_mem(pci_priv);
 	cnss_pci_free_qdss_mem(pci_priv);

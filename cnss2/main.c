@@ -811,6 +811,23 @@ int cnss_set_pcie_gen_speed(struct device *dev, u8 pcie_gen_speed)
 }
 EXPORT_SYMBOL(cnss_set_pcie_gen_speed);
 
+static bool cnss_is_aux_support_enabled(struct cnss_plat_data *plat_priv)
+{
+	switch (plat_priv->device_id) {
+	case PEACH_DEVICE_ID:
+		if (!plat_priv->fw_aux_uc_support) {
+			cnss_pr_dbg("FW does not support aux uc capability\n");
+			return false;
+		}
+		break;
+	default:
+		cnss_pr_dbg("Host does not support aux uc capability\n");
+		return false;
+	}
+
+	return true;
+}
+
 static int cnss_fw_mem_ready_hdlr(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
@@ -849,6 +866,16 @@ static int cnss_fw_mem_ready_hdlr(struct cnss_plat_data *plat_priv)
 	ret = cnss_wlfw_m3_dnld_send_sync(plat_priv);
 	if (ret)
 		goto out;
+
+	if (cnss_is_aux_support_enabled(plat_priv)) {
+		ret = cnss_bus_load_aux(plat_priv);
+		if (ret)
+			goto out;
+
+		ret = cnss_wlfw_aux_dnld_send_sync(plat_priv);
+		if (ret)
+			goto out;
+	}
 
 	cnss_wlfw_qdss_dnld_send_sync(plat_priv);
 
@@ -4377,6 +4404,8 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 	if (of_property_read_bool(plat_priv->plat_dev->dev.of_node,
 				  "qcom,rc-ep-short-channel"))
 		cnss_set_feature_list(plat_priv, CNSS_RC_EP_ULTRASHORT_CHANNEL_V01);
+	if (plat_priv->device_id == PEACH_DEVICE_ID)
+		cnss_set_feature_list(plat_priv, CNSS_AUX_UC_SUPPORT_V01);
 
 	return 0;
 }

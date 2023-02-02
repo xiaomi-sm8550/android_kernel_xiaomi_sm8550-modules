@@ -269,6 +269,7 @@ enum cnss_mem_type {
 	CNSS_MEM_M3,
 	CNSS_MEM_CAL_V01,
 	CNSS_MEM_DPD_V01,
+	CNSS_MEM_AUX,
 };
 
 enum cnss_fw_dump_type {
@@ -535,6 +536,7 @@ struct cnss_plat_data {
 	struct cnss_fw_mem fw_mem[QMI_WLFW_MAX_NUM_MEM_SEG_V01];
 	struct cnss_fw_mem m3_mem;
 	struct cnss_fw_mem *cal_mem;
+	struct cnss_fw_mem aux_mem;
 	u64 cal_time;
 	bool cbc_file_download;
 	u32 cal_file_size;
@@ -583,6 +585,7 @@ struct cnss_plat_data {
 	u8 set_wlaon_pwr_ctrl;
 	struct cnss_tcs_info tcs_info;
 	bool fw_pcie_gen_switch;
+	bool fw_aux_uc_support;
 	u64 fw_caps;
 	u8 pcie_gen_speed;
 	struct iommu_domain *audio_iommu_domain;
