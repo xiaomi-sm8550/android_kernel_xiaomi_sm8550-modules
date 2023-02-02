@@ -15,12 +15,6 @@
 #define CNSS_MAX_DEV_MEM_NUM		4
 #define CNSS_CHIP_VER_ANY		0
 
-/*
- * Temporary change for compilation, will be removed
- * after WLAN host driver switched to use new APIs
- */
-#define CNSS_API_WITH_DEV
-
 #define CNSS_SSR_DRIVER_DUMP_MAX_REGIONS 32
 
 enum cnss_bus_width_type {
