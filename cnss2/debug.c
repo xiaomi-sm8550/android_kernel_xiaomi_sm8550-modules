@@ -576,6 +576,8 @@ static ssize_t cnss_runtime_pm_debug_write(struct file *fp,
 	buf[len] = '\0';
 	cmd = buf;
 
+	cnss_pr_dbg("Received runtime_pm debug command: %s\n", cmd);
+
 	if (sysfs_streq(cmd, "usage_count")) {
 		cnss_pci_pm_runtime_show_usage_count(pci_priv);
 	} else if (sysfs_streq(cmd, "request_resume")) {
