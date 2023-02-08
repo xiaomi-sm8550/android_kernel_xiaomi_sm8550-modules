@@ -3025,7 +3025,9 @@ static int cnss_qca6290_shutdown(struct cnss_pci_data *pci_priv)
 	    test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state)) {
 		del_timer(&pci_priv->dev_rddm_timer);
 		cnss_pci_collect_dump_info(pci_priv, false);
-		CNSS_ASSERT(0);
+
+		if (!plat_priv->recovery_enabled)
+			CNSS_ASSERT(0);
 	}
 
 	if (!cnss_is_device_powered_on(plat_priv)) {
