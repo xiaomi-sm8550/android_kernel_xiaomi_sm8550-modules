@@ -26,8 +26,10 @@ KBUILD_OPTIONS += CONFIG_CNSS2_SSR_DRIVER_DUMP=y
 endif
 endif
 
-all:
-	$(MAKE) -C $(KERNEL_SRC) M=$(M) modules $(KBUILD_OPTIONS)
+all: modules
+
+%:
+	$(MAKE) -C $(KERNEL_SRC) M=$(M) $@ $(KBUILD_OPTIONS)
 
 modules_install:
 	$(MAKE) INSTALL_MOD_STRIP=1 -C $(KERNEL_SRC) M=$(M) modules_install
