@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "ipa_i.h"
@@ -589,6 +590,8 @@ static int ipa_create_ap_smmu_mapping_pa(phys_addr_t pa, size_t len,
 
 	ipa3_ctx->wdi_map_cnt++;
 	cb->next_addr = va + true_len;
+	if (cb->next_addr >= cb->geometry_end)
+		cb->next_addr = cb->va_end;
 	*iova = va + pa - rounddown(pa, PAGE_SIZE);
 	return 0;
 }
@@ -671,6 +674,10 @@ static int ipa_create_ap_smmu_mapping_sgt(struct sg_table *sgt,
 		count++;
 	}
 	cb->next_addr = va;
+
+	if (cb->next_addr >= cb->geometry_end)
+		cb->next_addr = cb->va_end;
+
 	*iova = start_iova;
 
 	return 0;
@@ -965,7 +972,7 @@ void ipa3_release_wdi3_gsi_smmu_mappings(u8 dir)
 		}
 	}
 
-	if (ipa3_ctx->wdi_map_cnt == 0)
+	if (ipa3_ctx->wdi_map_cnt == 0 || cb->next_addr >= cb->geometry_end)
 		cb->next_addr = cb->va_end;
 }
 
