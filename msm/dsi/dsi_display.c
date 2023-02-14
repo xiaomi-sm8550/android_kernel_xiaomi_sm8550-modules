@@ -5279,7 +5279,7 @@ static int _dsi_display_dev_init(struct dsi_display *display)
 	rc = dsi_display_res_init(display);
 	if (rc) {
 		DSI_ERR("[%s] failed to initialize resources, rc=%d\n",
-		       display->name, rc);
+			display->name, rc);
 		goto error;
 	}
 error:
@@ -5896,7 +5896,7 @@ static int dsi_display_init(struct dsi_display *display)
 
 	rc = _dsi_display_dev_init(display);
 	if (rc) {
-		DSI_ERR("device init failed, rc=%d\n", rc);
+		DSI_ERR("device init failed for %s, rc=%d\n", display->display_type, rc);
 		goto end;
 	}
 

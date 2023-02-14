@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -1214,7 +1215,8 @@ int dsi_clk_req_state(void *client, enum dsi_clk_type clk,
 	if (changed) {
 		rc = dsi_recheck_clk_state(mngr);
 		if (rc)
-			DSI_ERR("Failed to adjust clock state rc = %d\n", rc);
+			DSI_ERR("[%s]%s: failed to adjust clock state rc = %d\n",
+				mngr->name, c->name, rc);
 	}
 
 	mutex_unlock(&mngr->clk_mutex);
