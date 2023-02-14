@@ -13,9 +13,6 @@ ifneq (, $(filter y, $(CONFIG_QTI_QUIN_GVM) $(CONFIG_ARCH_KHAJE) $(CONFIG_ARCH_S
 
     obj-$(CONFIG_QSEECOM) += qseecom_dlkm.o
     qseecom_dlkm-objs := qseecom/qseecom.o
-    ifdef CONFIG_COMPAT
-        qseecom_dlkm-objs += qseecom/qseecom_32bit_impl.o
-    endif
 endif
 
 include $(SSG_MODULE_ROOT)/config/sec-kernel_defconfig_smcinvoke.conf
