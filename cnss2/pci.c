@@ -1816,6 +1816,18 @@ static void cnss_pci_set_mhi_state_bit(struct cnss_pci_data *pci_priv,
 	}
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+static int cnss_mhi_pm_force_resume(struct cnss_pci_data *pci_priv)
+{
+	return mhi_pm_resume_force(pci_priv->mhi_ctrl);
+}
+#else
+static int cnss_mhi_pm_force_resume(struct cnss_pci_data *pci_priv)
+{
+	return mhi_pm_resume(pci_priv->mhi_ctrl);
+}
+#endif
+
 static int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,
 				  enum cnss_mhi_state mhi_state)
 {
@@ -1888,7 +1900,10 @@ retry_mhi_suspend:
 			ret = cnss_mhi_pm_fast_resume(pci_priv, true);
 			cnss_pci_allow_l1(&pci_priv->pci_dev->dev);
 		} else {
-			ret = mhi_pm_resume(pci_priv->mhi_ctrl);
+			if (pci_priv->device_id == QCA6390_DEVICE_ID)
+				ret = cnss_mhi_pm_force_resume(pci_priv);
+			else
+				ret = mhi_pm_resume(pci_priv->mhi_ctrl);
 		}
 		mutex_unlock(&pci_priv->mhi_ctrl->pm_mutex);
 		break;
