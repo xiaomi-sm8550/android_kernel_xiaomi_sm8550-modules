@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -494,7 +494,8 @@ int cnss_audio_smmu_map(struct device *dev, phys_addr_t paddr,
 	paddr -= page_offset;
 
 	return iommu_map(plat_priv->audio_iommu_domain, iova, paddr,
-			 roundup(size, PAGE_SIZE), IOMMU_READ | IOMMU_WRITE);
+			 roundup(size, PAGE_SIZE), IOMMU_READ | IOMMU_WRITE |
+			 IOMMU_CACHE);
 }
 EXPORT_SYMBOL(cnss_audio_smmu_map);
 
@@ -843,6 +844,7 @@ static int cnss_fw_ready_hdlr(struct cnss_plat_data *plat_priv)
 	clear_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state);
 
 	cnss_wlfw_send_pcie_gen_speed_sync(plat_priv);
+	cnss_send_subsys_restart_level_msg(plat_priv);
 
 	if (test_bit(CNSS_FW_BOOT_RECOVERY, &plat_priv->driver_state)) {
 		clear_bit(CNSS_FW_BOOT_RECOVERY, &plat_priv->driver_state);
@@ -2109,6 +2111,7 @@ static int cnss_cold_boot_cal_start_hdlr(struct cnss_plat_data *plat_priv)
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
 	case MANGO_DEVICE_ID:
+	case PEACH_DEVICE_ID:
 		break;
 	default:
 		cnss_pr_err("Not supported for device ID 0x%lx\n",
@@ -2921,6 +2924,106 @@ do_elf_dump:
 
 	return ret;
 }
+
+#ifdef CONFIG_CNSS2_SSR_DRIVER_DUMP
+int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
+			 struct cnss_ssr_driver_dump_entry *ssr_entry,
+			 size_t num_entries_loaded)
+{
+	struct qcom_dump_segment *seg;
+	struct cnss_host_dump_meta_info meta_info = {0};
+	struct list_head head;
+	int dev_ret = 0;
+	struct device *new_device;
+	static const char * const wlan_str[] = {
+		[CNSS_HOST_WLAN_LOGS] = "wlan_logs",
+		[CNSS_HOST_HTC_CREDIT] = "htc_credit",
+		[CNSS_HOST_WMI_TX_CMP] = "wmi_tx_cmp",
+		[CNSS_HOST_WMI_COMMAND_LOG] = "wmi_command_log",
+		[CNSS_HOST_WMI_EVENT_LOG] = "wmi_event_log",
+		[CNSS_HOST_WMI_RX_EVENT] = "wmi_rx_event",
+		[CNSS_HOST_HAL_SOC] = "hal_soc",
+		[CNSS_HOST_WMI_HANG_DATA] = "wmi_hang_data",
+		[CNSS_HOST_CE_HANG_EVT] = "ce_hang_evt",
+		[CNSS_HOST_PEER_MAC_ADDR_HANG_DATA] = "peer_mac_addr_hang_data",
+		[CNSS_HOST_CP_VDEV_INFO] = "cp_vdev_info",
+		[CNSS_HOST_GWLAN_LOGGING] = "gwlan_logging",
+		[CNSS_HOST_WMI_DEBUG_LOG_INFO] = "wmi_debug_log_info",
+		[CNSS_HOST_HTC_CREDIT_IDX] = "htc_credit_history_idx",
+		[CNSS_HOST_HTC_CREDIT_LEN] = "htc_credit_history_length",
+		[CNSS_HOST_WMI_TX_CMP_IDX] = "wmi_tx_cmp_idx",
+		[CNSS_HOST_WMI_COMMAND_LOG_IDX] = "wmi_command_log_idx",
+		[CNSS_HOST_WMI_EVENT_LOG_IDX] = "wmi_event_log_idx",
+		[CNSS_HOST_WMI_RX_EVENT_IDX] = "wmi_rx_event_idx"
+	};
+	int i, j;
+	int ret = 0;
+
+	if (!dump_enabled()) {
+		cnss_pr_info("Dump collection is not enabled\n");
+		return ret;
+	}
+
+	new_device = kcalloc(1, sizeof(*new_device), GFP_KERNEL);
+	if (!new_device) {
+		cnss_pr_err("Failed to alloc device mem\n");
+		return -ENOMEM;
+	}
+
+	device_initialize(new_device);
+	dev_set_name(new_device, "wlan_driver");
+	dev_ret = device_add(new_device);
+	if (dev_ret) {
+		cnss_pr_err("Failed to add new device\n");
+		goto put_device;
+	}
+
+	INIT_LIST_HEAD(&head);
+	for (i = 0; i < num_entries_loaded; i++) {
+		seg = kcalloc(1, sizeof(*seg), GFP_KERNEL);
+		if (!seg) {
+			cnss_pr_err("Failed to alloc seg entry %d\n", i);
+			continue;
+		}
+
+		seg->va = ssr_entry[i].buffer_pointer;
+		seg->da = (dma_addr_t)ssr_entry[i].buffer_pointer;
+		seg->size = ssr_entry[i].buffer_size;
+
+		for (j = 0; j < ARRAY_SIZE(wlan_str); j++) {
+			if (strncmp(ssr_entry[i].region_name, wlan_str[j],
+				    strlen(wlan_str[j])) == 0) {
+				meta_info.entry[i].type = j;
+			}
+		}
+		meta_info.entry[i].entry_start = i + 1;
+		meta_info.entry[i].entry_num++;
+
+		list_add_tail(&seg->node, &head);
+	}
+
+	seg = kcalloc(1, sizeof(*seg), GFP_KERNEL);
+	meta_info.magic = CNSS_RAMDUMP_MAGIC;
+	meta_info.version = CNSS_RAMDUMP_VERSION;
+	meta_info.chipset = plat_priv->device_id;
+	meta_info.total_entries = num_entries_loaded;
+	seg->va = &meta_info;
+	seg->da = (dma_addr_t)&meta_info;
+	seg->size = sizeof(meta_info);
+	list_add(&seg->node, &head);
+	ret = qcom_elf_dump(&head, new_device, ELF_CLASS);
+	while (!list_empty(&head)) {
+		seg = list_first_entry(&head, struct qcom_dump_segment, node);
+		list_del(&seg->node);
+		kfree(seg);
+	}
+	device_del(new_device);
+put_device:
+	put_device(new_device);
+	kfree(new_device);
+	return ret;
+}
+#endif
 #endif /* CONFIG_MSM_SUBSYSTEM_RESTART */
 
 #if IS_ENABLED(CONFIG_QCOM_MEMORY_DUMP_V2)
@@ -3125,6 +3228,7 @@ int cnss_register_ramdump(struct cnss_plat_data *plat_priv)
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
 	case MANGO_DEVICE_ID:
+	case PEACH_DEVICE_ID:
 		ret = cnss_register_ramdump_v2(plat_priv);
 		break;
 	default:
@@ -3146,6 +3250,7 @@ void cnss_unregister_ramdump(struct cnss_plat_data *plat_priv)
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
 	case MANGO_DEVICE_ID:
+	case PEACH_DEVICE_ID:
 		cnss_unregister_ramdump_v2(plat_priv);
 		break;
 	default:
@@ -3584,7 +3689,6 @@ static ssize_t recovery_store(struct device *dev,
 {
 	struct cnss_plat_data *plat_priv = dev_get_drvdata(dev);
 	unsigned int recovery = 0;
-	int ret;
 
 	if (!plat_priv)
 		return -ENODEV;
@@ -3602,13 +3706,7 @@ static ssize_t recovery_store(struct device *dev,
 	cnss_pr_dbg("%s PCSS recovery, count is %zu\n",
 		    plat_priv->recovery_pcss_enabled ? "Enable" : "Disable", count);
 
-	ret = cnss_send_subsys_restart_level_msg(plat_priv);
-	if (ret < 0) {
-		cnss_pr_err("pcss recovery setting failed with ret %d\n", ret);
-		plat_priv->recovery_pcss_enabled = false;
-		return -EINVAL;
-	}
-
+	cnss_send_subsys_restart_level_msg(plat_priv);
 	return count;
 }
 
@@ -4056,6 +4154,7 @@ static const struct platform_device_id cnss_platform_id_table[] = {
 	{ .name = "qca6490", .driver_data = QCA6490_DEVICE_ID, },
 	{ .name = "kiwi", .driver_data = KIWI_DEVICE_ID, },
 	{ .name = "mango", .driver_data = MANGO_DEVICE_ID, },
+	{ .name = "peach", .driver_data = PEACH_DEVICE_ID, },
 	{ .name = "qcaconv", .driver_data = 0, },
 	{ },
 };
@@ -4080,8 +4179,11 @@ static const struct of_device_id cnss_of_match_table[] = {
 		.compatible = "qcom,cnss-mango",
 		.data = (void *)&cnss_platform_id_table[5]},
 	{
-		.compatible = "qcom,cnss-qca-converged",
+		.compatible = "qcom,cnss-peach",
 		.data = (void *)&cnss_platform_id_table[6]},
+	{
+		.compatible = "qcom,cnss-qca-converged",
+		.data = (void *)&cnss_platform_id_table[7]},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, cnss_of_match_table);

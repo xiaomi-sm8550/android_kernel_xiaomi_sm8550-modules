@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _NET_CNSS2_H
@@ -20,6 +20,8 @@
  * after WLAN host driver switched to use new APIs
  */
 #define CNSS_API_WITH_DEV
+
+#define CNSS_SSR_DRIVER_DUMP_MAX_REGIONS 32
 
 enum cnss_bus_width_type {
 	CNSS_BUS_WIDTH_NONE,
@@ -92,6 +94,29 @@ enum cnss_driver_status {
 	CNSS_BUS_EVENT,
 };
 
+enum cnss_host_dump_type {
+	CNSS_HOST_WLAN_LOGS,
+	CNSS_HOST_HTC_CREDIT,
+	CNSS_HOST_WMI_TX_CMP,
+	CNSS_HOST_WMI_COMMAND_LOG,
+	CNSS_HOST_WMI_EVENT_LOG,
+	CNSS_HOST_WMI_RX_EVENT,
+	CNSS_HOST_HAL_SOC,
+	CNSS_HOST_WMI_HANG_DATA,
+	CNSS_HOST_CE_HANG_EVT,
+	CNSS_HOST_PEER_MAC_ADDR_HANG_DATA,
+	CNSS_HOST_CP_VDEV_INFO,
+	CNSS_HOST_GWLAN_LOGGING,
+	CNSS_HOST_WMI_DEBUG_LOG_INFO,
+	CNSS_HOST_HTC_CREDIT_IDX,
+	CNSS_HOST_HTC_CREDIT_LEN,
+	CNSS_HOST_WMI_TX_CMP_IDX,
+	CNSS_HOST_WMI_COMMAND_LOG_IDX,
+	CNSS_HOST_WMI_EVENT_LOG_IDX,
+	CNSS_HOST_WMI_RX_EVENT_IDX,
+	CNSS_HOST_DUMP_TYPE_MAX,
+};
+
 enum cnss_bus_event_type {
 	BUS_EVENT_PCI_LINK_DOWN = 0,
 
@@ -122,6 +147,13 @@ struct cnss_uevent_data {
 	void *data;
 };
 
+struct cnss_ssr_driver_dump_entry {
+	char region_name[CNSS_SSR_DRIVER_DUMP_MAX_REGIONS];
+	void *buffer_pointer;
+	size_t buffer_size;
+};
+
+
 struct cnss_wlan_driver {
 	char *name;
 	int  (*probe)(struct pci_dev *pdev, const struct pci_device_id *id);
@@ -144,6 +176,9 @@ struct cnss_wlan_driver {
 	const struct pci_device_id *id_table;
 	u32 chip_version;
 	enum cnss_driver_mode (*get_driver_mode)(void);
+	int (*collect_driver_dump)(struct pci_dev *pdev,
+				   struct cnss_ssr_driver_dump_entry *input_array,
+				   size_t *num_entries_loaded);
 };
 
 struct cnss_ce_tgt_pipe_cfg {

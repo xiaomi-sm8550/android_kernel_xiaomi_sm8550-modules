@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -237,7 +237,8 @@ static void cnss_wlfw_host_cap_parse_mlo(struct cnss_plat_data *plat_priv,
 					 struct wlfw_host_cap_req_msg_v01 *req)
 {
 	if (plat_priv->device_id == KIWI_DEVICE_ID ||
-	    plat_priv->device_id == MANGO_DEVICE_ID) {
+	    plat_priv->device_id == MANGO_DEVICE_ID ||
+	    plat_priv->device_id == PEACH_DEVICE_ID) {
 		req->mlo_capable_valid = 1;
 		req->mlo_capable = 1;
 		req->mlo_chip_id_valid = 1;
@@ -711,8 +712,6 @@ int cnss_wlfw_ini_file_send_sync(struct cnss_plat_data *plat_priv,
 	unsigned int remaining;
 	bool backup_supported = false;
 
-	cnss_pr_info("INI File %u download\n", file_type);
-
 	req = kzalloc(sizeof(*req), GFP_KERNEL);
 	if (!req)
 		return -ENOMEM;
@@ -739,10 +738,6 @@ int cnss_wlfw_ini_file_send_sync(struct cnss_plat_data *plat_priv,
 	/* Fetch the file */
 	ret = firmware_request_nowarn(&fw, filename, &plat_priv->plat_dev->dev);
 	if (ret) {
-		cnss_pr_err("Failed to get INI file %s (%d), Backup file: %s",
-			    filename, ret,
-			    backup_supported ? "Supported" : "Not Supported");
-
 		if (!backup_supported)
 			goto err_req_fw;
 
@@ -751,11 +746,8 @@ int cnss_wlfw_ini_file_send_sync(struct cnss_plat_data *plat_priv,
 
 		ret = firmware_request_nowarn(&fw, filename,
 					      &plat_priv->plat_dev->dev);
-		if (ret) {
-			cnss_pr_err("Failed to get INI file %s (%d)", filename,
-				    ret);
+		if (ret)
 			goto err_req_fw;
-		}
 	}
 
 	temp = fw->data;
@@ -1235,7 +1227,8 @@ void cnss_get_qdss_cfg_filename(struct cnss_plat_data *plat_priv,
 	char *debug_str = QDSS_DEBUG_FILE_STR;
 
 	if (plat_priv->device_id == KIWI_DEVICE_ID ||
-	    plat_priv->device_id == MANGO_DEVICE_ID)
+	    plat_priv->device_id == MANGO_DEVICE_ID ||
+	    plat_priv->device_id == PEACH_DEVICE_ID)
 		debug_str = "";
 
 	if (plat_priv->device_version.major_version == FW_V2_NUMBER)
@@ -1588,7 +1581,8 @@ int cnss_wlfw_wlan_cfg_send_sync(struct cnss_plat_data *plat_priv,
 	}
 
 	if (plat_priv->device_id != KIWI_DEVICE_ID &&
-	    plat_priv->device_id != MANGO_DEVICE_ID) {
+	    plat_priv->device_id != MANGO_DEVICE_ID &&
+	    plat_priv->device_id != PEACH_DEVICE_ID) {
 		req->shadow_reg_v2_valid = 1;
 		if (config->num_shadow_reg_v2_cfg >
 		    QMI_WLFW_MAX_NUM_SHADOW_REG_V2_V01)
@@ -3563,8 +3557,8 @@ int cnss_send_subsys_restart_level_msg(struct cnss_plat_data *plat_priv)
 		return -ENODEV;
 
 	if (!test_bit(CNSS_FW_READY, &plat_priv->driver_state)) {
-		cnss_pr_err("Can't send pcss cmd before fw ready\n");
-		return -EINVAL;
+		cnss_pr_dbg("Can't send pcss cmd before fw ready\n");
+		return 0;
 	}
 
 	pcss_enabled = plat_priv->recovery_pcss_enabled;
@@ -3579,6 +3573,9 @@ int cnss_send_subsys_restart_level_msg(struct cnss_plat_data *plat_priv)
 			    QMI_WLFW_SUBSYS_RESTART_LEVEL_REQ_V01,
 			    WLFW_SUBSYS_RESTART_LEVEL_REQ_MSG_V01_MAX_MSG_LEN,
 			    QMI_WLFW_TIMEOUT_JF);
+
+	if (ret < 0)
+		cnss_pr_err("pcss recovery setting failed with ret %d\n", ret);
 	return ret;
 }
 
