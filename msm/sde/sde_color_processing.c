@@ -2243,6 +2243,9 @@ void sde_cp_crtc_apply_properties(struct drm_crtc *crtc)
 	}
 
 	_sde_cp_flush_properties(crtc);
+	if (!sde_crtc->enabled)
+		return;
+
 	mutex_lock(&sde_crtc->crtc_cp_lock);
 	_sde_clear_ltm_merge_mode(sde_crtc);
 
