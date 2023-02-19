@@ -707,53 +707,29 @@ static int start_sha_req(struct qcedev_control *podev,
 };
 
 static void qcedev_check_crypto_status(
-			struct qcedev_async_req *qcedev_areq, void *handle,
-			bool print_err)
+			struct qcedev_async_req *qcedev_areq, void *handle)
 {
-	unsigned int s1, s2, s3, s4, s5, s6;
+	struct qce_error error = {0};
 
 	qcedev_areq->offload_cipher_op_req.err = QCEDEV_OFFLOAD_NO_ERROR;
-	qce_get_crypto_status(handle, &s1, &s2, &s3, &s4, &s5, &s6);
+	qce_get_crypto_status(handle, &error);
 
-	if (print_err) {
-		pr_err("%s: sts = 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n", __func__,
-			s1, s2, s3, s4, s5, s6);
-	}
-
-	// Check for key timer expiry
-	if ((s6 & PIPE_KEY_TIMER_EXPIRED_STATUS6_MASK) ||
-		(s3 & PIPE_KEY_TIMER_EXPIRED_STATUS3_MASK)) {
-		pr_info("%s: crypto timer expired\n", __func__);
-		pr_info("%s: sts = 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n", __func__,
-			s1, s2, s3, s4, s5, s6);
+	if (error.timer_error) {
 		qcedev_areq->offload_cipher_op_req.err =
-					QCEDEV_OFFLOAD_KEY_TIMER_EXPIRED_ERROR;
-		return;
+			QCEDEV_OFFLOAD_KEY_TIMER_EXPIRED_ERROR;
+	} else if (error.key_paused) {
+		qcedev_areq->offload_cipher_op_req.err =
+			QCEDEV_OFFLOAD_KEY_PAUSE_ERROR;
+	} else if (error.generic_error) {
+		qcedev_areq->offload_cipher_op_req.err =
+			QCEDEV_OFFLOAD_GENERIC_ERROR;
 	}
 
-	// Check for key pause
-	if ((s6 & PIPE_KEY_PAUSE_STATUS6_MASK) ||
-		(s3 & PIPE_KEY_PAUSE_STATUS3_MASK)) {
-		pr_info("%s: crypto key paused\n", __func__);
-		pr_info("%s: sts = 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n", __func__,
-			s1, s2, s3, s4, s5, s6);
-		qcedev_areq->offload_cipher_op_req.err =
-					QCEDEV_OFFLOAD_KEY_PAUSE_ERROR;
-		return;
-	}
-
-	// Check for generic error
-	if (s1 & QCEDEV_STATUS1_ERR_INTR_MASK) {
-		pr_err("%s: generic crypto error\n", __func__);
-		pr_info("%s: sts = 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n", __func__,
-			s1, s2, s3, s4, s5, s6);
-		qcedev_areq->offload_cipher_op_req.err =
-					QCEDEV_OFFLOAD_GENERIC_ERROR;
-		return;
-	}
+	return;
 }
 
-#define MAX_RETRIES		333
+
+#define MAX_RETRIES	333
 
 static int submit_req(struct qcedev_async_req *qcedev_areq,
 					struct qcedev_handle *handle)
@@ -764,7 +740,6 @@ static int submit_req(struct qcedev_async_req *qcedev_areq,
 	struct qcedev_stat *pstat;
 	int current_req_info = 0;
 	int wait = MAX_CRYPTO_WAIT_TIME;
-	bool print_sts = false;
 	struct qcedev_async_req *new_req = NULL;
 	int retries = 0;
 	int req_wait = MAX_REQUEST_TIME;
@@ -772,7 +747,6 @@ static int submit_req(struct qcedev_async_req *qcedev_areq,
 	qcedev_areq->err = 0;
 	podev = handle->cntl;
 	init_waitqueue_head(&qcedev_areq->wait_q);
-
 
 	spin_lock_irqsave(&podev->lock, flags);
 
@@ -852,25 +826,26 @@ static int submit_req(struct qcedev_async_req *qcedev_areq,
 	 */
 		pr_err("%s: wait timed out, req info = %d\n", __func__,
 					current_req_info);
-		print_sts = true;
-		spin_lock_irqsave(&podev->lock, flags);
-		qcedev_check_crypto_status(qcedev_areq, podev->qce, print_sts);
-		qcedev_areq->timed_out = true;
-		ret = qce_manage_timeout(podev->qce, current_req_info);
-		spin_unlock_irqrestore(&podev->lock, flags);
-		if (ret) {
-			pr_err("%s: error during manage timeout", __func__);
+		qcedev_check_crypto_status(qcedev_areq, podev->qce);
+		if (qcedev_areq->offload_cipher_op_req.err ==
+			QCEDEV_OFFLOAD_NO_ERROR) {
+			pr_err("%s: no error, wait for request to be done", __func__);
 			while (qcedev_areq->state != QCEDEV_REQ_DONE &&
-					retries < MAX_RETRIES) {
+				retries < MAX_RETRIES) {
 				usleep_range(3000, 5000);
 				retries++;
 				pr_err("%s: waiting for req state to be done, retries = %d",
-						__func__, retries);
+					__func__, retries);
 			}
-			// This means there is no crypto error, timeout corner case.
-			qcedev_areq->offload_cipher_op_req.err = QCEDEV_OFFLOAD_NO_ERROR;
 			return 0;
 		}
+		spin_lock_irqsave(&podev->lock, flags);
+		qcedev_areq->timed_out = true;
+		ret = qce_manage_timeout(podev->qce, current_req_info);
+		if (ret)
+			pr_err("%s: error during manage timeout", __func__);
+
+		spin_unlock_irqrestore(&podev->lock, flags);
 		tasklet_schedule(&podev->done_tasklet);
 		if (qcedev_areq->offload_cipher_op_req.err !=
 						QCEDEV_OFFLOAD_NO_ERROR)
