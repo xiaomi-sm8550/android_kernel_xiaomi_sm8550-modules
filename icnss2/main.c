@@ -152,6 +152,9 @@ static ssize_t icnss_sysfs_store(struct kobject *kobj,
 {
 	struct icnss_priv *priv = icnss_get_plat_priv();
 
+	if (!priv)
+		return count;
+
 	icnss_pr_dbg("Received shutdown indication");
 
 	atomic_set(&priv->is_shutdown, true);
@@ -466,7 +469,7 @@ static int icnss_send_smp2p(struct icnss_priv *priv,
 	unsigned int value = 0;
 	int ret;
 
-	if (IS_ERR(priv->smp2p_info[smp2p_entry].smem_state))
+	if (!priv || IS_ERR(priv->smp2p_info[smp2p_entry].smem_state))
 		return -EINVAL;
 
 	/* No Need to check FW_DOWN for ICNSS_RESET_MSG */
@@ -547,11 +550,11 @@ static irqreturn_t fw_crash_indication_handler(int irq, void *ctx)
 
 	icnss_pr_err("Received early crash indication from FW\n");
 
-	if (priv->wpss_self_recovery_enabled)
-		mod_timer(&priv->wpss_ssr_timer,
-			  jiffies + msecs_to_jiffies(ICNSS_WPSS_SSR_TIMEOUT));
-
 	if (priv) {
+		if (priv->wpss_self_recovery_enabled)
+			mod_timer(&priv->wpss_ssr_timer,
+				  jiffies + msecs_to_jiffies(ICNSS_WPSS_SSR_TIMEOUT));
+
 		set_bit(ICNSS_FW_DOWN, &priv->state);
 		icnss_ignore_fw_timeout(true);
 
@@ -2425,6 +2428,9 @@ static void icnss_pdr_notifier_cb(int state, char *service_path, void *priv_cb)
 	struct icnss_event_pd_service_down_data *event_data;
 	struct icnss_uevent_fw_down_data fw_down_data = {0};
 	enum icnss_pdr_cause_index cause = ICNSS_ROOT_PD_CRASH;
+
+	if (!priv)
+		return;
 
 	icnss_pr_dbg("PD service notification: 0x%lx state: 0x%lx\n",
 		     state, priv->state);
