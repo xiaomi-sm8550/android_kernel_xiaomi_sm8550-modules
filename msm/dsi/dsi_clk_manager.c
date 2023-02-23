@@ -106,6 +106,30 @@ int dsi_clk_set_link_frequencies(void *client, struct link_clk_freq freq,
 }
 
 /**
+ * dsi_clk_get_link_frequencies() - get link clk frequencies
+ * @link_freq:       Structure to get link clock frequencies
+ * @client:     DSI clock client pointer.
+ * @index:      Index of the DSI controller.
+ *
+ * return: error code in case of failure or 0 for success.
+ */
+int dsi_clk_get_link_frequencies(struct link_clk_freq *link_freq, void *client, u32 index)
+{
+	struct dsi_clk_client_info *c = client;
+	struct dsi_clk_mngr *mngr;
+
+	if (!client || !link_freq) {
+		DSI_ERR("invalid params\n");
+		return -EINVAL;
+	}
+
+	mngr = c->mngr;
+	memcpy(link_freq, &mngr->link_clks[index].freq, sizeof(struct link_clk_freq));
+
+	return 0;
+}
+
+/**
  * dsi_clk_set_pixel_clk_rate() - set frequency for pixel clock
  * @clks:	DSI link clock information.
  * @pixel_clk:	Pixel clock rate in KHz.
@@ -1492,4 +1516,30 @@ int dsi_display_clk_mngr_deregister(void *clk_mngr)
 	DSI_DEBUG("%s: EXIT, rc = %d\n", mngr->name, rc);
 	kfree(mngr);
 	return rc;
+}
+
+/**
+ * dsi_clk_acquire_mngr_lock() - acquire clk manager mutex lock
+ * @client:       DSI clock client pointer.
+ */
+void dsi_clk_acquire_mngr_lock(void *client)
+{
+	struct dsi_clk_mngr *mngr;
+	struct dsi_clk_client_info *c = client;
+
+	mngr = c->mngr;
+	mutex_lock(&mngr->clk_mutex);
+}
+
+/**
+ * dsi_clk_release_mngr_lock() - release clk manager mutex lock
+ * @client:       DSI clock client pointer.
+ */
+void dsi_clk_release_mngr_lock(void *client)
+{
+	struct dsi_clk_mngr *mngr;
+	struct dsi_clk_client_info *c = client;
+
+	mngr = c->mngr;
+	mutex_unlock(&mngr->clk_mutex);
 }

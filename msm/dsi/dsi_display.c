@@ -2826,7 +2826,7 @@ int dsi_display_phy_configure(void *priv, bool commit)
 	struct dsi_display *display = priv;
 	struct dsi_display_ctrl *m_ctrl;
 	struct dsi_pll_resource *pll_res;
-	struct dsi_ctrl *ctrl;
+	struct link_clk_freq link_freq;
 
 	if (!display) {
 		DSI_ERR("invalid arguments\n");
@@ -2848,9 +2848,15 @@ int dsi_display_phy_configure(void *priv, bool commit)
 		return -EINVAL;
 	}
 
-	ctrl = m_ctrl->ctrl;
-	pll_res->byteclk_rate = ctrl->clk_freq.byte_clk_rate;
-	pll_res->pclk_rate = ctrl->clk_freq.pix_clk_rate;
+	rc = dsi_clk_get_link_frequencies(&link_freq, display->dsi_clk_handle,
+						display->clk_master_idx);
+	if (rc) {
+		DSI_ERR("Failed to get link frequencies\n");
+		return rc;
+	}
+
+	pll_res->byteclk_rate = link_freq.byte_clk_rate;
+	pll_res->pclk_rate = link_freq.pix_clk_rate;
 
 	rc = dsi_phy_configure(m_ctrl->phy, commit);
 
@@ -4458,6 +4464,26 @@ void dsi_display_update_byte_intf_div(struct dsi_display *display)
 	config->byte_intf_clk_div = 2;
 }
 
+static int dsi_display_set_link_frequencies(struct dsi_display *display)
+{
+	int rc = 0, i = 0;
+
+	dsi_clk_acquire_mngr_lock(display->dsi_clk_handle);
+	display_for_each_ctrl(i, display) {
+		struct dsi_display_ctrl *ctrl = &display->ctrl[i];
+
+		rc = dsi_clk_set_link_frequencies(display->dsi_clk_handle, ctrl->ctrl->clk_freq, i);
+		if (rc) {
+			DSI_ERR("Failed to update link frequencies of ctrl_%d, rc=%d\n", i, rc);
+			dsi_clk_release_mngr_lock(display->dsi_clk_handle);
+			return rc;
+		}
+	}
+	dsi_clk_release_mngr_lock(display->dsi_clk_handle);
+
+	return rc;
+}
+
 static int dsi_display_update_dsi_bitrate(struct dsi_display *display,
 					  u32 bit_clk_rate)
 {
@@ -4540,12 +4566,6 @@ static int dsi_display_update_dsi_bitrate(struct dsi_display *display,
 		ctrl->clk_freq.byte_clk_rate = byte_clk_rate;
 		ctrl->clk_freq.byte_intf_clk_rate = byte_intf_clk_rate;
 		ctrl->clk_freq.pix_clk_rate = pclk_rate;
-		rc = dsi_clk_set_link_frequencies(display->dsi_clk_handle,
-			ctrl->clk_freq, ctrl->cell_index);
-		if (rc) {
-			DSI_ERR("Failed to update link frequencies\n");
-			goto error;
-		}
 
 		ctrl->host_config.bit_clk_rate_hz = bit_clk_rate;
 error:
@@ -4554,6 +4574,12 @@ error:
 		/* TODO: recover ctrl->clk_freq in case of failure */
 		if (rc)
 			return rc;
+	}
+
+	rc = dsi_display_set_link_frequencies(display);
+	if (rc) {
+		DSI_ERR("Failed to set display link frequencies\n");
+		return rc;
 	}
 
 	return 0;
@@ -5206,6 +5232,15 @@ static int dsi_display_set_mode_sub(struct dsi_display *display,
 		if (rc) {
 			DSI_ERR("[%s] failed to update ctrl config, rc=%d\n",
 			       display->name, rc);
+			goto error;
+		}
+	}
+
+	if (!(mode->dsi_mode_flags & (DSI_MODE_FLAG_SEAMLESS | DSI_MODE_FLAG_VRR |
+		       DSI_MODE_FLAG_DYN_CLK))) {
+		rc = dsi_display_set_link_frequencies(display);
+		if (rc) {
+			DSI_ERR("Failed to set display link frequencies\n");
 			goto error;
 		}
 	}
@@ -7408,6 +7443,13 @@ int dsi_display_update_transfer_time(void *display, u32 transfer_time)
 			return rc;
 		}
 	}
+
+	rc = dsi_display_set_link_frequencies(disp);
+	if (rc) {
+		DSI_ERR("Failed to set display link frequencies\n");
+		return rc;
+	}
+
 	atomic_set(&disp->clkrate_change_pending, 1);
 
 	return 0;
