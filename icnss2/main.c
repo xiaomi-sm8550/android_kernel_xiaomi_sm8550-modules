@@ -2468,13 +2468,14 @@ static void icnss_pdr_notifier_cb(int state, char *service_path, void *priv_cb)
 			}
 		}
 		clear_bit(ICNSS_HOST_TRIGGERED_PDR, &priv->state);
-		icnss_driver_event_post(priv, ICNSS_DRIVER_EVENT_PD_SERVICE_DOWN,
-					ICNSS_EVENT_SYNC, event_data);
 
 		if (event_data->crashed)
 			mod_timer(&priv->recovery_timer,
 				  jiffies +
 				  msecs_to_jiffies(ICNSS_RECOVERY_TIMEOUT));
+
+		icnss_driver_event_post(priv, ICNSS_DRIVER_EVENT_PD_SERVICE_DOWN,
+					ICNSS_EVENT_SYNC, event_data);
 		break;
 	case SERVREG_SERVICE_STATE_UP:
 		clear_bit(ICNSS_FW_DOWN, &priv->state);
