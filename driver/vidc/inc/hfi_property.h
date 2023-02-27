@@ -470,6 +470,8 @@ enum hfi_picture_type {
     HFI_PICTURE_CRA = 0x00000010,
     HFI_PICTURE_BLA = 0x00000020,
     HFI_PICTURE_NOSHOW = 0x00000040,
+    HFI_PICTURE_START  = 0x00000080,
+    HFI_PICTURE_END    = 0x00000100,
 };
 #define HFI_PROP_PICTURE_TYPE                                   0x03000162
 
