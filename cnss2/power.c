@@ -74,9 +74,11 @@ static struct cnss_clk_cfg cnss_clk_list[] = {
 #define WLAN_EN_SLEEP			"wlan_en_sleep"
 #define WLAN_VREGS_PROP			"wlan_vregs"
 
+/* unit us */
 #define BOOTSTRAP_DELAY			1000
 #define WLAN_ENABLE_DELAY		1000
-#define WLAN_ENABLE_DELAY_ROME		10000
+/* unit ms */
+#define WLAN_ENABLE_DELAY_ROME		10
 
 #define TCS_CMD_DATA_ADDR_OFFSET	0x4
 #define TCS_OFFSET			0xC8
@@ -1024,7 +1026,7 @@ static int cnss_select_pinctrl_state(struct cnss_plat_data *plat_priv,
 
 			if (plat_priv->device_id == QCA6174_DEVICE_ID ||
 			    plat_priv->device_id == 0)
-				udelay(WLAN_ENABLE_DELAY_ROME);
+				mdelay(WLAN_ENABLE_DELAY_ROME);
 			else
 				udelay(WLAN_ENABLE_DELAY);
 
