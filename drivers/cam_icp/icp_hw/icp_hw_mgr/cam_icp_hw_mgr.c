@@ -7093,7 +7093,8 @@ int cam_icp_hw_mgr_init(struct device_node *of_node, uint64_t *hw_mgr_hdl,
 		(camera_hw_version == CAM_CPAS_TITAN_780_V100) ||
 		(camera_hw_version == CAM_CPAS_TITAN_640_V200) ||
 		(camera_hw_version == CAM_CPAS_TITAN_640_V210) ||
-		(camera_hw_version == CAM_CPAS_TITAN_880_V100)) {
+		(camera_hw_version == CAM_CPAS_TITAN_880_V100) ||
+		(camera_hw_version == CAM_CPAS_TITAN_770_V100)) {
 		if (cam_caps & CPAS_TITAN_IPE0_CAP_BIT)
 			icp_hw_mgr.ipe0_enable = true;
 		if (cam_caps & CPAS_BPS_BIT)
