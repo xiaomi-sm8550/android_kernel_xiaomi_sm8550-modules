@@ -292,6 +292,15 @@ struct cam_isp_context_event_record {
  * @do_internal_recovery:      Enable KMD halt/reset/resume internal recovery
  * @last_sof_jiffies:          Record the jiffies of last sof
  * @last_applied_jiffies:      Record the jiffiest of last applied req
+ * @mswitch_default_apply_delay_max_cnt: Max mode switch delay among all devices connected
+ *                                       on the same link as this ISP context
+ * @mswitch_default_apply_delay_ref_cnt: Ref cnt for this context to decide when to apply
+ *                                       mode switch settings
+ * @handle_mswitch:            Indicates if IFE needs to explicitly handle mode switch
+ *                             on frame skip callback from request manager.
+ *                             This is decided based on the max mode switch delay published
+ *                             by other devices on the link as part of link setup
+ * @mode_switch_en:            Indicates if mode switch is enabled
  *
  */
 struct cam_isp_context {
@@ -352,6 +361,10 @@ struct cam_isp_context {
 	bool                                  do_internal_recovery;
 	uint64_t                              last_sof_jiffies;
 	uint64_t                              last_applied_jiffies;
+	int32_t                               mswitch_default_apply_delay_max_cnt;
+	atomic_t                              mswitch_default_apply_delay_ref_cnt;
+	bool                                  handle_mswitch;
+	bool                                  mode_switch_en;
 };
 
 /**
