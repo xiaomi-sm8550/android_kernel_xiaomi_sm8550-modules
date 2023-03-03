@@ -683,7 +683,7 @@ static void cam_cpastop_work(struct work_struct *work)
 	}
 
 	cam_common_util_thread_switch_delay_detect(
-		"CPAS workq schedule",
+		"cam_cpas_workq", "schedule", cam_cpastop_work,
 		payload->workq_scheduled_ts,
 		CAM_WORKQ_SCHEDULE_TIME_THRESHOLD);
 
