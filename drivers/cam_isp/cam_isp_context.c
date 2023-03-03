@@ -6300,14 +6300,14 @@ static int __cam_isp_ctx_config_dev_in_top_state(
 			if (rc) {
 				if (rc == -EBADR)
 					CAM_INFO(CAM_ISP,
-						"Add req failed: req id=%llu, it has been flushed",
-						req->request_id);
+						"Add req failed: req id=%llu, it has been flushed on link 0x%x ctx %u",
+						req->request_id, ctx->link_hdl, ctx->ctx_id);
 				else
-					CAM_ERR(CAM_ISP, "Add req failed: req id=%llu",
-						req->request_id);
+					CAM_ERR(CAM_ISP,
+						"Add req failed: req id=%llu on link 0x%x ctx %u",
+						req->request_id, ctx->link_hdl, ctx->ctx_id);
 			} else {
-				__cam_isp_ctx_enqueue_request_in_order(
-					ctx, req, true);
+				__cam_isp_ctx_enqueue_request_in_order(ctx, req, true);
 			}
 		} else {
 			CAM_ERR(CAM_ISP, "Unable to add request: req id=%llu", req->request_id);
