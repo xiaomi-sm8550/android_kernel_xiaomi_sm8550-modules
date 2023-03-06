@@ -41,6 +41,8 @@
 #endif
 #include <linux/iommu.h>
 #include "qmi.h"
+#include "cnss_prealloc.h"
+#include "cnss_common.h"
 
 #define MAX_NO_OF_MAC_ADDR		4
 #define QMI_WLFW_MAX_TIMESTAMP_LEN	32

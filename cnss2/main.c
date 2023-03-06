@@ -4867,6 +4867,8 @@ static int cnss_probe(struct platform_device *plat_dev)
 		goto reset_plat_dev;
 	}
 
+	cnss_initialize_prealloc_pool(plat_priv->device_id);
+
 	ret = cnss_get_pld_bus_ops_name(plat_priv);
 	if (ret)
 		cnss_pr_err("Failed to find bus ops name, err = %d\n",
@@ -4970,6 +4972,7 @@ free_res:
 	cnss_put_resources(plat_priv);
 reset_ctx:
 	platform_set_drvdata(plat_dev, NULL);
+	cnss_deinitialize_prealloc_pool();
 reset_plat_dev:
 	cnss_clear_plat_priv(plat_priv);
 out:
@@ -4998,6 +5001,8 @@ static int cnss_remove(struct platform_device *plat_dev)
 
 	if (!IS_ERR_OR_NULL(plat_priv->mbox_chan))
 		mbox_free_channel(plat_priv->mbox_chan);
+
+	cnss_deinitialize_prealloc_pool();
 
 	platform_set_drvdata(plat_dev, NULL);
 	cnss_clear_plat_priv(plat_priv);
