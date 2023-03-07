@@ -6359,7 +6359,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	}
 
 	/* MHI satellite driver only needs to connect when DRV is supported */
-	if (cnss_pci_is_drv_supported(pci_priv))
+	if (cnss_pci_get_drv_supported(pci_priv))
 		cnss_mhi_controller_set_base(pci_priv, bar_start);
 
 	/* BW scale CB needs to be set after registering MHI per requirement */
@@ -6747,6 +6747,9 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	ret = cnss_pci_init_smmu(pci_priv);
 	if (ret)
 		goto unregister_ramdump;
+
+	/* update drv support flag */
+	cnss_pci_update_drv_supported(pci_priv);
 
 	ret = cnss_reg_pci_event(pci_priv);
 	if (ret) {
