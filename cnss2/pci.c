@@ -819,6 +819,13 @@ static int cnss_mhi_device_get_sync_atomic(struct cnss_pci_data *pci_priv,
 					  timeout_us, in_panic);
 }
 
+#ifdef CONFIG_CNSS2_SMMU_DB_SUPPORT
+static int cnss_mhi_host_notify_db_disable_trace(struct cnss_pci_data *pci_priv)
+{
+	return mhi_host_notify_db_disable_trace(pci_priv->mhi_ctrl);
+}
+#endif
+
 static void
 cnss_mhi_controller_set_bw_scale_cb(struct cnss_pci_data *pci_priv,
 				    int (*cb)(struct mhi_controller *mhi_ctrl,
@@ -875,6 +882,13 @@ static int cnss_mhi_device_get_sync_atomic(struct cnss_pci_data *pci_priv,
 	return -EOPNOTSUPP;
 }
 
+#ifdef CONFIG_CNSS2_SMMU_DB_SUPPORT
+static int cnss_mhi_host_notify_db_disable_trace(struct cnss_pci_data *pci_priv)
+{
+	return -EOPNOTSUPP;
+}
+#endif
+
 static void
 cnss_mhi_controller_set_bw_scale_cb(struct cnss_pci_data *pci_priv,
 				    int (*cb)(struct mhi_controller *mhi_ctrl,
@@ -892,6 +906,37 @@ void cnss_mhi_controller_set_base(struct cnss_pci_data *pci_priv,
 {
 }
 #endif /* CONFIG_MHI_BUS_MISC */
+
+#ifdef CONFIG_CNSS2_SMMU_DB_SUPPORT
+#define CNSS_MHI_WAKE_TIMEOUT		500000
+static void cnss_pci_smmu_fault_handler_irq(struct iommu_domain *domain,
+					    void *handler_token)
+{
+	struct cnss_pci_data *pci_priv = handler_token;
+	int ret = 0;
+
+	ret = cnss_mhi_device_get_sync_atomic(pci_priv,
+					      CNSS_MHI_WAKE_TIMEOUT, true);
+	if (ret < 0) {
+		cnss_pr_err("Failed to bring mhi in M0 state, ret %d\n", ret);
+		return;
+	}
+
+	ret = cnss_mhi_host_notify_db_disable_trace(pci_priv);
+	if (ret < 0)
+		cnss_pr_err("Fail to notify wlan fw to stop trace collection, ret %d\n", ret);
+}
+
+void cnss_register_iommu_fault_handler_irq(struct cnss_pci_data *pci_priv)
+{
+	qcom_iommu_set_fault_handler_irq(pci_priv->iommu_domain,
+					 cnss_pci_smmu_fault_handler_irq, pci_priv);
+}
+#else
+void cnss_register_iommu_fault_handler_irq(struct cnss_pci_data *pci_priv)
+{
+}
+#endif
 
 int cnss_pci_check_link_status(struct cnss_pci_data *pci_priv)
 {

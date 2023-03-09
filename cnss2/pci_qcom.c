@@ -579,6 +579,7 @@ int cnss_pci_init_smmu(struct cnss_pci_data *pci_priv)
 		pci_priv->smmu_s1_enable = true;
 		iommu_set_fault_handler(pci_priv->iommu_domain,
 					cnss_pci_smmu_fault_handler, pci_priv);
+		cnss_register_iommu_fault_handler_irq(pci_priv);
 	}
 
 	ret = of_property_read_u32_array(of_node,  "qcom,iommu-dma-addr-pool",

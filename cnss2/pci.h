@@ -9,6 +9,7 @@
 
 #include <linux/cma.h>
 #include <linux/iommu.h>
+#include <linux/qcom-iommu-util.h>
 #include <linux/mhi.h>
 #if IS_ENABLED(CONFIG_MHI_BUS_MISC)
 #include <linux/mhi_misc.h>
@@ -313,4 +314,5 @@ int cnss_pci_get_user_msi_assignment(struct cnss_pci_data *pci_priv,
 				     int *num_vectors,
 				     u32 *user_base_data,
 				     u32 *base_vector);
+void cnss_register_iommu_fault_handler_irq(struct cnss_pci_data *pci_priv);
 #endif /* _CNSS_PCI_H */
