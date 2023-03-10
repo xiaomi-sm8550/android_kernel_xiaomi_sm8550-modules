@@ -97,6 +97,9 @@ struct cam_tfe_cdm_user_data {
  * @packet                     CSL packet from user mode driver
  * @bw_config_version          BW Config version
  * @cdm_userdata               CDM user data
+ * @try_recovery_cnt          Retry count for overflow recovery
+ * @current_mup               Current MUP val
+ * @recovery_req_id           The request id on which overflow recovery happens
  */
 struct cam_tfe_hw_mgr_ctx {
 	struct list_head                list;
@@ -140,6 +143,9 @@ struct cam_tfe_hw_mgr_ctx {
 	struct cam_packet              *packet;
 	uint32_t                        bw_config_version;
 	struct cam_tfe_cdm_user_data    cdm_userdata;
+	uint32_t                        current_mup;
+	uint32_t                        try_recovery_cnt;
+	uint64_t                        recovery_req_id;
 };
 
 /**
