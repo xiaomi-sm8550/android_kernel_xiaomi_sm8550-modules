@@ -587,7 +587,7 @@ static int __ipa_add_hdr(struct ipa_hdr_add *hdr, bool user,
 
 	memcpy(entry->hdr, hdr->hdr, hdr->hdr_len);
 	entry->hdr_len = hdr->hdr_len;
-	strlcpy(entry->name, hdr->name, IPA_RESOURCE_NAME_MAX);
+	strscpy(entry->name, hdr->name, IPA_RESOURCE_NAME_MAX);
 	entry->is_partial = hdr->is_partial;
 	entry->type = hdr->type;
 	entry->is_eth2_ofst_valid = hdr->is_eth2_ofst_valid;
