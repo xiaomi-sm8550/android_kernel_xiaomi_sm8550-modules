@@ -7208,7 +7208,7 @@ static ssize_t _sde_debugfs_hw_fence_features_mask_wr(struct file *file,
 {
 	struct sde_crtc *sde_crtc;
 	u32 bit, enable;
-	char buf[10];
+	char buf[25];
 
 	if (!file || !file->private_data)
 		return -EINVAL;
