@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/device.h>
@@ -3415,6 +3415,122 @@ end:
 	return rc;
 }
 
+static struct cam_cpas_private_soc *cam_cpas_kobj_to_private_soc(struct kobject *kobj)
+{
+	return container_of(kobj, struct cam_cpas_kobj_map, base_kobj)->soc_private;
+}
+
+static ssize_t cam_cpas_get_num_ifes(struct kobject *kobj, struct kobj_attribute *attr,
+	char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "0x%x\n",
+		cam_cpas_kobj_to_private_soc(kobj)->sysfs_info.num_ifes);
+}
+
+static ssize_t cam_cpas_get_num_ife_lites(struct kobject *kobj, struct kobj_attribute *attr,
+	char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "0x%x\n",
+		cam_cpas_kobj_to_private_soc(kobj)->sysfs_info.num_ife_lites);
+}
+
+static ssize_t cam_cpas_get_num_sfes(struct kobject *kobj, struct kobj_attribute *attr,
+	char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "0x%x\n",
+		cam_cpas_kobj_to_private_soc(kobj)->sysfs_info.num_sfes);
+}
+
+static ssize_t cam_cpas_get_num_custom(struct kobject *kobj, struct kobj_attribute *attr,
+	char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "0x%x\n",
+		cam_cpas_kobj_to_private_soc(kobj)->sysfs_info.num_custom);
+}
+
+static struct kobj_attribute cam_num_ifes_attribute = __ATTR(num_ifes, 0444, cam_cpas_get_num_ifes,
+	NULL);
+
+static struct kobj_attribute cam_num_ife_lites_attribute = __ATTR(num_ife_lites, 0444,
+	cam_cpas_get_num_ife_lites, NULL);
+
+static struct kobj_attribute cam_num_sfes_attribute = __ATTR(num_sfes, 0444, cam_cpas_get_num_sfes,
+	NULL);
+
+static struct kobj_attribute cam_num_custom_attribute = __ATTR(num_sbi, 0444,
+	cam_cpas_get_num_custom, NULL);
+
+static void cam_cpas_hw_kobj_release(struct kobject *kobj)
+{
+	CAM_DBG(CAM_CPAS, "Release kobj");
+	kfree(container_of(kobj, struct cam_cpas_kobj_map, base_kobj));
+}
+
+static struct kobj_type kobj_cam_cpas_hw_type = {
+	.release = cam_cpas_hw_kobj_release,
+	.sysfs_ops = &kobj_sysfs_ops
+};
+
+static void cam_cpas_remove_sysfs(struct cam_cpas_private_soc *soc_private)
+{
+	sysfs_remove_file(soc_private->sysfs_info.kobj, &cam_num_ifes_attribute.attr);
+	sysfs_remove_file(soc_private->sysfs_info.kobj, &cam_num_ife_lites_attribute.attr);
+	sysfs_remove_file(soc_private->sysfs_info.kobj, &cam_num_sfes_attribute.attr);
+	sysfs_remove_file(soc_private->sysfs_info.kobj, &cam_num_custom_attribute.attr);
+	kobject_put(soc_private->sysfs_info.kobj);
+}
+
+static int cam_cpas_create_sysfs(struct cam_cpas_private_soc *soc_private)
+{
+	int rc = 0;
+	struct cam_cpas_kobj_map *kobj_camera = NULL;
+
+        kobj_camera = kzalloc(sizeof(*kobj_camera), GFP_KERNEL);
+	if (!kobj_camera) {
+		CAM_ERR(CAM_CPAS, "failed to allocate memory for kobj_camera");
+		return -ENOMEM;
+	}
+
+	kobject_init(&kobj_camera->base_kobj, &kobj_cam_cpas_hw_type);
+	kobj_camera->soc_private = soc_private;
+	soc_private->sysfs_info.kobj = &kobj_camera->base_kobj;
+
+	rc = kobject_add(&kobj_camera->base_kobj, kernel_kobj, "%s", "camera");
+	if (rc) {
+		kobject_put(&kobj_camera->base_kobj);
+		CAM_ERR(CAM_CPAS, "failed to add camera entry in sysfs");
+		goto end;
+	}
+
+	/* sysfs files are created in /sys/kernel/camera */
+	rc = sysfs_create_file(&kobj_camera->base_kobj, &cam_num_ifes_attribute.attr);
+	if (rc) {
+		CAM_ERR(CAM_CPAS, "failed to create num_ifes file, rc: %d", rc);
+		goto end;
+	}
+
+	rc = sysfs_create_file(&kobj_camera->base_kobj, &cam_num_ife_lites_attribute.attr);
+	if (rc) {
+		CAM_ERR(CAM_CPAS, "failed to create num_ife_lites file, rc: %d", rc);
+		goto end;
+	}
+
+	rc = sysfs_create_file(&kobj_camera->base_kobj, &cam_num_sfes_attribute.attr);
+	if (rc) {
+		CAM_ERR(CAM_CPAS, "failed to create num_sfes file. rc: %d", rc);
+		goto end;
+	}
+
+	rc = sysfs_create_file(&kobj_camera->base_kobj, &cam_num_custom_attribute.attr);
+	if (rc)
+		CAM_ERR(CAM_CPAS, "failed to create the num_sbi file, rc: %d", rc);
+
+	return rc;
+end:
+	cam_cpas_remove_sysfs(soc_private);
+	return rc;
+}
+
 int cam_cpas_hw_probe(struct platform_device *pdev,
 	struct cam_hw_intf **hw_intf)
 {
@@ -3495,6 +3611,13 @@ int cam_cpas_hw_probe(struct platform_device *pdev,
 
 	soc_private = (struct cam_cpas_private_soc *)
 		cpas_hw->soc_info.soc_private;
+
+	rc = cam_cpas_create_sysfs(soc_private);
+	if (rc) {
+		CAM_ERR(CAM_CPAS, "Failed to create sysfs entries, rc: %d", rc);
+		goto sysfs_fail;
+	}
+
 	cpas_core->num_clients = soc_private->num_clients;
 	atomic_set(&cpas_core->irq_count, 0);
 	init_waitqueue_head(&cpas_core->irq_count_wq);
@@ -3580,6 +3703,8 @@ client_cleanup:
 	cam_cpas_util_client_cleanup(cpas_hw);
 	cam_cpas_node_tree_cleanup(cpas_core, cpas_hw->soc_info.soc_private);
 deinit_platform_res:
+	cam_cpas_remove_sysfs(soc_private);
+sysfs_fail:
 	cam_cpas_soc_deinit_resources(&cpas_hw->soc_info);
 release_workq:
 	flush_workqueue(cpas_core->work_queue);
@@ -3611,6 +3736,7 @@ int cam_cpas_hw_remove(struct cam_hw_intf *cpas_hw_intf)
 		return -EINVAL;
 	}
 
+	cam_cpas_remove_sysfs(cpas_hw->soc_info.soc_private);
 	cam_cpas_util_axi_cleanup(cpas_core, &cpas_hw->soc_info);
 	cam_cpas_node_tree_cleanup(cpas_core, cpas_hw->soc_info.soc_private);
 	cam_cpas_util_unregister_bus_client(&cpas_core->ahb_bus_client);
