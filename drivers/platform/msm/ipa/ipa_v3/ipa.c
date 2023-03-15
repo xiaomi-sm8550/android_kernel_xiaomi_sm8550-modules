@@ -6298,7 +6298,8 @@ static int ipa3_setup_apps_pipes(void)
 
 	ipa3_ctx->clnt_hdl_data_in = 0;
 
-	if ( ipa3_ctx->ipa_hw_type >= IPA_HW_v5_5 ) {
+	if (ipa3_ctx->ipa_hw_type >= IPA_HW_v5_5 &&
+		!ipa3_ctx->ipa_config_is_apq_dma) {
 		/*
 		 * LAN_COAL IN (IPA->AP)
 		 */
@@ -8591,9 +8592,10 @@ static void ipa3_load_ipa_fw(struct work_struct *work)
 
 	if (ipa3_ctx->platform_type == IPA_PLAT_TYPE_APQ &&
 		ipa3_ctx->ipa3_hw_mode != IPA_HW_MODE_VIRTUAL &&
-		ipa3_ctx->ipa3_hw_mode != IPA_HW_MODE_EMULATION) {
+		ipa3_ctx->ipa3_hw_mode != IPA_HW_MODE_EMULATION &&
+		!ipa3_ctx->ipa_config_is_apq_dma) {
 
-		IPADBG("Loading IPA uC via PIL\n");
+		IPADBG("Loading IPA uC via PIL or MDT\n");
 
 		/* Unvoting will happen when uC loaded event received. */
 		ipa3_proxy_clk_vote(false);
@@ -8618,6 +8620,7 @@ static void ipa3_load_ipa_fw(struct work_struct *work)
 			return;
 		}
 		IPADBG("IPA uC loading succeeded\n");
+		ipa3_proxy_clk_unvote();
 	}
 }
 
