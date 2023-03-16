@@ -635,6 +635,24 @@ int cnss_bus_update_time_sync_period(struct cnss_plat_data *plat_priv,
 	}
 }
 
+int cnss_bus_set_therm_cdev_state(struct cnss_plat_data *plat_priv,
+				  unsigned long thermal_state,
+				  int tcdev_id)
+{
+	if (!plat_priv)
+		return -ENODEV;
+
+	switch (plat_priv->bus_type) {
+	case CNSS_BUS_PCI:
+		return cnss_pci_set_therm_cdev_state(plat_priv->bus_priv,
+						     thermal_state,
+						     tcdev_id);
+	default:
+		cnss_pr_err("Unsupported bus type: %d\n", plat_priv->bus_type);
+		return -EINVAL;
+	}
+}
+
 #if IS_ENABLED(CONFIG_MHI_BUS_MISC)
 void cnss_bus_disable_mhi_satellite_cfg(struct cnss_plat_data *plat_priv)
 {

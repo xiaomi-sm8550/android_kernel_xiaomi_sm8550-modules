@@ -23,7 +23,13 @@
 
 #define PM_OPTIONS_DEFAULT		0
 #define PCI_LINK_DOWN			0
+
+#ifdef CONFIG_CNSS_SUPPORT_DUAL_DEV
+#define LINK_TRAINING_RETRY_MAX_TIMES		2
+#else
 #define LINK_TRAINING_RETRY_MAX_TIMES		3
+#endif
+
 #define LINK_TRAINING_RETRY_DELAY_MS		500
 #define MSI_USERS			4
 
@@ -295,4 +301,7 @@ void cnss_pci_handle_linkdown(struct cnss_pci_data *pci_priv);
 
 int cnss_pci_update_time_sync_period(struct cnss_pci_data *pci_priv,
 				     unsigned int time_sync_period);
+int cnss_pci_set_therm_cdev_state(struct cnss_pci_data *pci_priv,
+				  unsigned long thermal_state,
+				  int tcdev_id);
 #endif /* _CNSS_PCI_H */

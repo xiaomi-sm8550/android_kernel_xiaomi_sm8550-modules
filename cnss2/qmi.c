@@ -597,6 +597,22 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 	if (resp->ol_cpr_cfg_valid)
 		cnss_aop_ol_cpr_cfg_setup(plat_priv, &resp->ol_cpr_cfg);
 
+	/* Disable WLAN PDC in AOP firmware for boards which support on chip PMIC
+	 * so AOP will ignore SW_CTRL changes and do not update regulator votes.
+	 **/
+	for (i = 0; i < plat_priv->on_chip_pmic_devices_count; i++) {
+		if (plat_priv->board_info.board_id ==
+		    plat_priv->on_chip_pmic_board_ids[i]) {
+			cnss_pr_dbg("Disabling WLAN PDC for board_id: %02x\n",
+				    plat_priv->board_info.board_id);
+			ret = cnss_aop_send_msg(plat_priv,
+						"{class: wlan_pdc, ss: rf, res: pdc, enable: 0}");
+			if (ret < 0)
+				cnss_pr_dbg("Failed to Send AOP Msg");
+			break;
+		}
+	}
+
 	cnss_pr_dbg("Target capability: chip_id: 0x%x, chip_family: 0x%x, board_id: 0x%x, soc_id: 0x%x, otp_version: 0x%x\n",
 		    plat_priv->chip_info.chip_id,
 		    plat_priv->chip_info.chip_family,
@@ -620,6 +636,21 @@ out:
 	kfree(req);
 	kfree(resp);
 	return ret;
+}
+
+static char *cnss_bdf_type_to_str(enum cnss_bdf_type bdf_type)
+{
+	switch (bdf_type) {
+	case CNSS_BDF_BIN:
+	case CNSS_BDF_ELF:
+		return "BDF";
+	case CNSS_BDF_REGDB:
+		return "REGDB";
+	case CNSS_BDF_HDS:
+		return "HDS";
+	default:
+		return "UNKNOWN";
+	}
 }
 
 static int cnss_get_bdf_file_name(struct cnss_plat_data *plat_priv,
@@ -841,8 +872,8 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 	unsigned int remaining;
 	int ret = 0;
 
-	cnss_pr_dbg("Sending BDF download message, state: 0x%lx, type: %d\n",
-		    plat_priv->driver_state, bdf_type);
+	cnss_pr_dbg("Sending QMI_WLFW_BDF_DOWNLOAD_REQ_V01 message for bdf_type: %d (%s), state: 0x%lx\n",
+		    bdf_type, cnss_bdf_type_to_str(bdf_type), plat_priv->driver_state);
 
 	req = kzalloc(sizeof(*req), GFP_KERNEL);
 	if (!req)
@@ -867,14 +898,16 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 					      &plat_priv->plat_dev->dev);
 
 	if (ret) {
-		cnss_pr_err("Failed to load BDF: %s, ret: %d\n", filename, ret);
+		cnss_pr_err("Failed to load %s: %s, ret: %d\n",
+			    cnss_bdf_type_to_str(bdf_type), filename, ret);
 		goto err_req_fw;
 	}
 
 	temp = fw_entry->data;
 	remaining = fw_entry->size;
 
-	cnss_pr_dbg("Downloading BDF: %s, size: %u\n", filename, remaining);
+	cnss_pr_dbg("Downloading %s: %s, size: %u\n",
+		    cnss_bdf_type_to_str(bdf_type), filename, remaining);
 
 	while (remaining) {
 		req->valid = 1;
@@ -900,8 +933,8 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 		ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 				   wlfw_bdf_download_resp_msg_v01_ei, resp);
 		if (ret < 0) {
-			cnss_pr_err("Failed to initialize txn for BDF download request, err: %d\n",
-				    ret);
+			cnss_pr_err("Failed to initialize txn for QMI_WLFW_BDF_DOWNLOAD_REQ_V01 request for %s, error: %d\n",
+				    cnss_bdf_type_to_str(bdf_type), ret);
 			goto err_send;
 		}
 
@@ -912,21 +945,22 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 			 wlfw_bdf_download_req_msg_v01_ei, req);
 		if (ret < 0) {
 			qmi_txn_cancel(&txn);
-			cnss_pr_err("Failed to send respond BDF download request, err: %d\n",
-				    ret);
+			cnss_pr_err("Failed to send QMI_WLFW_BDF_DOWNLOAD_REQ_V01 request for %s, error: %d\n",
+				    cnss_bdf_type_to_str(bdf_type), ret);
 			goto err_send;
 		}
 
 		ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
 		if (ret < 0) {
-			cnss_pr_err("Failed to wait for response of BDF download request, err: %d\n",
-				    ret);
+			cnss_pr_err("Timeout while waiting for FW response for QMI_WLFW_BDF_DOWNLOAD_REQ_V01 request for %s, err: %d\n",
+				    cnss_bdf_type_to_str(bdf_type), ret);
 			goto err_send;
 		}
 
 		if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
-			cnss_pr_err("BDF download request failed, result: %d, err: %d\n",
-				    resp->resp.result, resp->resp.error);
+			cnss_pr_err("FW response for QMI_WLFW_BDF_DOWNLOAD_REQ_V01 request for %s failed, result: %d, err: %d\n",
+				    cnss_bdf_type_to_str(bdf_type), resp->resp.result,
+				    resp->resp.error);
 			ret = -resp->resp.result;
 			goto err_send;
 		}
@@ -3211,9 +3245,25 @@ static struct qmi_ops qmi_wlfw_ops = {
 	.del_server = wlfw_del_server,
 };
 
+static int cnss_qmi_add_lookup(struct cnss_plat_data *plat_priv)
+{
+	unsigned int id = WLFW_SERVICE_INS_ID_V01;
+
+	/* In order to support dual wlan card attach case,
+	 * need separate qmi service instance id for each dev
+	 */
+	if (cnss_is_dual_wlan_enabled() && plat_priv->qrtr_node_id != 0 &&
+	    plat_priv->wlfw_service_instance_id != 0)
+		id = plat_priv->wlfw_service_instance_id;
+
+	return qmi_add_lookup(&plat_priv->qmi_wlfw, WLFW_SERVICE_ID_V01,
+			      WLFW_SERVICE_VERS_V01, id);
+}
+
 int cnss_qmi_init(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
+	cnss_get_qrtr_info(plat_priv);
 
 	ret = qmi_handle_init(&plat_priv->qmi_wlfw,
 			      QMI_WLFW_MAX_RECV_BUF_SIZE,
@@ -3224,8 +3274,7 @@ int cnss_qmi_init(struct cnss_plat_data *plat_priv)
 		goto out;
 	}
 
-	ret = qmi_add_lookup(&plat_priv->qmi_wlfw, WLFW_SERVICE_ID_V01,
-			     WLFW_SERVICE_VERS_V01, WLFW_SERVICE_INS_ID_V01);
+	ret = cnss_qmi_add_lookup(plat_priv);
 	if (ret < 0)
 		cnss_pr_err("Failed to add WLFW QMI lookup, err: %d\n", ret);
 
