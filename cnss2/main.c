@@ -3125,8 +3125,9 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 		[CNSS_HOST_WMI_EVENT_LOG_IDX] = "wmi_event_log_idx",
 		[CNSS_HOST_WMI_RX_EVENT_IDX] = "wmi_rx_event_idx"
 	};
-	int i, j;
+	int i;
 	int ret = 0;
+	enum cnss_host_dump_type j;
 
 	if (!dump_enabled()) {
 		cnss_pr_info("Dump collection is not enabled\n");
@@ -3159,7 +3160,7 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 		seg->da = (dma_addr_t)ssr_entry[i].buffer_pointer;
 		seg->size = ssr_entry[i].buffer_size;
 
-		for (j = 0; j < ARRAY_SIZE(wlan_str); j++) {
+		for (j = 0; j < CNSS_HOST_DUMP_TYPE_MAX; j++) {
 			if (strncmp(ssr_entry[i].region_name, wlan_str[j],
 				    strlen(wlan_str[j])) == 0) {
 				meta_info.entry[i].type = j;
