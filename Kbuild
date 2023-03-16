@@ -13,9 +13,6 @@ ifneq (, $(filter y, $(CONFIG_QTI_QUIN_GVM) $(CONFIG_ARCH_KHAJE) $(CONFIG_ARCH_S
 
     obj-$(CONFIG_QSEECOM) += qseecom_dlkm.o
     qseecom_dlkm-objs := qseecom/qseecom.o
-    ifdef CONFIG_COMPAT
-        qseecom_dlkm-objs += qseecom/qseecom_32bit_impl.o
-    endif
 endif
 
 include $(SSG_MODULE_ROOT)/config/sec-kernel_defconfig_smcinvoke.conf
@@ -31,7 +28,9 @@ obj-$(CONFIG_CRYPTO_DEV_QCEDEV) += qce50_dlkm.o
 qce50_dlkm-objs := crypto-qti/qce50.o
 
 obj-$(CONFIG_CRYPTO_DEV_QCEDEV) += qcedev-mod_dlkm.o
-qcedev-mod_dlkm-objs := crypto-qti/qcedev.o crypto-qti/qcedev_smmu.o crypto-qti/compat_qcedev.o
+qcedev-mod_dlkm-objs := crypto-qti/qcedev.o crypto-qti/qcedev_smmu.o
+qcedev-mod_dlkm-$(CONFIG_COMPAT) += crypto-qti/compat_qcedev.o
+
 
 obj-$(CONFIG_CRYPTO_DEV_QCRYPTO) += qcrypto-msm_dlkm.o
 qcrypto-msm_dlkm-objs := crypto-qti/qcrypto.o
