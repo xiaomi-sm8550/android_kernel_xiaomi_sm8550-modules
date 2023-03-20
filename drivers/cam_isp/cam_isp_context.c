@@ -4526,6 +4526,16 @@ static int __cam_isp_ctx_apply_req_in_activated_state(
 		ctx_isp->substate_activated = next_state;
 		ctx_isp->last_applied_req_id = apply->request_id;
 		ctx_isp->last_applied_jiffies = jiffies;
+
+		if (ctx_isp->is_tfe_shdr) {
+			if (ctx_isp->is_shdr_master && req_isp->hw_update_data.mup_en)
+				apply->dual_trigger_status = req_isp->hw_update_data.num_exp;
+			else
+				apply->dual_trigger_status = CAM_REQ_DUAL_TRIGGER_NONE;
+		} else {
+			apply->dual_trigger_status = CAM_REQ_DUAL_TRIGGER_NONE;
+		}
+
 		list_del_init(&req->list);
 		if (atomic_read(&ctx_isp->internal_recovery_set))
 			__cam_isp_ctx_enqueue_request_in_order(ctx, req, false);
@@ -6296,6 +6306,9 @@ static int __cam_isp_ctx_config_dev_in_top_state(
 			add_req.link_hdl = ctx->link_hdl;
 			add_req.dev_hdl  = ctx->dev_hdl;
 			add_req.req_id   = req->request_id;
+
+			if (ctx_isp->is_shdr_master && req_isp->hw_update_data.mup_en)
+				add_req.num_exp = req_isp->hw_update_data.num_exp;
 			rc = ctx->ctx_crm_intf->add_req(&add_req);
 			if (rc) {
 				if (rc == -EBADR)
@@ -6877,6 +6890,8 @@ static int __cam_isp_ctx_acquire_hw_v2(struct cam_context *ctx,
 		(param.op_flags & CAM_IFE_CTX_AEB_EN);
 	ctx_isp->mode_switch_en =
 		(param.op_flags & CAM_IFE_CTX_DYNAMIC_SWITCH_EN);
+	ctx_isp->is_tfe_shdr = (param.op_flags & CAM_IFE_CTX_SHDR_EN);
+	ctx_isp->is_shdr_master = (param.op_flags & CAM_IFE_CTX_SHDR_IS_MASTER);
 
 	if ((ctx_isp->aeb_enabled) && (!isp_ctx_debug.disable_internal_recovery))
 		ctx_isp->do_internal_recovery = true;
@@ -7156,6 +7171,8 @@ static int __cam_isp_ctx_get_dev_info_in_acquired(struct cam_context *ctx,
 	struct cam_req_mgr_device_info *dev_info)
 {
 	int rc = 0;
+	struct cam_isp_context *ctx_isp =
+		(struct cam_isp_context *) ctx->ctx_priv;
 
 	dev_info->dev_hdl = ctx->dev_hdl;
 	strlcpy(dev_info->name, CAM_ISP_DEV_NAME, sizeof(dev_info->name));
@@ -7164,6 +7181,8 @@ static int __cam_isp_ctx_get_dev_info_in_acquired(struct cam_context *ctx,
 	dev_info->m_delay = CAM_MODESWITCH_DELAY_1;
 	dev_info->trigger = CAM_TRIGGER_POINT_SOF;
 	dev_info->trigger_on = true;
+	dev_info->is_shdr = ctx_isp->is_tfe_shdr;
+	dev_info->is_shdr_master = ctx_isp->is_shdr_master;
 
 	return rc;
 }
