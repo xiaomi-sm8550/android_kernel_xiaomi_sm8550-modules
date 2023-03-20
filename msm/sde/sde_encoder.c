@@ -3323,7 +3323,8 @@ static void sde_encoder_wait_for_vsync_event_complete(struct sde_encoder_virt *s
 	if (!ret) {
 		SDE_ERROR("vsync event complete timed out %d\n", ret);
 		SDE_EVT32(ret, SDE_EVTLOG_ERROR);
-		for (i = 0; i < sde_enc->num_phys_encs; i++) {
+		for (i = 0; (i < sde_enc->num_phys_encs &&
+			i < ARRAY_SIZE(sde_enc->phys_encs)) ; i++) {
 			struct sde_encoder_phys *phys = sde_enc->phys_encs[i];
 
 			if (phys && phys->ops.control_vblank_irq)
