@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2022, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/iommu.h>
@@ -7094,4 +7095,17 @@ int msm_vidc_update_input_meta_buffer_index(struct msm_vidc_inst *inst,
 		rc = -EINVAL;
 	}
 	return rc;
+}
+
+int msm_vidc_get_src_clk_scaling_ratio(struct msm_vidc_core *core)
+{
+	int scaling_ratio = 3;
+	if (!core || !core->platform) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+	if (core->platform->data.vpu_ver == VPU_VERSION_IRIS2_1)
+		scaling_ratio = 1;
+
+	return scaling_ratio;
 }

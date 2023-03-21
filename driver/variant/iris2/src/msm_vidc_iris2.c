@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021,, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include "msm_vidc_iris2.h"
 #include "msm_vidc_buffer_iris2.h"
@@ -211,7 +212,7 @@ static int __disable_unprepare_clock_iris2(struct msm_vidc_core *core,
 static int __prepare_enable_clock_iris2(struct msm_vidc_core *core,
 		const char *clk_name)
 {
-	int rc = 0;
+	int rc = 0, src_clk_scale_ratio = 1;
 	struct clock_info *cl;
 	bool found;
 	u64 rate = 0;
@@ -242,7 +243,8 @@ static int __prepare_enable_clock_iris2(struct msm_vidc_core *core,
 			 * attempts to multiply again. So divide scaling ratio before calling
 			 * __set_clk_rate.
 			 */
-			rate = rate / MSM_VIDC_CLOCK_SOURCE_SCALING_RATIO;
+			src_clk_scale_ratio = msm_vidc_get_src_clk_scaling_ratio(core);
+			rate = rate / src_clk_scale_ratio;
 			__set_clk_rate(core, cl, rate);
 		}
 
