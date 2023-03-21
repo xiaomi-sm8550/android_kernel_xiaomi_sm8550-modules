@@ -1693,6 +1693,11 @@ static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 	}
 }
 
+#ifdef CONFIG_DISABLE_CNSS_SRAM_DUMP
+static void cnss_pci_dump_sram(struct cnss_pci_data *pci_priv)
+{
+}
+#else
 static void cnss_pci_dump_sram(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv;
@@ -1727,6 +1732,7 @@ static void cnss_pci_dump_sram(struct cnss_pci_data *pci_priv)
 			cond_resched();
 	}
 }
+#endif
 
 static int cnss_pci_handle_mhi_poweron_timeout(struct cnss_pci_data *pci_priv)
 {
