@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <soc/qcom/of_common.h>
@@ -1070,7 +1070,7 @@ static struct msm_platform_inst_capability instance_cap_data_anorak[] = {
 
 	{LEVEL, ENC, HEVC|HEIC,
 		V4L2_MPEG_VIDEO_HEVC_LEVEL_1,
-		V4L2_MPEG_VIDEO_HEVC_LEVEL_6,
+		V4L2_MPEG_VIDEO_HEVC_LEVEL_6_2,
 		BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_1) |
 		BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_2) |
 		BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_2_1) |
@@ -1081,7 +1081,9 @@ static struct msm_platform_inst_capability instance_cap_data_anorak[] = {
 		BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_5) |
 		BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_5_1) |
 		BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_5_2) |
-		BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_6),
+		BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_6) |
+		BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_6_1) |
+		BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_6_2),
 		V4L2_MPEG_VIDEO_HEVC_LEVEL_5,
 		V4L2_CID_MPEG_VIDEO_HEVC_LEVEL,
 		HFI_PROP_LEVEL,
@@ -2040,6 +2042,12 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_anor
 		msm_vidc_set_ir_period},
 
 	{AU_DELIMITER, ENC, H264|HEVC,
+		{0},
+		{0},
+		NULL,
+		msm_vidc_set_u32},
+
+	{BASELAYER_PRIORITY, ENC, H264,
 		{0},
 		{0},
 		NULL,
