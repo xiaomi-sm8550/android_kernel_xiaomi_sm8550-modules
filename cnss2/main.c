@@ -842,6 +842,11 @@ static int cnss_fw_mem_ready_hdlr(struct cnss_plat_data *plat_priv)
 	if (ret)
 		goto out;
 
+	cnss_bus_load_tme_patch(plat_priv);
+
+	cnss_wlfw_tme_patch_dnld_send_sync(plat_priv,
+					   WLFW_TME_LITE_PATCH_FILE_V01);
+
 	if (plat_priv->hds_enabled)
 		cnss_wlfw_bdf_dnld_send_sync(plat_priv, CNSS_BDF_HDS);
 

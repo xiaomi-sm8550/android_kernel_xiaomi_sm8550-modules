@@ -49,6 +49,7 @@
 #define DEFAULT_PHY_M3_FILE_NAME	"m3.bin"
 #define DEFAULT_AUX_FILE_NAME		"aux_ucode.elf"
 #define DEFAULT_PHY_UCODE_FILE_NAME	"phy_ucode.elf"
+#define TME_PATCH_FILE_NAME		"tmel_patch.elf"
 #define PHY_UCODE_V2_FILE_NAME		"phy_ucode20.elf"
 #define DEFAULT_FW_FILE_NAME		"amss.bin"
 #define FW_V2_FILE_NAME			"amss20.bin"
@@ -4762,6 +4763,78 @@ void cnss_pci_free_qdss_mem(struct cnss_pci_data *pci_priv)
 	plat_priv->qdss_mem_seg_len = 0;
 }
 
+int cnss_pci_load_tme_patch(struct cnss_pci_data *pci_priv)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_fw_mem *tme_lite_mem = &plat_priv->tme_lite_mem;
+	char filename[MAX_FIRMWARE_NAME_LEN];
+	char *tme_patch_filename = NULL;
+	const struct firmware *fw_entry;
+	int ret = 0;
+
+	switch (pci_priv->device_id) {
+	case PEACH_DEVICE_ID:
+		tme_patch_filename = TME_PATCH_FILE_NAME;
+		break;
+	case QCA6174_DEVICE_ID:
+	case QCA6290_DEVICE_ID:
+	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
+	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
+	default:
+		cnss_pr_dbg("TME-L not supported for device ID: (0x%x)\n",
+			    pci_priv->device_id);
+		return 0;
+	}
+
+	if (!tme_lite_mem->va && !tme_lite_mem->size) {
+		cnss_pci_add_fw_prefix_name(pci_priv, filename,
+					    tme_patch_filename);
+
+		ret = firmware_request_nowarn(&fw_entry, filename,
+					      &pci_priv->pci_dev->dev);
+		if (ret) {
+			cnss_pr_err("Failed to load TME-L patch: %s, ret: %d\n",
+				    filename, ret);
+			return ret;
+		}
+
+		tme_lite_mem->va = dma_alloc_coherent(&pci_priv->pci_dev->dev,
+						fw_entry->size, &tme_lite_mem->pa,
+						GFP_KERNEL);
+		if (!tme_lite_mem->va) {
+			cnss_pr_err("Failed to allocate memory for M3, size: 0x%zx\n",
+				    fw_entry->size);
+			release_firmware(fw_entry);
+			return -ENOMEM;
+		}
+
+		memcpy(tme_lite_mem->va, fw_entry->data, fw_entry->size);
+		tme_lite_mem->size = fw_entry->size;
+		release_firmware(fw_entry);
+	}
+
+	return 0;
+}
+
+static void cnss_pci_free_tme_lite_mem(struct cnss_pci_data *pci_priv)
+{
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
+	struct cnss_fw_mem *tme_lite_mem = &plat_priv->tme_lite_mem;
+
+	if (tme_lite_mem->va && tme_lite_mem->size) {
+		cnss_pr_dbg("Freeing memory for TME patch, va: 0x%pK, pa: %pa, size: 0x%zx\n",
+			    tme_lite_mem->va, &tme_lite_mem->pa, tme_lite_mem->size);
+		dma_free_coherent(&pci_priv->pci_dev->dev, tme_lite_mem->size,
+				  tme_lite_mem->va, tme_lite_mem->pa);
+	}
+
+	tme_lite_mem->va = NULL;
+	tme_lite_mem->pa = 0;
+	tme_lite_mem->size = 0;
+}
+
 int cnss_pci_load_m3(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
@@ -7123,6 +7196,7 @@ static void cnss_pci_remove(struct pci_dev *pci_dev)
 	clear_bit(CNSS_PCI_PROBE_DONE, &plat_priv->driver_state);
 	cnss_pci_unregister_driver_hdlr(pci_priv);
 	cnss_pci_free_aux_mem(pci_priv);
+	cnss_pci_free_tme_lite_mem(pci_priv);
 	cnss_pci_free_m3_mem(pci_priv);
 	cnss_pci_free_fw_mem(pci_priv);
 	cnss_pci_free_qdss_mem(pci_priv);
