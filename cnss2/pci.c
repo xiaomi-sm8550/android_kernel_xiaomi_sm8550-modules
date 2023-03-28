@@ -2121,10 +2121,47 @@ out:
 	return ret;
 }
 
+static int cnss_pci_config_msi_addr(struct cnss_pci_data *pci_priv)
+{
+	int ret = 0;
+	struct pci_dev *pci_dev = pci_priv->pci_dev;
+	struct cnss_plat_data *plat_priv;
+
+	if (!pci_dev)
+		return -ENODEV;
+
+	if (!pci_dev->msix_enabled)
+		return ret;
+
+	plat_priv = pci_priv->plat_priv;
+	if (!plat_priv) {
+		cnss_pr_err("plat_priv is NULL\n");
+		return -ENODEV;
+	}
+
+	ret = of_property_read_u32(plat_priv->plat_dev->dev.of_node,
+				   "msix-match-addr",
+				   &pci_priv->msix_addr);
+	cnss_pr_dbg("MSI-X Match address is 0x%X\n",
+		    pci_priv->msix_addr);
+
+	return ret;
+}
+
 static int cnss_pci_config_msi_data(struct cnss_pci_data *pci_priv)
 {
 	struct msi_desc *msi_desc;
+	struct cnss_msi_config *msi_config;
 	struct pci_dev *pci_dev = pci_priv->pci_dev;
+
+	msi_config = pci_priv->msi_config;
+
+	if (pci_dev->msix_enabled) {
+		pci_priv->msi_ep_base_data = msi_config->users[0].base_vector;
+		cnss_pr_dbg("MSI-X base data is %d\n",
+			    pci_priv->msi_ep_base_data);
+		return 0;
+	}
 
 	msi_desc = irq_get_msi_desc(pci_dev->irq);
 	if (!msi_desc) {
@@ -5077,7 +5114,7 @@ static int cnss_pci_enable_msi(struct cnss_pci_data *pci_priv)
 	num_vectors = pci_alloc_irq_vectors(pci_dev,
 					    msi_config->total_vectors,
 					    msi_config->total_vectors,
-					    PCI_IRQ_MSI);
+					    PCI_IRQ_MSI | PCI_IRQ_MSIX);
 	if ((num_vectors != msi_config->total_vectors) &&
 	    !cnss_pci_fallback_one_msi(pci_priv, &num_vectors)) {
 		cnss_pr_err("Failed to get enough MSI vectors (%d), available vectors = %d",
@@ -5085,6 +5122,11 @@ static int cnss_pci_enable_msi(struct cnss_pci_data *pci_priv)
 		if (num_vectors >= 0)
 			ret = -EINVAL;
 		goto reset_msi_config;
+	}
+
+	if (cnss_pci_config_msi_addr(pci_priv)) {
+		ret = -EINVAL;
+		goto free_msi_vector;
 	}
 
 	if (cnss_pci_config_msi_data(pci_priv)) {
@@ -5178,7 +5220,24 @@ void cnss_get_msi_address(struct device *dev, u32 *msi_addr_low,
 			  u32 *msi_addr_high)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
+	struct cnss_pci_data *pci_priv;
 	u16 control;
+
+	if (!pci_dev)
+		return;
+
+	pci_priv = cnss_get_pci_priv(pci_dev);
+	if (!pci_priv)
+		return;
+
+	if (pci_dev->msix_enabled) {
+		*msi_addr_low = pci_priv->msix_addr;
+		*msi_addr_high = 0;
+		if (!print_optimize.msi_addr_chk++)
+			cnss_pr_dbg("Get MSI low addr = 0x%x, high addr = 0x%x\n",
+				    *msi_addr_low, *msi_addr_high);
+		return;
+	}
 
 	pci_read_config_word(pci_dev, pci_dev->msi_cap + PCI_MSI_FLAGS,
 			     &control);

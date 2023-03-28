@@ -160,6 +160,7 @@ struct cnss_pci_data {
 	void __iomem *bar;
 	struct cnss_msi_config *msi_config;
 	u32 msi_ep_base_data;
+	u32 msix_addr;
 	struct mhi_controller *mhi_ctrl;
 	unsigned long mhi_state;
 	u32 remap_window;
