@@ -4231,9 +4231,6 @@ static void _sde_crtc_atomic_begin(struct drm_crtc *crtc,
 	if (sde_kms_is_cp_operation_allowed(sde_kms))
 		sde_cp_crtc_apply_properties(crtc);
 
-	if (!sde_crtc->enabled)
-		sde_cp_crtc_mark_features_dirty(crtc);
-
 	/*
 	 * PP_DONE irq is only used by command mode for now.
 	 * It is better to request pending before FLUSH and START trigger
