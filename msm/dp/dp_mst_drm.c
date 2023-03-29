@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -1204,8 +1204,8 @@ static int dp_mst_connector_atomic_check(struct drm_connector *connector,
 				bridge->num_slots);
 	}
 
-	/* do not attempt to release vcpi slots if crtc state is enable */
-	if (drm_atomic_crtc_needs_modeset(crtc_state) && !crtc_state->enable) {
+	/*attempt to release vcpi slots on a modeset change for crtc state*/
+	if (drm_atomic_crtc_needs_modeset(crtc_state)) {
 		if (WARN_ON(!old_conn_state->best_encoder)) {
 			rc = -EINVAL;
 			goto end;
