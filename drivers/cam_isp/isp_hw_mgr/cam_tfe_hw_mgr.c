@@ -2202,6 +2202,7 @@ static int cam_tfe_mgr_acquire_hw(void *hw_mgr_priv, void *acquire_hw_args)
 	tfe_ctx->cdm_ops = cdm_acquire.ops;
 	atomic_set(&tfe_ctx->cdm_done, 1);
 	tfe_ctx->last_cdm_done_req = 0;
+	tfe_ctx->cdm_id = cdm_acquire.id;
 	tfe_ctx->current_mup = 0;
 	tfe_ctx->try_recovery_cnt = 0;
 	tfe_ctx->recovery_req_id = 0;
@@ -2474,6 +2475,7 @@ static int cam_tfe_mgr_acquire_dev(void *hw_mgr_priv, void *acquire_hw_args)
 	tfe_ctx->cdm_ops = cdm_acquire.ops;
 	atomic_set(&tfe_ctx->cdm_done, 1);
 	tfe_ctx->last_cdm_done_req = 0;
+	tfe_ctx->cdm_id = cdm_acquire.id;
 	tfe_ctx->current_mup = 0;
 
 	isp_resource = (struct cam_isp_resource *)acquire_args->acquire_info;
@@ -4734,7 +4736,7 @@ static int cam_tfe_mgr_prepare_hw_update(void *hw_mgr_priv,
 			i, ctx->base[i].idx);
 
 		change_base_info.base_idx = ctx->base[i].idx;
-		change_base_info.cdm_id = CAM_CDM_MAX;
+		change_base_info.cdm_id = ctx->cdm_id;
 
 		/* Add change base */
 		rc = cam_isp_add_change_base(prepare, &ctx->res_list_tfe_in,
@@ -4834,7 +4836,7 @@ static int cam_tfe_mgr_prepare_hw_update(void *hw_mgr_priv,
 	/* add reg update commands */
 	for (i = 0; i < ctx->num_base; i++) {
 		change_base_info.base_idx = ctx->base[i].idx;
-		change_base_info.cdm_id = CAM_CDM_MAX;
+		change_base_info.cdm_id = ctx->cdm_id;
 		/* Add change base */
 		rc = cam_isp_add_change_base(prepare, &ctx->res_list_tfe_in,
 			&change_base_info, &prepare_hw_data->kmd_cmd_buff_info);
