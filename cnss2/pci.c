@@ -1611,6 +1611,7 @@ EXPORT_SYMBOL(cnss_get_pci_slot);
  */
 static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 {
+	enum mhi_ee_type ee;
 	u32 mem_addr, val, pbl_log_max_size, sbl_log_max_size;
 	u32 pbl_log_sram_start;
 	u32 pbl_stage, sbl_log_start, sbl_log_size;
@@ -1667,6 +1668,12 @@ static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 	cnss_pr_dbg("PBL_WLAN_BOOT_CFG: 0x%08x PBL_BOOTSTRAP_STATUS: 0x%08x\n",
 		    pbl_wlan_boot_cfg, pbl_bootstrap_status);
 
+	ee = mhi_get_exec_env(pci_priv->mhi_ctrl);
+	if (CNSS_MHI_IN_MISSION_MODE(ee)) {
+		cnss_pr_dbg("Avoid Dumping PBL log data in Mission mode\n");
+		return;
+	}
+
 	cnss_pr_dbg("Dumping PBL log data\n");
 	for (i = 0; i < pbl_log_max_size; i += sizeof(val)) {
 		mem_addr = pbl_log_sram_start + i;
@@ -1681,6 +1688,12 @@ static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 	    sbl_log_start > sbl_log_def_end ||
 	    (sbl_log_start + sbl_log_size) > sbl_log_def_end) {
 		cnss_pr_err("Invalid SBL log data\n");
+		return;
+	}
+
+	ee = mhi_get_exec_env(pci_priv->mhi_ctrl);
+	if (CNSS_MHI_IN_MISSION_MODE(ee)) {
+		cnss_pr_dbg("Avoid Dumping SBL log data in Mission mode\n");
 		return;
 	}
 
