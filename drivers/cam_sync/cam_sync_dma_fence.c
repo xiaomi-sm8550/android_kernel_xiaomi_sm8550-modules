@@ -656,9 +656,9 @@ void cam_dma_fence_close(void)
 			/* Signal and put if the dma fence is created from camera */
 			if (!row->ext_dma_fence) {
 				__cam_dma_fence_signal_fence(row->fence, -EADV);
-				dma_fence_put(row->fence);
 			}
 
+			dma_fence_put(row->fence);
 			memset(row, 0, sizeof(struct cam_dma_fence_row));
 			clear_bit(i, g_cam_dma_fence_dev->bitmap);
 		}
