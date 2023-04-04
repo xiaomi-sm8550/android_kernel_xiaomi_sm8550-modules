@@ -3140,10 +3140,6 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 		[CNSS_HOST_WMI_EVENT_LOG] = "wmi_event_log",
 		[CNSS_HOST_WMI_RX_EVENT] = "wmi_rx_event",
 		[CNSS_HOST_HAL_SOC] = "hal_soc",
-		[CNSS_HOST_WMI_HANG_DATA] = "wmi_hang_data",
-		[CNSS_HOST_CE_HANG_EVT] = "ce_hang_evt",
-		[CNSS_HOST_PEER_MAC_ADDR_HANG_DATA] = "peer_mac_addr_hang_data",
-		[CNSS_HOST_CP_VDEV_INFO] = "cp_vdev_info",
 		[CNSS_HOST_GWLAN_LOGGING] = "gwlan_logging",
 		[CNSS_HOST_WMI_DEBUG_LOG_INFO] = "wmi_debug_log_info",
 		[CNSS_HOST_HTC_CREDIT_IDX] = "htc_credit_history_idx",
@@ -3151,7 +3147,10 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 		[CNSS_HOST_WMI_TX_CMP_IDX] = "wmi_tx_cmp_idx",
 		[CNSS_HOST_WMI_COMMAND_LOG_IDX] = "wmi_command_log_idx",
 		[CNSS_HOST_WMI_EVENT_LOG_IDX] = "wmi_event_log_idx",
-		[CNSS_HOST_WMI_RX_EVENT_IDX] = "wmi_rx_event_idx"
+		[CNSS_HOST_WMI_RX_EVENT_IDX] = "wmi_rx_event_idx",
+		[CNSS_HOST_HIF_CE_DESC_HISTORY] = "hif_ce_desc_history",
+		[CNSS_HOST_HIF_CE_DESC_HISTORY_BUFF] = "hif_ce_desc_history_buff",
+		[CNSS_HOST_HANG_EVENT_DATA] = "hang_event_data"
 	};
 	int i;
 	int ret = 0;
