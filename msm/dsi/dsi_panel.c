@@ -1108,13 +1108,13 @@ static int dsi_panel_parse_triggers(struct dsi_host_common_cfg *host,
 		} else if (!strcmp(trig, "trigger_sw_te")) {
 			host->dma_cmd_trigger = DSI_TRIGGER_SW_TE;
 		} else {
-			DSI_ERR("[%s] Unrecognized mdp trigger type (%s)\n",
+			DSI_ERR("[%s] Unrecognized cmd dma trigger type (%s)\n",
 			       name, trig);
 			rc = -EINVAL;
 		}
 
 	} else {
-		DSI_DEBUG("[%s] Falling back to default MDP trigger\n", name);
+		DSI_DEBUG("[%s] Falling back to default cmd dma trigger\n", name);
 		host->dma_cmd_trigger = DSI_TRIGGER_SW;
 	}
 
