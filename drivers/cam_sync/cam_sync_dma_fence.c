@@ -338,10 +338,9 @@ static int __cam_dma_fence_signal_fence(
 	int32_t status)
 {
 	int rc;
-	unsigned long flags;
 	bool fence_signaled = false;
 
-	spin_lock_irqsave(dma_fence->lock, flags);
+	spin_lock_bh(dma_fence->lock);
 	fence_signaled = dma_fence_is_signaled_locked(dma_fence);
 	if (fence_signaled) {
 		CAM_DBG(CAM_DMA_FENCE,
@@ -357,7 +356,7 @@ static int __cam_dma_fence_signal_fence(
 	rc = dma_fence_signal_locked(dma_fence);
 
 end:
-	spin_unlock_irqrestore(dma_fence->lock, flags);
+	spin_unlock_bh(dma_fence->lock);
 	return rc;
 }
 
@@ -399,10 +398,12 @@ int cam_dma_fence_internal_signal(
 	}
 
 	rc = __cam_dma_fence_signal_fence(dma_fence, signal_dma_fence->status);
-	if (rc)
+	if (rc) {
 		CAM_WARN(CAM_DMA_FENCE,
 			"dma fence seqno: %llu fd: %d already signaled rc: %d",
 			dma_fence->seqno, row->fd, rc);
+		rc = 0;
+	}
 
 	row->state = CAM_DMA_FENCE_STATE_SIGNALED;
 	spin_unlock_bh(&g_cam_dma_fence_dev->row_spinlocks[dma_fence_row_idx]);
@@ -454,10 +455,12 @@ int cam_dma_fence_signal_fd(struct cam_dma_fence_signal *signal_dma_fence)
 	}
 
 	rc = __cam_dma_fence_signal_fence(dma_fence, signal_dma_fence->status);
-	if (rc)
+	if (rc) {
 		CAM_WARN(CAM_DMA_FENCE,
 			"dma fence seqno: %llu fd: %d already signaled rc: %d",
 			dma_fence->seqno, row->fd, rc);
+		rc = 0;
+	}
 
 	row->state = CAM_DMA_FENCE_STATE_SIGNALED;
 	spin_unlock_bh(&g_cam_dma_fence_dev->row_spinlocks[idx]);
@@ -572,13 +575,14 @@ static int __cam_dma_fence_release(int32_t dma_row_idx)
 			"Unsignaled fence being released name: %s seqno: %llu fd: %d",
 			row->name, dma_fence->seqno, row->fd);
 
-	/* Ensure dma fence is signaled prior to release */
-	rc = __cam_dma_fence_signal_fence(dma_fence, -ECANCELED);
-	if ((!rc) && (row->state == CAM_DMA_FENCE_STATE_SIGNALED))
-		CAM_WARN(CAM_DMA_FENCE,
-			"Unsignaled fence being released but row was marked signaled name: %s seqno: %llu fd: %d",
-			row->name, dma_fence->seqno, row->fd);
-
+	/* Ensure camera dma fence is signaled prior to release */
+	if (!row->ext_dma_fence) {
+		rc = __cam_dma_fence_signal_fence(dma_fence, -ECANCELED);
+		if ((!rc) && (row->state == CAM_DMA_FENCE_STATE_SIGNALED))
+			CAM_WARN(CAM_DMA_FENCE,
+				"Unsignaled fence being released but row was marked signaled name: %s seqno: %llu fd: %d",
+				row->name, dma_fence->seqno, row->fd);
+	}
 	CAM_DBG(CAM_DMA_FENCE,
 		"Releasing dma fence with fd: %d[%s] row_idx: %u current ref_cnt: %u",
 		row->fd, row->name, dma_row_idx, kref_read(&dma_fence->refcount));

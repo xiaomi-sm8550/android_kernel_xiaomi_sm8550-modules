@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/slab.h>
@@ -31,6 +31,7 @@
 
 #define CAM_TFE_HW_CONFIG_TIMEOUT 60
 #define CAM_TFE_HW_CONFIG_WAIT_MAX_TRY  3
+#define MAX_TFE_INTERNAL_RECOVERY_ATTEMPTS    1
 
 #define TZ_SVC_SMMU_PROGRAM 0x15
 #define TZ_SAFE_SYSCALL_ID  0x3
@@ -1266,7 +1267,7 @@ static int cam_tfe_hw_mgr_acquire_res_tfe_csid_pxl(
 		goto acquire_successful;
 
 	/* Acquire Left if not already acquired */
-	if (in_port->usage_type) {
+	if (in_port->usage_type || in_port->is_shdr_master) {
 		for (i = 0; i < CAM_TFE_CSID_HW_NUM_MAX; i++) {
 			if (!tfe_hw_mgr->csid_devices[i])
 				continue;
@@ -1521,7 +1522,7 @@ static int cam_tfe_hw_mgr_acquire_res_tfe_csid_rdi(
 		}
 
 		/* Acquire if not already acquired */
-		if (tfe_ctx->is_dual) {
+		if (tfe_ctx->is_dual || in_port->is_shdr_master) {
 			for (i = 0; i < CAM_TFE_CSID_HW_NUM_MAX; i++) {
 				if (!tfe_hw_mgr->csid_devices[i])
 					continue;
@@ -2004,6 +2005,13 @@ static int cam_tfe_mgr_acquire_get_unified_structure_v2(
 					CAM_ISP_TFE_FLAG_BAYER_BIN;
 	in_port->qcfa_bin        =  in->feature_flag &
 					CAM_ISP_TFE_FLAG_QCFA_BIN;
+	in_port->shdr_en         =  in->feature_flag &
+					CAM_ISP_TFE_FLAG_SHDR_MASTER_EN;
+	in_port->shdr_en        |=  in->feature_flag &
+					CAM_ISP_TFE_FLAG_SHDR_SLAVE_EN;
+	in_port->is_shdr_master  =  in->feature_flag &
+					CAM_ISP_TFE_FLAG_SHDR_MASTER_EN;
+
 
 	if (in_port->bayer_bin && in_port->qcfa_bin) {
 		CAM_ERR(CAM_ISP,
@@ -2144,6 +2152,8 @@ static int cam_tfe_mgr_acquire_hw(void *hw_mgr_priv, void *acquire_hw_args)
 	struct cam_isp_tfe_acquire_hw_info *acquire_hw_info = NULL;
 	uint32_t                            input_size = 0;
 	bool                                lcr_enable = false;
+	bool                                is_shdr_en = false;
+	bool                                is_shdr_master = false;
 
 	CAM_DBG(CAM_ISP, "Enter...");
 
@@ -2191,6 +2201,9 @@ static int cam_tfe_mgr_acquire_hw(void *hw_mgr_priv, void *acquire_hw_args)
 	tfe_ctx->cdm_ops = cdm_acquire.ops;
 	atomic_set(&tfe_ctx->cdm_done, 1);
 	tfe_ctx->last_cdm_done_req = 0;
+	tfe_ctx->current_mup = 0;
+	tfe_ctx->try_recovery_cnt = 0;
+	tfe_ctx->recovery_req_id = 0;
 
 	acquire_hw_info = (struct cam_isp_tfe_acquire_hw_info *)
 		acquire_args->acquire_info;
@@ -2217,9 +2230,17 @@ static int cam_tfe_mgr_acquire_hw(void *hw_mgr_priv, void *acquire_hw_args)
 
 	/* Check any inport has dual tfe usage  */
 	tfe_ctx->is_dual = false;
-	for (i = 0; i < acquire_hw_info->num_inputs; i++)
+	for (i = 0; i < acquire_hw_info->num_inputs; i++) {
 		if (in_port[i].usage_type)
 			tfe_ctx->is_dual = true;
+		if (in_port[i].shdr_en)
+			is_shdr_en = true;
+		if (in_port[i].is_shdr_master)
+			is_shdr_master = true;
+	}
+
+	if (is_shdr_en && !is_shdr_master)
+		tfe_ctx->is_shdr_slave = true;
 
 	for (i = 0; i < acquire_hw_info->num_inputs; i++) {
 		cam_tfe_hw_mgr_preprocess_port(tfe_ctx, &in_port[i], &num_pix_port_per_in,
@@ -2284,6 +2305,12 @@ static int cam_tfe_mgr_acquire_hw(void *hw_mgr_priv, void *acquire_hw_args)
 	if (g_tfe_hw_mgr.support_consumed_addr)
 		acquire_args->op_flags |=
 			 CAM_IFE_CTX_CONSUME_ADDR_EN;
+
+	if (is_shdr_en) {
+		acquire_args->op_flags |= CAM_IFE_CTX_SHDR_EN;
+		if (is_shdr_master)
+			acquire_args->op_flags |= CAM_IFE_CTX_SHDR_IS_MASTER;
+	}
 
 	cam_tfe_hw_mgr_put_ctx(&tfe_hw_mgr->used_ctx_list, &tfe_ctx);
 
@@ -2446,6 +2473,7 @@ static int cam_tfe_mgr_acquire_dev(void *hw_mgr_priv, void *acquire_hw_args)
 	tfe_ctx->cdm_ops = cdm_acquire.ops;
 	atomic_set(&tfe_ctx->cdm_done, 1);
 	tfe_ctx->last_cdm_done_req = 0;
+	tfe_ctx->current_mup = 0;
 
 	isp_resource = (struct cam_isp_resource *)acquire_args->acquire_info;
 
@@ -2815,8 +2843,27 @@ static int cam_tfe_mgr_config_hw(void *hw_mgr_priv,
 		CAM_ERR(CAM_ISP, "Invalid context parameters");
 		return -EPERM;
 	}
-	if (atomic_read(&ctx->overflow_pending))
+	if (atomic_read(&ctx->overflow_pending)) {
+		CAM_DBG(CAM_ISP,
+			"Ctx[%pK][%d] Overflow pending, cannot apply req %llu",
+			ctx, ctx->ctx_index, cfg->request_id);
 		return -EINVAL;
+	}
+
+
+	/*
+	 * Assuming overflow recovery happens on req N, and we may
+	 * haven't got all the result for req N while apply N + 1,
+	 * so we reset try_recovery_cnt while apply N + 2.
+	 */
+	if (ctx->try_recovery_cnt &&
+		(cfg->request_id > (ctx->recovery_req_id + 1))) {
+		ctx->try_recovery_cnt = 0;
+		ctx->recovery_req_id = 0;
+		CAM_DBG(CAM_ISP,
+			"Ctx[%pK][%d] Reset try_recovery count for req %llu",
+			ctx, ctx->ctx_index, cfg->request_id);
+	}
 
 	hw_update_data = (struct cam_isp_prepare_hw_update_data  *) cfg->priv;
 	hw_update_data->isp_mgr_ctx = ctx;
@@ -2996,6 +3043,8 @@ static int cam_tfe_mgr_config_hw(void *hw_mgr_priv,
 			goto end;
 		} else {
 			rc = 0;
+			if (hw_update_data->mup_en)
+				ctx->current_mup = hw_update_data->mup_val;
 			CAM_DBG(CAM_ISP,
 				"config done Success for req_id=%llu ctx_index %d",
 				cfg->request_id, ctx->ctx_index);
@@ -3218,6 +3267,8 @@ static int cam_tfe_mgr_stop_hw(void *hw_mgr_priv, void *stop_hw_args)
 
 	cam_common_wait_for_completion_timeout(&ctx->config_done_complete,
 		msecs_to_jiffies(5));
+
+	ctx->current_mup = 0;
 
 	if (stop_isp->stop_only)
 		goto end;
@@ -3810,6 +3861,9 @@ static int cam_tfe_mgr_release_hw(void *hw_mgr_priv,
 	}
 	ctx->last_submit_bl_cmd.bl_count = 0;
 	ctx->packet = NULL;
+	ctx->current_mup = 0;
+	ctx->try_recovery_cnt = 0;
+	ctx->recovery_req_id = 0;
 
 	CAM_DBG(CAM_ISP, "Exit...ctx id:%d",
 		ctx->ctx_index);
@@ -3952,6 +4006,39 @@ static int cam_isp_tfe_blob_csid_clock_update(
 					CAM_ERR(CAM_ISP, "Clock Update failed");
 			} else
 				CAM_ERR(CAM_ISP, "NULL hw_intf!");
+		}
+	}
+
+	return rc;
+}
+
+static int cam_isp_blob_tfe_init_config_update(
+	struct cam_hw_prepare_update_args    *prepare,
+	struct cam_isp_init_config           *init_config)
+{
+	int i, rc = 0;
+	struct cam_tfe_hw_mgr_ctx             *ctx = NULL;
+	struct cam_isp_hw_init_config_update   init_cfg_update;
+	struct cam_hw_intf                    *hw_intf;
+
+	ctx = prepare->ctxt_to_hw_map;
+	init_cfg_update.init_config = init_config;
+
+	for (i = 0; i < ctx->num_base; i++) {
+		if (ctx->base[i].hw_type != CAM_ISP_HW_TYPE_TFE)
+			continue;
+
+		hw_intf = g_tfe_hw_mgr.tfe_devices[ctx->base[i].idx]->hw_intf;
+		if (hw_intf && hw_intf->hw_ops.process_cmd) {
+			CAM_DBG(CAM_ISP, "Epoch/init config update for ctx %d",
+				ctx->ctx_index);
+			rc = hw_intf->hw_ops.process_cmd(hw_intf->hw_priv,
+				CAM_ISP_HW_CMD_INIT_CONFIG_UPDATE,
+				&init_cfg_update,
+				sizeof(struct cam_isp_hw_init_config_update));
+			if (rc)
+				CAM_ERR(CAM_ISP, "Epoch/init config failed rc %d ctx %d",
+					rc, ctx->ctx_index);
 		}
 	}
 
@@ -4274,8 +4361,40 @@ static int cam_isp_tfe_packet_generic_blob_handler(void *user_data,
 		prepare_hw_data->num_exp = mup_config->num_expoures;
 	}
 		break;
+	case CAM_ISP_TFE_GENERIC_BLOB_TYPE_INIT_CONFIG: {
+		struct cam_isp_init_config            *init_config;
+		struct cam_isp_prepare_hw_update_data *prepare_hw_data;
+
+		prepare_hw_data = (struct cam_isp_prepare_hw_update_data *)prepare->priv;
+
+		if (prepare_hw_data->packet_opcode_type != CAM_ISP_PACKET_INIT_DEV) {
+			CAM_ERR(CAM_ISP,
+				"Epoch config blob not supported packet type: %u req: %llu Ctx %d",
+				prepare_hw_data->packet_opcode_type,
+				prepare->packet->header.request_id,
+				tfe_mgr_ctx->ctx_index);
+			return -EINVAL;
+		}
+
+		if (blob_size != sizeof(struct cam_isp_init_config)) {
+			CAM_ERR(CAM_ISP,
+				"Invalid init config blob size %u expected %u ctx %d",
+				blob_size, sizeof(struct cam_isp_init_config),
+				tfe_mgr_ctx->ctx_index);
+			return -EINVAL;
+		}
+
+		init_config = (struct cam_isp_init_config *)blob_data;
+		rc = cam_isp_blob_tfe_init_config_update(prepare, init_config);
+		if (rc)
+			CAM_ERR(CAM_ISP,
+				"Init config failed for req: %llu rc: %d ctx %d",
+				prepare->packet->header.request_id, rc, tfe_mgr_ctx->ctx_index);
+	}
+		break;
 	default:
-		CAM_WARN(CAM_ISP, "Invalid blob type %d", blob_type);
+		CAM_WARN(CAM_ISP, "Invalid blob type %d ctx %d", blob_type,
+			tfe_mgr_ctx->ctx_index);
 		break;
 	}
 
@@ -4725,6 +4844,9 @@ static int cam_tfe_mgr_prepare_hw_update(void *hw_mgr_priv,
 			goto end;
 		}
 
+		if (ctx->is_shdr_slave)
+			continue;
+
 		/*Add reg update */
 		rc = cam_isp_add_reg_update(prepare, &ctx->res_list_tfe_in,
 			ctx->base[i].idx, &prepare_hw_data->kmd_cmd_buff_info);
@@ -4862,6 +4984,58 @@ static void cam_tfe_mgr_pf_dump(uint32_t res_id,
 				sizeof(struct cam_isp_hw_get_cmd_update));
 		}
 	}
+}
+
+static int cam_tfe_mgr_prog_default_settings(struct cam_tfe_hw_mgr_ctx *ctx)
+{
+	int rc = 0, i;
+	struct cam_isp_hw_mgr_res       *hw_mgr_res;
+	struct cam_isp_resource_node    *res;
+	struct list_head                *res_list;
+	struct cam_isp_hw_get_cmd_update    rup_args;
+	struct cam_isp_mode_switch_data     mup_config;
+
+
+	res_list = &ctx->res_list_tfe_in;
+
+	list_for_each_entry(hw_mgr_res, &ctx->res_list_tfe_in, list) {
+		if (hw_mgr_res->res_type != CAM_ISP_RESOURCE_TFE_IN)
+			continue;
+
+		for (i = 0; i < CAM_ISP_HW_SPLIT_MAX; i++) {
+			if (!hw_mgr_res->hw_res[i])
+				continue;
+
+			rup_args.res = hw_mgr_res->hw_res[i];
+			rup_args.cmd.cmd_buf_addr = NULL;
+			rup_args.cmd.size = 0;
+			rup_args.cmd_type = CAM_ISP_HW_CMD_GET_REG_UPDATE;
+			rup_args.reg_write = true;
+
+			mup_config.mup = ctx->current_mup;
+
+			rup_args.data = &mup_config;
+
+			res = rup_args.res;
+			rc = res->hw_intf->hw_ops.process_cmd(
+				res->hw_intf->hw_priv,
+				CAM_ISP_HW_CMD_GET_REG_UPDATE, &rup_args,
+				sizeof(struct cam_isp_hw_get_cmd_update));
+
+			if (rc) {
+				CAM_ERR(CAM_ISP, "failed for TFE: %d mup: %d ctx id:%d",
+					res->hw_intf->hw_idx, ctx->current_mup, ctx->ctx_index);
+				return rc;
+			}
+
+			CAM_DBG(CAM_ISP,
+				"Reg update for TFE: %d mup: %d ctx id:%d",
+				res->hw_intf->hw_idx, ctx->current_mup, ctx->ctx_index);
+		}
+
+	}
+
+	return rc;
 }
 
 static void cam_tfe_mgr_dump_pf_data(
@@ -5067,6 +5241,9 @@ static int cam_tfe_mgr_cmd(void *hw_mgr_priv, void *cmd_args)
 		case CAM_ISP_HW_MGR_GET_LAST_CDM_DONE:
 			isp_hw_cmd_args->u.last_cdm_done =
 				ctx->last_cdm_done_req;
+			break;
+		case CAM_ISP_HW_MGR_CMD_PROG_DEFAULT_CFG:
+			rc = cam_tfe_mgr_prog_default_settings(ctx);
 			break;
 		case CAM_ISP_HW_MGR_GET_SOF_TS:
 			rc = cam_tfe_mgr_cmd_get_sof_timestamp(ctx,
@@ -5617,6 +5794,13 @@ static int cam_tfe_hw_mgr_handle_hw_err(
 		return rc;
 	}
 
+	if (ctx)
+		tfe_hw_mgr_ctx = (struct cam_tfe_hw_mgr_ctx *)ctx;
+	else {
+		CAM_ERR(CAM_ISP, "tfe hw mgr ctx NULL");
+		return rc;
+	}
+
 	err_evt_info = (struct cam_isp_hw_error_event_info *)event_info->event_data;
 	if (err_evt_info->err_type == CAM_TFE_IRQ_STATUS_VIOLATION)
 		error_event_data.error_type = CAM_ISP_HW_ERROR_VIOLATION;
@@ -5625,6 +5809,23 @@ static int cam_tfe_hw_mgr_handle_hw_err(
 		error_event_data.error_type = CAM_ISP_HW_ERROR_OVERFLOW;
 	else if (event_info->res_type == CAM_ISP_RESOURCE_TFE_OUT)
 		error_event_data.error_type = CAM_ISP_HW_ERROR_BUSIF_OVERFLOW;
+	else if (err_evt_info->err_type == CAM_TFE_IRQ_STATUS_OUT_OF_SYNC) {
+		error_event_data.error_type = CAM_ISP_HW_ERROR_CSID_SENSOR_FRAME_DROP;
+		if (tfe_hw_mgr_ctx->try_recovery_cnt < MAX_TFE_INTERNAL_RECOVERY_ATTEMPTS) {
+			error_event_data.try_internal_recovery = true;
+			if (!atomic_read(&tfe_hw_mgr_ctx->overflow_pending))
+				tfe_hw_mgr_ctx->try_recovery_cnt++;
+
+			if (!tfe_hw_mgr_ctx->recovery_req_id)
+				tfe_hw_mgr_ctx->recovery_req_id = tfe_hw_mgr_ctx->applied_req_id;
+		}
+
+		CAM_INFO(CAM_ISP,
+			"TFE: %u error: %u current_recovery_cnt: %u  recovery_req: %llu on ctx: %u",
+			event_info->hw_idx, error_event_data.error_type,
+			tfe_hw_mgr_ctx->try_recovery_cnt, tfe_hw_mgr_ctx->recovery_req_id,
+			tfe_hw_mgr_ctx->ctx_index);
+	}
 
 	spin_lock(&g_tfe_hw_mgr.ctx_lock);
 	if (err_evt_info->err_type == CAM_ISP_HW_ERROR_CSID_FATAL) {
@@ -5633,17 +5834,13 @@ static int cam_tfe_hw_mgr_handle_hw_err(
 		return rc;
 	}
 
-	if (ctx) {
-		tfe_hw_mgr_ctx =
-			(struct cam_tfe_hw_mgr_ctx *)ctx;
-		if (event_info->res_type ==
-			CAM_ISP_RESOURCE_TFE_IN &&
-			!tfe_hw_mgr_ctx->is_rdi_only_context &&
-			event_info->res_id !=
-			CAM_ISP_HW_TFE_IN_CAMIF)
-			cam_tfe_hw_mgr_handle_hw_dump_info(
-				tfe_hw_mgr_ctx, event_info);
-	}
+	if (event_info->res_type ==
+		CAM_ISP_RESOURCE_TFE_IN &&
+		!tfe_hw_mgr_ctx->is_rdi_only_context &&
+		event_info->res_id !=
+		CAM_ISP_HW_TFE_IN_CAMIF)
+		cam_tfe_hw_mgr_handle_hw_dump_info(
+			tfe_hw_mgr_ctx, event_info);
 
 	core_idx = event_info->hw_idx;
 
@@ -5662,7 +5859,7 @@ static int cam_tfe_hw_mgr_handle_hw_err(
 		return rc;
 	}
 
-	if (g_tfe_hw_mgr.debug_cfg.enable_recovery) {
+	if (!error_event_data.try_internal_recovery && g_tfe_hw_mgr.debug_cfg.enable_recovery) {
 		/* Trigger for recovery */
 		if (err_evt_info->err_type == CAM_TFE_IRQ_STATUS_VIOLATION)
 			recovery_data.error_type = CAM_ISP_HW_ERROR_VIOLATION;
@@ -5670,9 +5867,13 @@ static int cam_tfe_hw_mgr_handle_hw_err(
 			recovery_data.error_type = CAM_ISP_HW_ERROR_OVERFLOW;
 		cam_tfe_hw_mgr_do_error_recovery(&recovery_data);
 	} else {
-		CAM_DBG(CAM_ISP, "recovery is not enabled");
+		CAM_DBG(CAM_ISP, "recovery enabled: %d, internal_recovery: %d, ctx: %d",
+			error_event_data.try_internal_recovery,
+			g_tfe_hw_mgr.debug_cfg.enable_recovery,
+			tfe_hw_mgr_ctx->ctx_index);
 		rc = 0;
 	}
+
 end:
 	spin_unlock(&g_tfe_hw_mgr.ctx_lock);
 	return rc;
