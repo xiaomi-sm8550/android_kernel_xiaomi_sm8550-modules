@@ -6389,8 +6389,13 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	if (cnss_pci_get_drv_supported(pci_priv))
 		cnss_mhi_controller_set_base(pci_priv, bar_start);
 
+	cnss_get_bwscal_info(plat_priv);
+	cnss_pr_dbg("no_bwscale: %d\n", plat_priv->no_bwscale);
+
 	/* BW scale CB needs to be set after registering MHI per requirement */
-	cnss_mhi_controller_set_bw_scale_cb(pci_priv, cnss_mhi_bw_scale);
+	if (!plat_priv->no_bwscale)
+		cnss_mhi_controller_set_bw_scale_cb(pci_priv,
+						    cnss_mhi_bw_scale);
 
 	ret = cnss_pci_update_fw_name(pci_priv);
 	if (ret)

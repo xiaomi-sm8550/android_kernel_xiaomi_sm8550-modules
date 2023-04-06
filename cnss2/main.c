@@ -274,6 +274,12 @@ cnss_get_pld_bus_ops_name(struct cnss_plat_data *plat_priv)
 }
 #endif
 
+void cnss_get_bwscal_info(struct cnss_plat_data *plat_priv)
+{
+	plat_priv->no_bwscale = of_property_read_bool(plat_priv->dev_node,
+						      "qcom,no-bwscale");
+}
+
 static inline int
 cnss_get_rc_num(struct cnss_plat_data *plat_priv)
 {
