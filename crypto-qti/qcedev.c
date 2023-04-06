@@ -71,17 +71,6 @@ static uint8_t _std_init_vector_sha256_uint8[] = {
 #define QCEDEV_CTX_USE_HW_KEY		0x00000001
 #define QCEDEV_CTX_USE_PIPE_KEY		0x00000002
 
-// Key timer expiry for pipes 1-15 (Status3)
-#define PIPE_KEY_TIMER_EXPIRED_STATUS3_MASK	0x0000FF00
-// Key timer expiry for pipes 16-19 (Status6)
-#define PIPE_KEY_TIMER_EXPIRED_STATUS6_MASK	0x00000300
-// Key pause for pipes 1-15 (Status3)
-#define PIPE_KEY_PAUSE_STATUS3_MASK	0xFF000000
-// Key pause for pipes 16-19 (Status6)
-#define PIPE_KEY_PAUSE_STATUS6_MASK	0x3000000
-
-#define QCEDEV_STATUS1_ERR_INTR_MASK	0x10
-
 static DEFINE_MUTEX(send_cmd_lock);
 static DEFINE_MUTEX(qcedev_sent_bw_req);
 static DEFINE_MUTEX(hash_access_lock);
