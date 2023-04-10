@@ -6762,6 +6762,8 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 		goto reset_ctx;
 	}
 
+	cnss_get_sleep_clk_supported(plat_priv);
+
 	ret = cnss_dev_specific_power_on(plat_priv);
 	if (ret < 0)
 		goto reset_ctx;
