@@ -255,6 +255,10 @@ static int msm_vidc_deinit_platform_variant(struct msm_vidc_core *core, struct d
 
 static int msm_vidc_init_platform_variant(struct msm_vidc_core *core, struct device *dev)
 {
+#if defined(CONFIG_MSM_VIDC_KALAMA)
+	struct msm_platform_core_capability *platform_data;
+	int i, num_platform_caps;
+#endif
 	int rc = -EINVAL;
 
 	if (!core || !dev) {
@@ -278,6 +282,27 @@ static int msm_vidc_init_platform_variant(struct msm_vidc_core *core, struct dev
 		if (rc)
 			d_vpr_e("%s: failed with %d\n", __func__, rc);
 		return rc;
+	}
+	if (of_device_is_compatible(dev->of_node, "qcom,msm-vidc-kalama-iot")) {
+		rc = msm_vidc_init_platform_kalama(core, dev);
+		if (rc) {
+			d_vpr_e("%s: failed with %d\n", __func__, rc);
+			return rc;
+		}
+		if (!core || !core->platform) {
+			d_vpr_e("%s: Invalid params\n", __func__);
+			return -EINVAL;
+		}
+		platform_data = core->platform->data.core_data;
+		num_platform_caps = core->platform->data.core_data_size;
+		for (i = 0; i < num_platform_caps && i < CORE_CAP_MAX; i++) {
+			if (platform_data[i].type == MAX_SESSION_COUNT)
+				platform_data[i].value = 32;
+			else if (platform_data[i].type == MAX_NUM_720P_SESSIONS)
+				platform_data[i].value = 32;
+			else if (platform_data[i].type == MAX_NUM_1080P_SESSIONS)
+				platform_data[i].value = 32;
+		}
 	}
 #endif
 #if defined(CONFIG_MSM_VIDC_ANORAK)
