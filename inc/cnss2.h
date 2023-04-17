@@ -86,6 +86,7 @@ enum cnss_driver_status {
 	CNSS_FW_DOWN,
 	CNSS_HANG_EVENT,
 	CNSS_BUS_EVENT,
+	CNSS_SYS_REBOOT,
 };
 
 enum cnss_host_dump_type {
