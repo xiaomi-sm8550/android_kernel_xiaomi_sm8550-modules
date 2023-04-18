@@ -4231,9 +4231,6 @@ static void _sde_crtc_atomic_begin(struct drm_crtc *crtc,
 	if (sde_kms_is_cp_operation_allowed(sde_kms))
 		sde_cp_crtc_apply_properties(crtc);
 
-	if (!sde_crtc->enabled)
-		sde_cp_crtc_mark_features_dirty(crtc);
-
 	/*
 	 * PP_DONE irq is only used by command mode for now.
 	 * It is better to request pending before FLUSH and START trigger
@@ -6665,6 +6662,16 @@ static void sde_crtc_install_properties(struct drm_crtc *crtc,
 	vfree(info);
 }
 
+static bool _is_crtc_intf_mode_wb(struct drm_crtc *crtc)
+{
+	enum sde_intf_mode intf_mode = sde_crtc_get_intf_mode(crtc, crtc->state);
+
+	if ((intf_mode != INTF_MODE_WB_BLOCK) && (intf_mode != INTF_MODE_WB_LINE))
+		return false;
+
+	return true;
+}
+
 static int _sde_crtc_get_output_fence(struct drm_crtc *crtc,
 	const struct drm_crtc_state *state, uint64_t *val)
 {
@@ -7208,7 +7215,7 @@ static ssize_t _sde_debugfs_hw_fence_features_mask_wr(struct file *file,
 {
 	struct sde_crtc *sde_crtc;
 	u32 bit, enable;
-	char buf[10];
+	char buf[25];
 
 	if (!file || !file->private_data)
 		return -EINVAL;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -1103,11 +1103,6 @@ static int dsi_ctrl_update_link_freqs(struct dsi_ctrl *dsi_ctrl,
 	dsi_ctrl->clk_freq.byte_intf_clk_rate = byte_intf_clk_rate;
 	dsi_ctrl->clk_freq.pix_clk_rate = pclk_rate;
 	dsi_ctrl->clk_freq.esc_clk_rate = config->esc_clk_rate_hz;
-
-	rc = dsi_clk_set_link_frequencies(clk_handle, dsi_ctrl->clk_freq,
-					dsi_ctrl->cell_index);
-	if (rc)
-		DSI_CTRL_ERR(dsi_ctrl, "Failed to update link frequencies\n");
 
 	return rc;
 }
