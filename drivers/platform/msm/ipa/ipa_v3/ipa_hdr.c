@@ -587,7 +587,7 @@ static int __ipa_add_hdr(struct ipa_hdr_add *hdr, bool user,
 
 	memcpy(entry->hdr, hdr->hdr, hdr->hdr_len);
 	entry->hdr_len = hdr->hdr_len;
-	strlcpy(entry->name, hdr->name, IPA_RESOURCE_NAME_MAX);
+	strscpy(entry->name, hdr->name, IPA_RESOURCE_NAME_MAX);
 	entry->is_partial = hdr->is_partial;
 	entry->type = hdr->type;
 	entry->is_eth2_ofst_valid = hdr->is_eth2_ofst_valid;
@@ -651,26 +651,35 @@ static int __ipa_add_hdr(struct ipa_hdr_add *hdr, bool user,
 		while (htbl->end + ipa_hdr_bin_sz[bin] > mem_size) {
 			if (entry->is_lcl) {
 				/* if header does not fit to SRAM table, place it in DDR */
+				IPADBG_LOW("SRAM header table was full allocting DDR header table! Requested: %d Left: %d name %s, end %d\n",
+						ipa_hdr_bin_sz[bin], mem_size - htbl->end, entry->name, htbl->end);
 				htbl = &ipa3_ctx->hdr_tbl[HDR_TBL_SYS];
 				mem_size = IPA_MEM_PART(apps_hdr_size_ddr);
 				entry->is_lcl = false;
-			} else {
-				/* check if DDR free list */
-				if (list_empty(&htbl->head_free_offset_list[bin])) {
-					IPAERR("No space in DDR header buffer! Requested: %d Left: %d name %s, end %d\n",
+			}
+
+			if (!entry->is_lcl && (htbl->end + ipa_hdr_bin_sz[bin] > mem_size)) {
+				IPAERR("No space in DDR header buffer! Requested: %d Left: %d name %s, end %d\n",
+					ipa_hdr_bin_sz[bin], mem_size - htbl->end, entry->name, htbl->end);
+				goto bad_hdr_len;
+			}
+
+			/* check if DDR free list */
+			if (list_empty(&htbl->head_free_offset_list[bin])) {
+				IPADBG_LOW("No free offset in DDR allocating new offset Requested: %d Left: %d name %s, end %d\n",
 						ipa_hdr_bin_sz[bin], mem_size - htbl->end, entry->name, htbl->end);
-					goto bad_hdr_len;
-				} else {
-					/* get the first free slot */
-					offset = list_first_entry(&htbl->head_free_offset_list[bin],
+				goto create_entry;
+			} else {
+				/* get the first free slot */
+				offset = list_first_entry(&htbl->head_free_offset_list[bin],
 						struct ipa_hdr_offset_entry, link);
-					list_move(&offset->link, &htbl->head_offset_list[bin]);
-					entry->offset_entry = offset;
-					offset->ipacm_installed = user;
-					goto free_list;
-				}
+				list_move(&offset->link, &htbl->head_offset_list[bin]);
+				entry->offset_entry = offset;
+				offset->ipacm_installed = user;
+				goto free_list;
 			}
 		}
+create_entry:
 		offset = kmem_cache_zalloc(ipa3_ctx->hdr_offset_cache,
 					   GFP_KERNEL);
 		if (!offset) {
