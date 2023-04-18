@@ -705,7 +705,6 @@ static void adreno_of_get_initial_pwrlevels(struct kgsl_pwrctrl *pwr,
 	if (level < 0 || level >= pwr->num_pwrlevels || level < pwr->default_pwrlevel)
 		level = pwr->num_pwrlevels - 1;
 
-	pwr->min_render_pwrlevel = level;
 	pwr->min_pwrlevel = level;
 }
 
@@ -1245,6 +1244,13 @@ int adreno_device_probe(struct platform_device *pdev,
 
 	if (ADRENO_FEATURE(adreno_dev, ADRENO_IOCOHERENT))
 		kgsl_mmu_set_feature(device, KGSL_MMU_IO_COHERENT);
+
+	/*
+	 * Support VBOs on hardware where HLOS has access to PRR registers
+	 * configuration.
+	 */
+	if (!adreno_is_a650(adreno_dev))
+		kgsl_mmu_set_feature(device, KGSL_MMU_SUPPORT_VBO);
 
 	device->pwrctrl.bus_width = adreno_dev->gpucore->bus_width;
 
