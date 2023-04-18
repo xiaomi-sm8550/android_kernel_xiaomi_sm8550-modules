@@ -20,6 +20,7 @@
 #define QCA6390_DEVICE_ID		0x1101
 #define QCA6490_VENDOR_ID		0x17CB
 #define QCA6490_DEVICE_ID		0x1103
+#define QCN7605_VENDOR_ID               0x17CB
 #define QCN7605_DEVICE_ID               0x1102
 #define KIWI_VENDOR_ID			0x17CB
 #define KIWI_DEVICE_ID			0x1107
@@ -80,4 +81,9 @@ void cnss_bus_disable_mhi_satellite_cfg(struct cnss_plat_data *plat_priv);
 int cnss_bus_set_therm_cdev_state(struct cnss_plat_data *plat_priv,
 				  unsigned long thermal_state,
 				  int tcdev_id);
+int cnss_bus_get_msi_assignment(struct cnss_plat_data *plat_priv,
+				char *msi_name,
+				int *num_vectors,
+				u32 *user_base_data,
+				u32 *base_vector);
 #endif /* _CNSS_BUS_H */

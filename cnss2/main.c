@@ -595,6 +595,9 @@ int cnss_wlan_enable(struct device *dev,
 	if (mode == CNSS_WALTEST || mode == CNSS_CCPM)
 		goto skip_cfg;
 
+	if (plat_priv->device_id == QCN7605_DEVICE_ID)
+		config->send_msi_ce = true;
+
 	ret = cnss_wlfw_wlan_cfg_send_sync(plat_priv, config, host_version);
 	if (ret)
 		goto out;
@@ -798,12 +801,18 @@ static int cnss_fw_mem_ready_hdlr(struct cnss_plat_data *plat_priv)
 
 	cnss_wlfw_bdf_dnld_send_sync(plat_priv, CNSS_BDF_REGDB);
 
+	if (plat_priv->device_id == QCN7605_DEVICE_ID)
+		plat_priv->ctrl_params.bdf_type = CNSS_BDF_BIN;
+
 	cnss_wlfw_ini_file_send_sync(plat_priv, WLFW_CONN_ROAM_INI_V01);
 
 	ret = cnss_wlfw_bdf_dnld_send_sync(plat_priv,
 					   plat_priv->ctrl_params.bdf_type);
 	if (ret)
 		goto out;
+
+	if (plat_priv->device_id == QCN7605_DEVICE_ID)
+		return 0;
 
 	ret = cnss_bus_load_m3(plat_priv);
 	if (ret)
@@ -1371,8 +1380,6 @@ EXPORT_SYMBOL(cnss_idle_restart);
 int cnss_idle_shutdown(struct device *dev)
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
-	unsigned int timeout;
-	int ret;
 
 	if (!plat_priv) {
 		cnss_pr_err("plat_priv is NULL\n");
@@ -1386,21 +1393,12 @@ int cnss_idle_shutdown(struct device *dev)
 
 	cnss_pr_dbg("Doing idle shutdown\n");
 
-	if (!test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state) &&
-	    !test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state))
-		goto skip_wait;
-
-	reinit_completion(&plat_priv->recovery_complete);
-	timeout = cnss_get_timeout(plat_priv, CNSS_TIMEOUT_RECOVERY);
-	ret = wait_for_completion_timeout(&plat_priv->recovery_complete,
-					  msecs_to_jiffies(timeout));
-	if (!ret) {
-		cnss_pr_err("Timeout (%ums) waiting for recovery to complete\n",
-			    timeout);
-		CNSS_ASSERT(0);
+	if (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state) ||
+	    test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state)) {
+		cnss_pr_dbg("Recovery in progress. Ignore IDLE Shutdown\n");
+		return -EBUSY;
 	}
 
-skip_wait:
 	return cnss_driver_event_post(plat_priv,
 				      CNSS_DRIVER_EVENT_IDLE_SHUTDOWN,
 				      CNSS_EVENT_SYNC_UNINTERRUPTIBLE, NULL);
@@ -2346,8 +2344,14 @@ static int cnss_cold_boot_cal_done_hdlr(struct cnss_plat_data *plat_priv,
 	cnss_wlfw_wlan_mode_send_sync(plat_priv, CNSS_OFF);
 	cnss_bus_free_qdss_mem(plat_priv);
 	cnss_release_antenna_sharing(plat_priv);
+
+	if (plat_priv->device_id == QCN7605_DEVICE_ID)
+		goto skip_shutdown;
+
 	cnss_bus_dev_shutdown(plat_priv);
 	msleep(POWER_RESET_MIN_DELAY_MS);
+
+skip_shutdown:
 	complete(&plat_priv->cal_complete);
 	clear_bit(CNSS_IN_COLD_BOOT_CAL, &plat_priv->driver_state);
 	set_bit(CNSS_COLD_BOOT_CAL_DONE, &plat_priv->driver_state);
@@ -3045,8 +3049,11 @@ int cnss_do_elf_ramdump(struct cnss_plat_data *plat_priv)
 		}
 
 		seg = kcalloc(1, sizeof(*seg), GFP_KERNEL);
-		if (!seg)
+		if (!seg) {
+			cnss_pr_err("%s: Failed to allocate mem for seg %d\n",
+				    __func__, i);
 			continue;
+		}
 
 		if (meta_info.entry[dump_seg->type].entry_start == 0) {
 			meta_info.entry[dump_seg->type].type = dump_seg->type;
@@ -3061,8 +3068,11 @@ int cnss_do_elf_ramdump(struct cnss_plat_data *plat_priv)
 	}
 
 	seg = kcalloc(1, sizeof(*seg), GFP_KERNEL);
-	if (!seg)
-		goto do_elf_dump;
+	if (!seg) {
+		cnss_pr_err("%s: Failed to allocate mem for elf ramdump seg\n",
+			    __func__);
+		goto skip_elf_dump;
+	}
 
 	meta_info.magic = CNSS_RAMDUMP_MAGIC;
 	meta_info.version = CNSS_RAMDUMP_VERSION;
@@ -3072,9 +3082,9 @@ int cnss_do_elf_ramdump(struct cnss_plat_data *plat_priv)
 	seg->size = sizeof(meta_info);
 	list_add(&seg->node, &head);
 
-do_elf_dump:
 	ret = qcom_elf_dump(&head, info_v2->ramdump_dev, ELF_CLASS);
 
+skip_elf_dump:
 	while (!list_empty(&head)) {
 		seg = list_first_entry(&head, struct qcom_dump_segment, node);
 		list_del(&seg->node);
@@ -3115,8 +3125,9 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 		[CNSS_HOST_WMI_EVENT_LOG_IDX] = "wmi_event_log_idx",
 		[CNSS_HOST_WMI_RX_EVENT_IDX] = "wmi_rx_event_idx"
 	};
-	int i, j;
+	int i;
 	int ret = 0;
+	enum cnss_host_dump_type j;
 
 	if (!dump_enabled()) {
 		cnss_pr_info("Dump collection is not enabled\n");
@@ -3149,7 +3160,7 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 		seg->da = (dma_addr_t)ssr_entry[i].buffer_pointer;
 		seg->size = ssr_entry[i].buffer_size;
 
-		for (j = 0; j < ARRAY_SIZE(wlan_str); j++) {
+		for (j = 0; j < CNSS_HOST_DUMP_TYPE_MAX; j++) {
 			if (strncmp(ssr_entry[i].region_name, wlan_str[j],
 				    strlen(wlan_str[j])) == 0) {
 				meta_info.entry[i].type = j;
@@ -3162,6 +3173,13 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 	}
 
 	seg = kcalloc(1, sizeof(*seg), GFP_KERNEL);
+
+	if (!seg) {
+		cnss_pr_err("%s: Failed to allocate mem for host dump seg\n",
+			    __func__);
+		goto skip_host_dump;
+	}
+
 	meta_info.magic = CNSS_RAMDUMP_MAGIC;
 	meta_info.version = CNSS_RAMDUMP_VERSION;
 	meta_info.chipset = plat_priv->device_id;
@@ -3170,7 +3188,10 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 	seg->da = (dma_addr_t)&meta_info;
 	seg->size = sizeof(meta_info);
 	list_add(&seg->node, &head);
+
 	ret = qcom_elf_dump(&head, new_device, ELF_CLASS);
+
+skip_host_dump:
 	while (!list_empty(&head)) {
 		seg = list_first_entry(&head, struct qcom_dump_segment, node);
 		list_del(&seg->node);
@@ -3384,6 +3405,7 @@ int cnss_register_ramdump(struct cnss_plat_data *plat_priv)
 		break;
 	case QCA6290_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
+	case QCN7605_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
 	case MANGO_DEVICE_ID:
@@ -3406,6 +3428,7 @@ void cnss_unregister_ramdump(struct cnss_plat_data *plat_priv)
 		break;
 	case QCA6290_DEVICE_ID:
 	case QCA6390_DEVICE_ID:
+	case QCN7605_DEVICE_ID:
 	case QCA6490_DEVICE_ID:
 	case KIWI_DEVICE_ID:
 	case MANGO_DEVICE_ID:

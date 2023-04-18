@@ -304,4 +304,9 @@ int cnss_pci_update_time_sync_period(struct cnss_pci_data *pci_priv,
 int cnss_pci_set_therm_cdev_state(struct cnss_pci_data *pci_priv,
 				  unsigned long thermal_state,
 				  int tcdev_id);
+int cnss_pci_get_user_msi_assignment(struct cnss_pci_data *pci_priv,
+				     char *user_name,
+				     int *num_vectors,
+				     u32 *user_base_data,
+				     u32 *base_vector);
 #endif /* _CNSS_PCI_H */

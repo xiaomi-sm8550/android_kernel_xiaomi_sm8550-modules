@@ -486,8 +486,12 @@ static int icnss_send_smp2p(struct icnss_priv *priv,
 		return ret;
 	}
 
-	if (test_bit(ICNSS_FW_DOWN, &priv->state))
-		return -ENODEV;
+	if (test_bit(ICNSS_FW_DOWN, &priv->state) ||
+	    !test_bit(ICNSS_FW_READY, &priv->state)) {
+		icnss_pr_smp2p("FW down, ignoring sending SMP2P state: 0x%lx\n",
+				  priv->state);
+		return -EINVAL;
+	}
 
 	value |= priv->smp2p_info[smp2p_entry].seq++;
 	value <<= ICNSS_SMEM_SEQ_NO_POS;
@@ -983,6 +987,13 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 			goto device_info_failure;
 	}
 
+	if (priv->device_id == WCN6450_DEVICE_ID) {
+		ret = icnss_wlfw_qdss_dnld_send_sync(priv);
+		if (ret < 0)
+			icnss_pr_info("Failed to download qdss config file for WCN6450, ret = %d\n",
+				      ret);
+	}
+
 	if (priv->device_id == WCN6750_DEVICE_ID ||
 	    priv->device_id == WCN6450_DEVICE_ID) {
 		if (!priv->fw_soc_wake_ack_irq)
@@ -1211,8 +1222,12 @@ static int icnss_driver_event_fw_init_done(struct icnss_priv *priv, void *data)
 
 	icnss_pr_info("WLAN FW Initialization done: 0x%lx\n", priv->state);
 
-	if (icnss_wlfw_qdss_dnld_send_sync(priv))
-		icnss_pr_info("Failed to download qdss configuration file");
+	if (priv->device_id == WCN6750_DEVICE_ID) {
+		ret = icnss_wlfw_qdss_dnld_send_sync(priv);
+		if (ret < 0)
+			icnss_pr_info("Failed to download qdss config file for WCN6750, ret = %d\n",
+				      ret);
+	}
 
 	if (test_bit(ICNSS_COLD_BOOT_CAL, &priv->state)) {
 		mod_timer(&priv->recovery_timer,
@@ -3292,6 +3307,13 @@ int icnss_force_wake_request(struct device *dev)
 		return -EINVAL;
 	}
 
+	if (test_bit(ICNSS_FW_DOWN, &priv->state) ||
+	    !test_bit(ICNSS_FW_READY, &priv->state)) {
+		icnss_pr_soc_wake("FW down, ignoring SOC Wake request state: 0x%lx\n",
+				  priv->state);
+		return -EINVAL;
+	}
+
 	if (atomic_inc_not_zero(&priv->soc_wake_ref_count)) {
 		icnss_pr_soc_wake("SOC already awake, Ref count: %d",
 				  atomic_read(&priv->soc_wake_ref_count));
@@ -3318,6 +3340,13 @@ int icnss_force_wake_release(struct device *dev)
 
 	if (!priv) {
 		icnss_pr_err("Platform driver not initialized\n");
+		return -EINVAL;
+	}
+
+	if (test_bit(ICNSS_FW_DOWN, &priv->state) ||
+	    !test_bit(ICNSS_FW_READY, &priv->state)) {
+		icnss_pr_soc_wake("FW down, ignoring SOC Wake release state: 0x%lx\n",
+				  priv->state);
 		return -EINVAL;
 	}
 
