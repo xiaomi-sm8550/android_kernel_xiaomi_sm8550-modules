@@ -673,7 +673,7 @@ void msm_cvp_comm_session_clean(struct msm_cvp_inst *inst)
 		dprintk(CVP_ERR, "%s invalid params\n", __func__);
 		return;
 	}
-	if (!inst->session) {
+	if (!inst->session || inst->session == (void *)0xdeadbeef) {
 		dprintk(CVP_SESS, "%s: inst %pK session already cleaned\n",
 			__func__, inst);
 		return;
@@ -1394,7 +1394,7 @@ int msm_cvp_comm_kill_session(struct msm_cvp_inst *inst)
 	if (!inst || !inst->core || !inst->core->device) {
 		dprintk(CVP_ERR, "%s: invalid input parameters\n", __func__);
 		return -EINVAL;
-	} else if (!inst->session) {
+	} else if (!inst->session || inst->session == (void *)0xdeadbeef) {
 		dprintk(CVP_ERR, "%s: no session to kill for inst %pK\n",
 			__func__, inst);
 		return 0;

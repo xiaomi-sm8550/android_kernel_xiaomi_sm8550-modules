@@ -325,7 +325,7 @@ int cvp_create_pkt_cmd_session_release_buffers(
 {
 	struct cvp_session_release_buffers_packet *pkt;
 
-	if (!cmd || !session)
+	if (!cmd || !session || session == (void *)0xdeadbeef)
 		return -EINVAL;
 
 	pkt = (struct cvp_session_release_buffers_packet *)cmd;
