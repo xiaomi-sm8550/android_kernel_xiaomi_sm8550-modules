@@ -4472,9 +4472,12 @@ static int dsi_display_set_link_frequencies(struct dsi_display *display)
 	display_for_each_ctrl(i, display) {
 		struct dsi_display_ctrl *ctrl = &display->ctrl[i];
 
-		rc = dsi_clk_set_link_frequencies(display->dsi_clk_handle, ctrl->ctrl->clk_freq, i);
+		rc = dsi_clk_set_link_frequencies(display->dsi_clk_handle,
+							ctrl->ctrl->clk_freq,
+							ctrl->ctrl->cell_index);
 		if (rc) {
-			DSI_ERR("Failed to update link frequencies of ctrl_%d, rc=%d\n", i, rc);
+			DSI_ERR("Failed to update link frequencies of ctrl_%d, rc=%d\n",
+							ctrl->ctrl->cell_index, rc);
 			dsi_clk_release_mngr_lock(display->dsi_clk_handle);
 			return rc;
 		}
