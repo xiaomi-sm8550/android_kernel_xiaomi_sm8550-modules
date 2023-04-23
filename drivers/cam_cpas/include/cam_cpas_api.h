@@ -538,6 +538,21 @@ struct cam_axi_vote {
 };
 
 /**
+ * cam_cpas_prepare_subpart_info()
+ *
+ * @brief: API to update the number of ifes, ife_lites, sfes and custom
+ *         in the struct cam_cpas_private_soc.
+ *
+ * @subpart_type  : Subpart type
+ * @subpart_count : Number of each subpart
+ *
+ * @returns 0 on success & -EINVAL when @subpart_type is invalid.
+ *
+ */
+int cam_cpas_prepare_subpart_info(
+	uint32_t subpart_type, uint32_t subpart_count);
+
+/**
  * cam_cpas_register_client()
  *
  * @brief: API to register cpas client

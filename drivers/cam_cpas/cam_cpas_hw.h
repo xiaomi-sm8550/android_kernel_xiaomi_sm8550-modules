@@ -130,11 +130,11 @@ struct cam_cpas_axi_bw_info {
  * struct cam_cpas_kobj_map: wrapper structure for base kobject
  *                               and cam cpas private soc info
  * @base_kobj: kernel object for camera sysfs
- * @soc_private: pointer to cam_cpas_private_soc structure
+ * @cpas_hw: pointer to cam_hw_info structure
  */
 struct cam_cpas_kobj_map {
 	struct kobject base_kobj;
-	struct cam_cpas_private_soc *soc_private;
+	struct cam_hw_info *cpas_hw;
 };
 
 /**
