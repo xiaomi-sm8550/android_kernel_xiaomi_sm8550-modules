@@ -4504,8 +4504,8 @@ int cnss_pci_qmi_send_put(struct cnss_pci_data *pci_priv)
 	return ret;
 }
 
-int cnss_send_buffer_to_afcmem(struct device *dev, char *afcdb, uint32_t len,
-			       uint8_t slotid)
+int cnss_send_buffer_to_afcmem(struct device *dev, const uint8_t *afcdb,
+			       uint32_t len, uint8_t slotid)
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
 	struct cnss_fw_mem *fw_mem;
