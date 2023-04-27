@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -10,6 +11,7 @@
 #include <linux/iommu.h>
 #include <linux/timer.h>
 #include <linux/kernel.h>
+#include <dt-bindings/msm-camera.h>
 
 #include <media/cam_req_mgr.h>
 
@@ -116,6 +118,11 @@ static int cam_custom_component_bind(struct device *dev,
 
 	g_custom_dev.sd.internal_ops = &cam_custom_subdev_internal_ops;
 	g_custom_dev.sd.close_seq_prior = CAM_SD_CLOSE_HIGH_PRIORITY;
+
+	if (!cam_cpas_is_feature_supported(CAM_CPAS_CUSTOM_FUSE, BIT(0), NULL)) {
+		CAM_DBG(CAM_CUSTOM, "CUSTOM:0 is not supported");
+		goto err;
+	}
 
 	rc = cam_subdev_probe(&g_custom_dev.sd, pdev, CAM_CUSTOM_DEV_NAME,
 		CAM_CUSTOM_DEVICE_TYPE);
