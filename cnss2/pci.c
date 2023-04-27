@@ -5942,7 +5942,13 @@ void cnss_pci_device_crashed(struct cnss_pci_data *pci_priv)
 
 	if (plat_priv->recovery_enabled)
 		cnss_pci_collect_host_dump_info(pci_priv);
-	cnss_device_crashed(&pci_priv->pci_dev->dev);
+
+	/* Call recovery handler in the DRIVER_RECOVERY event context
+	 * instead of scheduling work. In that way complete recovery
+	 * will be done as part of DRIVER_RECOVERY event and get
+	 * serialized with other events.
+	 */
+	cnss_recovery_handler(plat_priv);
 }
 
 static int cnss_mhi_pm_runtime_get(struct mhi_controller *mhi_ctrl)

@@ -717,4 +717,5 @@ int cnss_get_feature_list(struct cnss_plat_data *plat_priv,
 int cnss_get_input_gpio_value(struct cnss_plat_data *plat_priv, int gpio_num);
 bool cnss_check_driver_loading_allowed(void);
 int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv);
+void cnss_recovery_handler(struct cnss_plat_data *plat_priv);
 #endif /* _CNSS_MAIN_H */
