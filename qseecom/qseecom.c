@@ -7792,6 +7792,11 @@ long qseecom_ioctl(struct file *file,
 		pr_err("Aborting qseecom driver\n");
 		return -ENODEV;
 	}
+        if (atomic_read(&qseecom.qseecom_state) != QSEECOM_STATE_READY) {
+                pr_err("Not allowed to be called in %d state\n",
+                                atomic_read(&qseecom.qseecom_state));
+                return -EPERM;
+        }
 	if (cmd != QSEECOM_IOCTL_RECEIVE_REQ &&
 		cmd != QSEECOM_IOCTL_SEND_RESP_REQ &&
 		cmd != QSEECOM_IOCTL_SEND_MODFD_RESP &&
