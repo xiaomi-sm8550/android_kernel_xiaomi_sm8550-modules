@@ -1875,7 +1875,7 @@ enum msm_vidc_allow msm_vidc_allow_streamoff(struct msm_vidc_inst *inst, u32 typ
 		else if (!inst->bufq[OUTPUT_META_PORT].vb2q->streaming)
 			allow = MSM_VIDC_IGNORE;
 	}
-	if (allow != MSM_VIDC_ALLOW)
+	if (allow != MSM_VIDC_ALLOW && allow != MSM_VIDC_IGNORE)
 		i_vpr_e(inst, "%s: type %d is %s in state %s\n",
 				__func__, type, allow_name(allow),
 				state_name(inst->state));
@@ -5583,6 +5583,7 @@ void msm_vidc_ssr_handler(struct work_struct *work)
 
 	core_lock(core, __func__);
 	if (core->state == MSM_VIDC_CORE_INIT) {
+		d_vpr_e("%s: ssr type %d\n", __func__, ssr->ssr_type);
 		/*
 		 * In current implementation, user-initiated SSR triggers
 		 * a fatal error from hardware. However, there is no way
