@@ -5464,11 +5464,24 @@ int msm_vidc_print_inst_info(struct msm_vidc_inst *inst)
 void msm_vidc_print_core_info(struct msm_vidc_core *core)
 {
 	struct msm_vidc_inst *inst = NULL;
-	struct msm_vidc_inst *instances[MAX_SUPPORTED_INSTANCES];
+	struct msm_vidc_inst **instances = NULL;
+	s32 max_supported_instances;
 	s32 num_instances = 0;
 
 	if (!core) {
 		d_vpr_e("%s: invalid params\n", __func__);
+		return;
+	}
+
+	max_supported_instances = core->capabilities[MAX_SESSION_COUNT].value;
+	if(max_supported_instances > MAX_SUPPORTED_INSTANCES) {
+		d_vpr_e("%s: invalid number of instances \n", __func__);
+		return;
+	}
+
+	instances = vzalloc(max_supported_instances * sizeof (struct msm_vidc_inst *));
+	if(!instances) {
+		d_vpr_e("%s: instances allocation failed \n", __func__);
 		return;
 	}
 
@@ -5487,6 +5500,7 @@ void msm_vidc_print_core_info(struct msm_vidc_core *core)
 		inst_unlock(inst, __func__);
 		put_inst(inst);
 	}
+	vfree(instances);
 }
 
 int msm_vidc_smmu_fault_handler(struct iommu_domain *domain,
