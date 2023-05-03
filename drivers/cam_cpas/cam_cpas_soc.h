@@ -14,7 +14,6 @@
 #define CAM_REGULATOR_LEVEL_MAX 16
 #define CAM_CPAS_MAX_TREE_NODES 61
 #define CAM_CPAS_MAX_FUSE_FEATURE 10
-#define CAM_CPAS_MAX_INSTANCE 6
 
 /**
  * struct cpas_tree_node: Generic cpas tree node for BW voting
@@ -190,8 +189,6 @@ struct cam_cpas_sysfs_info {
  * @num_feature_info: number of feature_info entries
  * @feature_info: Structure for storing feature information
  * @num_caches: Number of last level caches
- * @part_info: Camera Hw subpart info
- * @num_cam: Number of Camera Instances
  * @llcc_info: Cache info
  * @enable_smart_qos: Whether to enable Smart QoS mechanism on current chipset
  * @enable_cam_ddr_drv: Whether to enable Camera DDR DRV on current chipset
@@ -220,8 +217,6 @@ struct cam_cpas_private_soc {
 	uint32_t num_feature_info;
 	struct cam_cpas_feature_info  feature_info[CAM_CPAS_MAX_FUSE_FEATURE];
 	uint32_t num_caches;
-	uint32_t part_info[CAM_CPAS_MAX_INSTANCE];
-	int32_t num_cam;
 	struct cam_sys_cache_info *llcc_info;
 	bool enable_smart_qos;
 	bool enable_cam_ddr_drv;

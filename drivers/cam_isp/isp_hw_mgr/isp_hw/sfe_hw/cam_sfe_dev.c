@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/slab.h>
 #include <linux/mod_devicetable.h>
 #include <linux/of_device.h>
 #include <linux/module.h>
-#include <dt-bindings/msm-camera.h>
 #include "cam_sfe_dev.h"
 #include "cam_sfe_core.h"
 #include "cam_sfe_soc.h"
@@ -31,23 +30,17 @@ static int cam_sfe_component_bind(struct device *dev,
 	struct cam_sfe_hw_info            *hw_info = NULL;
 	struct platform_device            *pdev = NULL;
 	struct cam_sfe_soc_private        *soc_priv;
-	uint32_t                           sfe_dev_idx;
 	int                                i, rc = 0;
 
 	pdev = to_platform_device(dev);
-
-	of_property_read_u32(pdev->dev.of_node, "cell-index", &sfe_dev_idx);
-
-	if (!cam_cpas_is_feature_supported(CAM_CPAS_SFE_FUSE, BIT(sfe_dev_idx), NULL)) {
-		CAM_DBG(CAM_SFE, "SFE:%d is not supported", sfe_dev_idx);
-		goto end;
-	}
-
 	sfe_hw_intf = kzalloc(sizeof(struct cam_hw_intf), GFP_KERNEL);
 	if (!sfe_hw_intf) {
 		rc = -ENOMEM;
 		goto end;
 	}
+
+	of_property_read_u32(pdev->dev.of_node,
+		"cell-index", &sfe_hw_intf->hw_idx);
 
 	sfe_info = kzalloc(sizeof(struct cam_hw_info), GFP_KERNEL);
 	if (!sfe_info) {
@@ -59,7 +52,6 @@ static int cam_sfe_component_bind(struct device *dev,
 	sfe_info->soc_info.dev = &pdev->dev;
 	sfe_info->soc_info.dev_name = pdev->name;
 	sfe_hw_intf->hw_priv = sfe_info;
-	sfe_hw_intf->hw_idx = sfe_dev_idx;
 	sfe_hw_intf->hw_ops.get_hw_caps = cam_sfe_get_hw_caps;
 	sfe_hw_intf->hw_ops.init = cam_sfe_init_hw;
 	sfe_hw_intf->hw_ops.deinit = cam_sfe_deinit_hw;

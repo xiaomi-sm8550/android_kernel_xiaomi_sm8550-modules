@@ -10,7 +10,6 @@
 #include <linux/pm_opp.h>
 #include <linux/slab.h>
 #include <linux/module.h>
-#include <soc/qcom/socinfo.h>
 
 #include "cam_cpas_hw.h"
 #include "cam_cpas_hw_intf.h"
@@ -3540,8 +3539,6 @@ int cam_cpas_hw_probe(struct platform_device *pdev,
 	struct cam_hw_info *cpas_hw = NULL;
 	struct cam_hw_intf *cpas_hw_intf = NULL;
 	struct cam_cpas *cpas_core = NULL;
-	struct cam_camnoc_info *camnoc_info = NULL;
-	struct cam_cpas_subpart_info *cam_subpart_info = NULL;
 	struct cam_cpas_private_soc *soc_private;
 	struct cam_cpas_internal_ops *internal_ops;
 
@@ -3679,23 +3676,6 @@ int cam_cpas_hw_probe(struct platform_device *pdev,
 	if (rc)
 		goto disable_soc_res;
 
-	camnoc_info = cpas_core->camnoc_info;
-	cam_subpart_info = camnoc_info->cam_subpart_info;
-	if (cam_subpart_info) {
-		soc_private->num_cam = socinfo_get_part_count(PART_CAMERA);
-		if (soc_private->num_cam > CAM_CPAS_MAX_INSTANCE || soc_private->num_cam < 0) {
-			CAM_ERR(CAM_CPAS, "Unsupported number of parts %d", soc_private->num_cam);
-			goto disable_soc_res;
-		}
-
-		rc = socinfo_get_subpart_info(PART_CAMERA, soc_private->part_info,
-				soc_private->num_cam);
-		if (rc) {
-			CAM_ERR(CAM_CPAS, "Failed while getting subpart_info, rc = %d.",
-				rc);
-			goto disable_soc_res;
-		}
-	}
 	rc = cam_cpas_soc_disable_resources(&cpas_hw->soc_info, true, true);
 	if (rc) {
 		CAM_ERR(CAM_CPAS, "failed in soc_disable_resources, rc=%d", rc);

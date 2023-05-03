@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 
@@ -29,22 +28,24 @@ static int cam_vfe_component_bind(struct device *dev,
 	int                                rc = 0;
 	struct platform_device *pdev = to_platform_device(dev);
 	struct cam_vfe_soc_private   *vfe_soc_priv;
-	uint32_t  vfe_dev_idx;
 	uint32_t  i;
-
-	of_property_read_u32(pdev->dev.of_node, "cell-index", &vfe_dev_idx);
-
-	if (!cam_cpas_is_feature_supported(CAM_CPAS_ISP_FUSE, BIT(vfe_dev_idx), NULL) ||
-		!cam_cpas_is_feature_supported(CAM_CPAS_ISP_LITE_FUSE,
-		BIT(vfe_dev_idx), NULL)) {
-		CAM_DBG(CAM_ISP, "IFE:%d is not supported", vfe_dev_idx);
-		goto end;
-	}
 
 	vfe_hw_intf = kzalloc(sizeof(struct cam_hw_intf), GFP_KERNEL);
 	if (!vfe_hw_intf) {
 		rc = -ENOMEM;
 		goto end;
+	}
+
+	of_property_read_u32(pdev->dev.of_node,
+		"cell-index", &vfe_hw_intf->hw_idx);
+
+	if (!cam_cpas_is_feature_supported(CAM_CPAS_ISP_FUSE,
+		(1 << vfe_hw_intf->hw_idx), 0) ||
+		!cam_cpas_is_feature_supported(CAM_CPAS_ISP_LITE_FUSE,
+		(1 << vfe_hw_intf->hw_idx), 0)) {
+		CAM_DBG(CAM_ISP, "IFE:%d is not supported",
+			vfe_hw_intf->hw_idx);
+		goto free_vfe_hw_intf;
 	}
 
 	vfe_hw = kzalloc(sizeof(struct cam_hw_info), GFP_KERNEL);
@@ -57,7 +58,6 @@ static int cam_vfe_component_bind(struct device *dev,
 	vfe_hw->soc_info.dev = &pdev->dev;
 	vfe_hw->soc_info.dev_name = pdev->name;
 	vfe_hw_intf->hw_priv = vfe_hw;
-	vfe_hw_intf->hw_idx = vfe_dev_idx;
 	vfe_hw_intf->hw_ops.get_hw_caps = cam_vfe_get_hw_caps;
 	vfe_hw_intf->hw_ops.init = cam_vfe_init_hw;
 	vfe_hw_intf->hw_ops.deinit = cam_vfe_deinit_hw;

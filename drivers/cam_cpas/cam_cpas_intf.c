@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/of.h>
@@ -21,7 +21,6 @@
 #include "cam_cpas_hw_intf.h"
 #include "cam_cpas_soc.h"
 #include "camera_main.h"
-#include "cam_cpastop_hw.h"
 
 #define CAM_CPAS_DEV_NAME    "cam-cpas"
 #define CAM_CPAS_INTF_INITIALIZED() (g_cpas_intf && g_cpas_intf->probe_done)
@@ -264,37 +263,6 @@ int cam_cpas_dump_camnoc_buff_fill_info(uint32_t client_handle)
 }
 EXPORT_SYMBOL(cam_cpas_dump_camnoc_buff_fill_info);
 
-bool cam_cpas_is_part_supported(uint32_t flag, uint32_t hw_map, uint32_t part_info)
-{
-	int32_t i;
-	struct cam_hw_info *cpas_hw = g_cpas_intf->hw_intf->hw_priv;
-	struct cam_cpas *cpas_core = cpas_hw->core_info;
-	struct cam_camnoc_info *camnoc_info = cpas_core->camnoc_info;
-	struct cam_cpas_subpart_info *cam_subpart_info = NULL;
-
-	if (!camnoc_info) {
-		CAM_ERR(CAM_CPAS, "Invalid camnoc info for hw_version: 0x%x",
-				cpas_hw->soc_info.hw_version);
-		return false;
-	}
-	cam_subpart_info = camnoc_info->cam_subpart_info;
-
-	if (!cam_subpart_info) {
-		CAM_DBG(CAM_CPAS, "Invalid address of cam_subpart_info");
-		return true;
-	}
-
-	for (i = 0; i < cam_subpart_info->num_bits; i++) {
-		if ((cam_subpart_info->hw_bitmap_mask[i][0] == flag) &&
-				(cam_subpart_info->hw_bitmap_mask[i][1] == hw_map)) {
-			CAM_DBG(CAM_CPAS, "flag: %u hw_map: %u part_info:0x%x",
-					flag, hw_map, part_info);
-			return ((part_info & BIT(i)) == 0);
-		}
-	}
-	return true;
-}
-
 bool cam_cpas_is_feature_supported(uint32_t flag, uint32_t hw_map,
 	uint32_t *fuse_val)
 {
@@ -317,9 +285,6 @@ bool cam_cpas_is_feature_supported(uint32_t flag, uint32_t hw_map,
 		return false;
 	}
 
-	/* we are supporting only one camera so use idx 0 */
-	supported = cam_cpas_is_part_supported(flag, hw_map, soc_private->part_info[0]);
-
 	for (i = 0; i < soc_private->num_feature_info; i++)
 		if (soc_private->feature_info[i].feature == flag)
 			break;
@@ -330,10 +295,8 @@ bool cam_cpas_is_feature_supported(uint32_t flag, uint32_t hw_map,
 	if (soc_private->feature_info[i].type == CAM_CPAS_FEATURE_TYPE_DISABLE
 		|| (soc_private->feature_info[i].type ==
 		CAM_CPAS_FEATURE_TYPE_ENABLE)) {
-		if ((soc_private->feature_info[i].hw_map & hw_map) == hw_map) {
-			if (!(supported && soc_private->feature_info[i].enable))
-				supported = false;
-		}
+		if ((soc_private->feature_info[i].hw_map & hw_map) == hw_map)
+			supported = soc_private->feature_info[i].enable;
 	} else {
 		if (!fuse_val) {
 			CAM_ERR(CAM_CPAS,
