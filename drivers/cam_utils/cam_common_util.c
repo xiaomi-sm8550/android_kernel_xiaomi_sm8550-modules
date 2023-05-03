@@ -417,7 +417,9 @@ static int cam_err_inject_set(const char *kmessage,
 		switch (param_counter) {
 		case HW_NAME:
 			if (strcmp(token_start, CAM_COMMON_IFE_NODE) == 0)
-				err_params->hw_id = CAM_COMMON_ERR_INJECT_HW_ISP;
+				err_params->hw_id = CAM_COMMON_ERR_INJECT_HW_IFE;
+			if (strcmp(token_start, CAM_COMMON_TFE_NODE) == 0)
+				err_params->hw_id = CAM_COMMON_ERR_INJECT_HW_TFE;
 			else if (strcmp(token_start, CAM_COMMON_ICP_NODE) == 0)
 				err_params->hw_id = CAM_COMMON_ERR_INJECT_HW_ICP;
 			else if (strcmp(token_start, CAM_COMMON_JPEG_NODE) == 0)
@@ -501,8 +503,11 @@ static int cam_err_inject_get(char *buffer,
 	else if (!list_empty(&g_err_inject_info.active_err_ctx_list)) {
 		list_for_each_entry(err_param, &g_err_inject_info.active_err_ctx_list, list) {
 			switch (err_param->hw_id) {
-			case CAM_COMMON_ERR_INJECT_HW_ISP:
+			case CAM_COMMON_ERR_INJECT_HW_IFE:
 				strscpy(hw_name, CAM_COMMON_IFE_NODE, 10);
+				break;
+			case CAM_COMMON_ERR_INJECT_HW_TFE:
+				strscpy(hw_name, CAM_COMMON_TFE_NODE, 10);
 				break;
 			case CAM_COMMON_ERR_INJECT_HW_ICP:
 				strscpy(hw_name, CAM_COMMON_ICP_NODE, 10);

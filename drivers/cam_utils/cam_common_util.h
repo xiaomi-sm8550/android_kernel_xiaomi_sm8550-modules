@@ -28,6 +28,7 @@
 #define CAM_COMMON_IFE_NODE "IFE"
 #define CAM_COMMON_ICP_NODE "IPE"
 #define CAM_COMMON_JPEG_NODE "JPEG"
+#define CAM_COMMON_TFE_NODE "TFE"
 
 #define CAM_COMMON_NS_PER_MS              1000000ULL
 
@@ -114,7 +115,8 @@ typedef int (*cam_common_err_inject_cb) (void *err_param);
 int cam_common_release_err_params(uint64_t dev_hdl);
 
 enum cam_common_err_inject_hw_id {
-	CAM_COMMON_ERR_INJECT_HW_ISP,
+	CAM_COMMON_ERR_INJECT_HW_IFE,
+	CAM_COMMON_ERR_INJECT_HW_TFE,
 	CAM_COMMON_ERR_INJECT_HW_ICP,
 	CAM_COMMON_ERR_INJECT_HW_JPEG,
 	CAM_COMMON_ERR_INJECT_HW_MAX
