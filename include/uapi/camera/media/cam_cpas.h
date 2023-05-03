@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __UAPI_CAM_CPAS_H__
@@ -77,12 +77,6 @@
 /* DRV Vote level */
 #define CAM_CPAS_VOTE_LEVEL_HIGH   1
 #define CAM_CPAS_VOTE_LEVEL_LOW    2
-
-/* sysfs for number of IFEs, IFE_LITEs, SFEs and SBI */
-#define CAM_SYSFS_NUM_IFES_FILENAME      "num_ifes"
-#define CAM_SYSFS_NUM_IFE_LITES_FILENAME "num_ife_lites"
-#define CAM_SYSFS_NUM_SFES_FILENAME      "num_sfes"
-#define CAM_SYSFS_NUM_SBI_FILENAME       "num_sbi"
 
 /**
  * struct cam_cpas_fuse_value - CPAS fuse value

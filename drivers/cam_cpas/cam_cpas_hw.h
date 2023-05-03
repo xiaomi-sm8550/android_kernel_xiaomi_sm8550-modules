@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _CAM_CPAS_HW_H_
@@ -124,17 +124,6 @@ struct cam_cpas_axi_bw_info {
 		struct cam_cpas_bw_vote hlos_vote;
 		struct cam_cpas_drv_vote drv_vote;
 	};
-};
-
-/**
- * struct cam_cpas_kobj_map: wrapper structure for base kobject
- *                               and cam cpas private soc info
- * @base_kobj: kernel object for camera sysfs
- * @soc_private: pointer to cam_cpas_private_soc structure
- */
-struct cam_cpas_kobj_map {
-	struct kobject base_kobj;
-	struct cam_cpas_private_soc *soc_private;
 };
 
 /**

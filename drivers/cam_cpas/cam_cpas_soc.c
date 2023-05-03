@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/device.h>
@@ -606,6 +606,8 @@ static int cam_cpas_parse_node_tree(struct cam_cpas *cpas_core,
 	return 0;
 }
 
+
+
 int cam_cpas_get_hw_features(struct platform_device *pdev,
 	struct cam_cpas_private_soc *soc_private)
 {
@@ -961,34 +963,6 @@ int cam_cpas_get_custom_dt_info(struct cam_hw_info *cpas_hw,
 		&soc_private->arch_compat);
 	if (rc) {
 		CAM_ERR(CAM_CPAS, "device %s failed to read arch-compat",
-			pdev->name);
-		return rc;
-	}
-
-	rc = of_property_read_u32(of_node, "num-ifes", &soc_private->sysfs_info.num_ifes);
-	if (rc) {
-		CAM_ERR(CAM_CPAS, "device %s failed to read num-ifes",
-			pdev->name);
-		return rc;
-	}
-
-	rc = of_property_read_u32(of_node, "num-ife-lites", &soc_private->sysfs_info.num_ife_lites);
-	if (rc) {
-		CAM_ERR(CAM_CPAS, "device %s failed to read num-ife-lites",
-			pdev->name);
-		return rc;
-	}
-
-	rc = of_property_read_u32(of_node, "num-sfes", &soc_private->sysfs_info.num_sfes);
-	if (rc) {
-		CAM_ERR(CAM_CPAS, "device %s failed to read num-sfes",
-			pdev->name);
-		return rc;
-	}
-
-	rc = of_property_read_u32(of_node, "num-custom", &soc_private->sysfs_info.num_custom);
-	if (rc) {
-		CAM_ERR(CAM_CPAS, "device %s failed to read num-custom",
 			pdev->name);
 		return rc;
 	}
