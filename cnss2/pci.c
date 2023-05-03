@@ -909,12 +909,23 @@ void cnss_mhi_controller_set_base(struct cnss_pci_data *pci_priv,
 
 #ifdef CONFIG_CNSS2_SMMU_DB_SUPPORT
 #define CNSS_MHI_WAKE_TIMEOUT		500000
+
+static void cnss_record_smmu_fault_timestamp(struct cnss_pci_data *pci_priv,
+					     enum cnss_smmu_fault_time id)
+{
+	if (id >= SMMU_CB_MAX)
+		return;
+
+	pci_priv->smmu_fault_timestamp[id] = sched_clock();
+}
+
 static void cnss_pci_smmu_fault_handler_irq(struct iommu_domain *domain,
 					    void *handler_token)
 {
 	struct cnss_pci_data *pci_priv = handler_token;
 	int ret = 0;
 
+	cnss_record_smmu_fault_timestamp(pci_priv, SMMU_CB_ENTRY);
 	ret = cnss_mhi_device_get_sync_atomic(pci_priv,
 					      CNSS_MHI_WAKE_TIMEOUT, true);
 	if (ret < 0) {
@@ -922,9 +933,12 @@ static void cnss_pci_smmu_fault_handler_irq(struct iommu_domain *domain,
 		return;
 	}
 
+	cnss_record_smmu_fault_timestamp(pci_priv, SMMU_CB_DOORBELL_RING);
 	ret = cnss_mhi_host_notify_db_disable_trace(pci_priv);
 	if (ret < 0)
 		cnss_pr_err("Fail to notify wlan fw to stop trace collection, ret %d\n", ret);
+
+	cnss_record_smmu_fault_timestamp(pci_priv, SMMU_CB_EXIT);
 }
 
 void cnss_register_iommu_fault_handler_irq(struct cnss_pci_data *pci_priv)
