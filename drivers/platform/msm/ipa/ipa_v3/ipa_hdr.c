@@ -658,14 +658,14 @@ static int __ipa_add_hdr(struct ipa_hdr_add *hdr, bool user,
 				entry->is_lcl = false;
 			}
 
-			if (!entry->is_lcl && (htbl->end + ipa_hdr_bin_sz[bin] > mem_size)) {
-				IPAERR("No space in DDR header buffer! Requested: %d Left: %d name %s, end %d\n",
-					ipa_hdr_bin_sz[bin], mem_size - htbl->end, entry->name, htbl->end);
-				goto bad_hdr_len;
-			}
-
 			/* check if DDR free list */
 			if (list_empty(&htbl->head_free_offset_list[bin])) {
+				if (!entry->is_lcl && (htbl->end + ipa_hdr_bin_sz[bin] > mem_size)) {
+					IPAERR("No space in DDR header buffer! Requested: %d Left: %d name %s, end %d\n",
+							ipa_hdr_bin_sz[bin], mem_size - htbl->end, entry->name, htbl->end);
+					goto bad_hdr_len;
+				}
+
 				IPADBG_LOW("No free offset in DDR allocating new offset Requested: %d Left: %d name %s, end %d\n",
 						ipa_hdr_bin_sz[bin], mem_size - htbl->end, entry->name, htbl->end);
 				goto create_entry;
