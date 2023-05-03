@@ -166,6 +166,8 @@ static void cnss_pool_deinit(void)
 			cnss_pools[i].name);
 		mempool_destroy(cnss_pools[i].mp);
 		kmem_cache_destroy(cnss_pools[i].cache);
+		cnss_pools[i].mp = NULL;
+		cnss_pools[i].cache = NULL;
 	}
 }
 
