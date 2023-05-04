@@ -2897,6 +2897,14 @@ static int cam_ife_csid_hw_ver2_config_rx(
 		csid_hw->rx_cfg.tpg_mux_sel = 1;
 		csid_hw->rx_cfg.tpg_num_sel = 3;
 		break;
+	case CAM_ISP_IFE_IN_RES_PHY_6:
+		csid_hw->rx_cfg.tpg_mux_sel = 0;
+		csid_hw->rx_cfg.phy_sel = 7;
+		break;
+	case CAM_ISP_IFE_IN_RES_PHY_7:
+		csid_hw->rx_cfg.tpg_mux_sel = 0;
+		csid_hw->rx_cfg.phy_sel = 8;
+		break;
 	default:
 		csid_hw->rx_cfg.tpg_mux_sel = 0;
 		csid_hw->rx_cfg.phy_sel =
