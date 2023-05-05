@@ -23,6 +23,10 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/time64.h>
+#if IS_ENABLED(CONFIG_MSM_QMP)
+#include <linux/mailbox/qmp.h>
+#include <linux/soc/qcom/qcom_aoss.h>
+#endif
 #ifdef CONFIG_CNSS_OUT_OF_TREE
 #include "cnss2.h"
 #else
@@ -588,6 +592,10 @@ struct cnss_plat_data {
 	u8 charger_mode;
 	struct mbox_client mbox_client_data;
 	struct mbox_chan *mbox_chan;
+#if IS_ENABLED(CONFIG_MSM_QMP)
+	struct qmp *qmp;
+#endif
+	bool use_direct_qmp;
 	const char *vreg_ol_cpr, *vreg_ipa;
 	const char **pdc_init_table, **vreg_pdc_map, **pmu_vreg_map;
 	int pdc_init_table_len, vreg_pdc_map_len, pmu_vreg_map_len;
@@ -699,7 +707,8 @@ int cnss_enable_int_pow_amp_vreg(struct cnss_plat_data *plat_priv);
 int cnss_get_tcs_info(struct cnss_plat_data *plat_priv);
 unsigned int cnss_get_timeout(struct cnss_plat_data *plat_priv,
 			      enum cnss_timeout_type);
-int cnss_aop_mbox_init(struct cnss_plat_data *plat_priv);
+int cnss_aop_interface_init(struct cnss_plat_data *plat_priv);
+void cnss_aop_interface_deinit(struct cnss_plat_data *plat_priv);
 int cnss_aop_pdc_reconfig(struct cnss_plat_data *plat_priv);
 int cnss_aop_send_msg(struct cnss_plat_data *plat_priv, char *msg);
 void cnss_power_misc_params_init(struct cnss_plat_data *plat_priv);

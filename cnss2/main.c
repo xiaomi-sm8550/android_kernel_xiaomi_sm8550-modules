@@ -4946,7 +4946,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	cnss_power_misc_params_init(plat_priv);
 	cnss_get_tcs_info(plat_priv);
 	cnss_get_cpr_info(plat_priv);
-	cnss_aop_mbox_init(plat_priv);
+	cnss_aop_interface_init(plat_priv);
 	cnss_init_control_params(plat_priv);
 
 	ret = cnss_get_resources(plat_priv);
@@ -5022,6 +5022,7 @@ unreg_esoc:
 free_res:
 	cnss_put_resources(plat_priv);
 reset_ctx:
+	cnss_aop_interface_deinit(plat_priv);
 	platform_set_drvdata(plat_dev, NULL);
 	cnss_deinitialize_mem_pool();
 reset_plat_dev:
@@ -5049,12 +5050,8 @@ static int cnss_remove(struct platform_device *plat_dev)
 	cnss_unregister_bus_scale(plat_priv);
 	cnss_unregister_esoc(plat_priv);
 	cnss_put_resources(plat_priv);
-
-	if (!IS_ERR_OR_NULL(plat_priv->mbox_chan))
-		mbox_free_channel(plat_priv->mbox_chan);
-
+	cnss_aop_interface_deinit(plat_priv);
 	cnss_deinitialize_mem_pool();
-
 	platform_set_drvdata(plat_dev, NULL);
 	cnss_clear_plat_priv(plat_priv);
 
