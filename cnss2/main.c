@@ -4310,6 +4310,24 @@ static void cnss_sram_dump_init(struct cnss_plat_data *plat_priv)
 }
 #endif
 
+#ifdef CONFIG_WCNSS_MEM_PRE_ALLOC
+static void cnss_initialize_mem_pool(unsigned long device_id)
+{
+	cnss_initialize_prealloc_pool(device_id);
+}
+static void cnss_deinitialize_mem_pool(void)
+{
+	cnss_deinitialize_prealloc_pool();
+}
+#else
+static void cnss_initialize_mem_pool(unsigned long device_id)
+{
+}
+static void cnss_deinitialize_mem_pool(void)
+{
+}
+#endif
+
 static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 {
 	int ret;
@@ -4900,7 +4918,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 		goto reset_plat_dev;
 	}
 
-	cnss_initialize_prealloc_pool(plat_priv->device_id);
+	cnss_initialize_mem_pool(plat_priv->device_id);
 
 	ret = cnss_get_pld_bus_ops_name(plat_priv);
 	if (ret)
@@ -5005,7 +5023,7 @@ free_res:
 	cnss_put_resources(plat_priv);
 reset_ctx:
 	platform_set_drvdata(plat_dev, NULL);
-	cnss_deinitialize_prealloc_pool();
+	cnss_deinitialize_mem_pool();
 reset_plat_dev:
 	cnss_clear_plat_priv(plat_priv);
 out:
@@ -5035,7 +5053,7 @@ static int cnss_remove(struct platform_device *plat_dev)
 	if (!IS_ERR_OR_NULL(plat_priv->mbox_chan))
 		mbox_free_channel(plat_priv->mbox_chan);
 
-	cnss_deinitialize_prealloc_pool();
+	cnss_deinitialize_mem_pool();
 
 	platform_set_drvdata(plat_dev, NULL);
 	cnss_clear_plat_priv(plat_priv);
