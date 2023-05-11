@@ -4120,7 +4120,7 @@ static int cam_req_mgr_cb_notify_trigger(
 	link = (struct cam_req_mgr_core_link *)
 		cam_get_device_priv(trigger_data->link_hdl);
 	if (!link) {
-		CAM_DBG(CAM_CRM, "link ptr NULL %x", trigger_data->link_hdl);
+		CAM_WARN_RATE_LIMIT(CAM_CRM, "link ptr NULL %x", trigger_data->link_hdl);
 		rc = -EINVAL;
 		goto end;
 	}
