@@ -156,3 +156,11 @@ config CNSS_OUT_OF_TREE
 	help
 	  If enabled, CNSS platform driver modules would be able to access
 	  functions from the other modules in the platform driver.
+
+config WCNSS_MEM_PRE_ALLOC
+	tristate "WCNSS pre-alloc memory support"
+	help
+	  Pre-allocate memory for the WLAN driver module.
+	  This feature enable cld wlan driver to use pre allocated memory
+	  for it's internal usage and release it to back to pre allocated pool.
+	  This memory is allocated at the cold boot time.
