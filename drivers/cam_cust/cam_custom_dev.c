@@ -25,6 +25,7 @@
 #include "camera_main.h"
 
 static struct cam_custom_dev g_custom_dev;
+static uint32_t cam_num_custom;
 
 static void cam_custom_dev_iommu_fault_handler(
 	struct cam_smmu_pf_info *pf_info)
@@ -174,6 +175,14 @@ err:
 	return rc;
 }
 
+void cam_custom_get_num_custom(uint32_t *custom_num)
+{
+	if (custom_num)
+		*custom_num = cam_num_custom;
+	else
+		CAM_ERR(CAM_CUSTOM, "Failed to update number of custom");
+}
+
 static void cam_custom_component_unbind(struct device *dev,
 	struct device *master_dev, void *data)
 {
@@ -211,6 +220,8 @@ static int cam_custom_dev_probe(struct platform_device *pdev)
 	int rc = 0;
 
 	CAM_DBG(CAM_CUSTOM, "Adding Custom HW component");
+	cam_num_custom++;
+
 	rc = component_add(&pdev->dev, &cam_custom_component_ops);
 	if (rc)
 		CAM_ERR(CAM_CUSTOM, "failed to add component rc: %d", rc);

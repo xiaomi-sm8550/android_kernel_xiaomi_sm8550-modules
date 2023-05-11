@@ -19,6 +19,7 @@
 #include "camera_main.h"
 
 static struct cam_isp_hw_intf_data cam_sfe_hw_list[CAM_SFE_HW_NUM_MAX];
+static uint32_t cam_num_sfes;
 
 static int cam_sfe_component_bind(struct device *dev,
 	struct device *master_dev, void *data)
@@ -204,11 +205,21 @@ const static struct component_ops cam_sfe_component_ops = {
 	.unbind = cam_sfe_component_unbind,
 };
 
+void cam_sfe_get_num_sfes(uint32_t *sfe_num)
+{
+	if (sfe_num)
+		*sfe_num = cam_num_sfes;
+	else
+		CAM_ERR(CAM_SFE, "Failed to update number of SFEs");
+}
+
 int cam_sfe_probe(struct platform_device *pdev)
 {
 	int rc = 0;
 
 	CAM_DBG(CAM_SFE, "Adding SFE component");
+	cam_num_sfes++;
+
 	rc = component_add(&pdev->dev, &cam_sfe_component_ops);
 	if (rc)
 		CAM_ERR(CAM_SFE, "failed to add component rc: %d", rc);
