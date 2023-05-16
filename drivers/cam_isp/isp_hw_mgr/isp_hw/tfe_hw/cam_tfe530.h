@@ -876,6 +876,9 @@ static struct cam_tfe_bus_hw_info  tfe530_bus_hw_info = {
 	.rdi_width = 64,
 	.mode_cfg_shift = 16,
 	.height_shift = 16,
+	.max_bw_counter_limit  = 0xFF,
+	.counter_limit_shift   = 1,
+	.counter_limit_mask    = 0xF,
 };
 
 struct cam_tfe_hw_info cam_tfe530 = {
