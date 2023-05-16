@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/of.h>
@@ -3376,6 +3376,29 @@ int gsi_query_channel_db_addr(unsigned long chan_hdl,
 	return GSI_STATUS_SUCCESS;
 }
 EXPORT_SYMBOL(gsi_query_channel_db_addr);
+
+int gsi_get_channel_event_db_base_addr(uint64_t *ch_db_base_addr,
+		uint64_t *ev_db_base_addr)
+{
+        if (!gsi_ctx) {
+                pr_err("%s:%d gsi context not allocated\n", __func__, __LINE__);
+                return -GSI_STATUS_NODEV;
+        }
+
+        if (!ch_db_base_addr || !ev_db_base_addr) {
+                GSIERR("bad params ch_db=%pK ev_db=%pK\n", ch_db_base_addr,
+                                ev_db_base_addr);
+                return -GSI_STATUS_INVALID_PARAMS;
+        }
+
+        *ch_db_base_addr = gsi_ctx->per.phys_addr +
+                gsihal_get_reg_nk_ofst(GSI_EE_n_GSI_CH_k_DOORBELL_0, 0, 0);
+        *ev_db_base_addr = gsi_ctx->per.phys_addr +
+                gsihal_get_reg_nk_ofst(GSI_EE_n_EV_CH_k_DOORBELL_0, 0, 0);
+
+        return GSI_STATUS_SUCCESS;
+}
+EXPORT_SYMBOL(gsi_get_channel_event_db_base_addr);
 
 int gsi_pending_irq_type(void)
 {

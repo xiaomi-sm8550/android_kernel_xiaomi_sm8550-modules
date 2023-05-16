@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/debugfs.h>
@@ -61,6 +62,15 @@
 
 #define IPA_MHI_MAX_UL_CHANNELS 2
 #define IPA_MHI_MAX_DL_CHANNELS 4
+
+#define IPA_MHI_TOTAL_CLIENTS 6
+static enum ipa_client_type mhi_clients[IPA_MHI_TOTAL_CLIENTS] =
+		{IPA_CLIENT_MHI_PROD,
+		IPA_CLIENT_MHI_CONS,
+		IPA_CLIENT_MHI_LOW_LAT_PROD,
+		IPA_CLIENT_MHI_LOW_LAT_CONS,
+		IPA_CLIENT_MHI_QDSS_CONS,
+		IPA_CLIENT_MHI_DPL_CONS};
 
 /* bit #40 in address should be asserted for MHI transfers over pcie */
 #define IPA_MHI_CLIENT_HOST_ADDR_COND(addr) \
@@ -550,6 +560,26 @@ static void ipa_mhi_notify_ready(void)
 	IPA_MHI_FUNC_ENTRY();
 	queue_work(ipa_mhi_client_ctx->wq, &ipa_mhi_notify_ready_work);
 	IPA_MHI_FUNC_EXIT();
+}
+
+
+/**
+ * ipa_mhi_get_ch_bitmap() - Get MHI channels numbers in bitmap.
+ *
+ * @ch_bitmap: the bitmap to fill with the MHI clients channels
+ *           numbers.
+ */
+static void ipa_mhi_get_ch_bitmap(u32 *ch_bitmap)
+{
+	int i;
+	const struct ipa_gsi_ep_config *gsi_ep_config;
+
+	*ch_bitmap = 0;
+	for (i = 0; i < IPA_MHI_TOTAL_CLIENTS; i++) {
+		gsi_ep_config = ipa_get_gsi_ep_info(mhi_clients[i]);
+		if (gsi_ep_config)
+			*ch_bitmap |= 1 << gsi_ep_config->ipa_gsi_chan_num;
+	}
 }
 
 /**
@@ -2444,6 +2474,167 @@ void ipa_mhi_register(void)
 }
 EXPORT_SYMBOL(ipa_mhi_register);
 
+/* New mhi API implementation for mhi_dma.h */
+
+int ipa_mhi_dma_register_ready_cb(void (*mhi_ready_cb)(void *user_data),
+		void *user_data)
+{
+
+	IPA_MHI_DBG("Begin\n");
+	return ipa_register_ipa_ready_cb(mhi_ready_cb,user_data);
+	IPA_MHI_DBG("End\n");
+}
+EXPORT_SYMBOL(ipa_mhi_dma_register_ready_cb);
+
+int ipa_mhi_dma_init(struct mhi_dma_function_params function,
+                struct mhi_dma_init_params *params,
+                struct mhi_dma_init_out *out)
+{
+	int gsi_res;
+	if (!out) {
+		IPA_MHI_DBG("null out arg\n");
+		return -EINVAL;
+	}
+
+	gsi_res = gsi_get_channel_event_db_base_addr(&out->ch_db_fwd_base,
+		&out->ev_db_fwd_base);
+	if (gsi_res != GSI_STATUS_SUCCESS) {
+		IPA_MHI_DBG("Error getting DB base addresses: %d\n", gsi_res);
+		return -EFAULT;
+	}
+
+	ipa_mhi_get_ch_bitmap(&out->ch_db_fwd_msk);
+	out->ev_db_fwd_msk = out->ch_db_fwd_msk;
+
+	return ipa_mhi_init_internal((struct ipa_mhi_init_params *)params);;
+}
+EXPORT_SYMBOL(ipa_mhi_dma_init);
+
+int ipa_mhi_dma_start(struct mhi_dma_function_params function,
+		struct mhi_dma_start_params *params)
+{
+	return ipa_mhi_start_internal((struct ipa_mhi_start_params *)params);
+}
+EXPORT_SYMBOL(ipa_mhi_dma_start);
+
+int ipa_mhi_dma_connect_endp(struct mhi_dma_function_params function,
+		struct mhi_dma_connect_params *in, u32 *clnt_hdl)
+{
+	struct ipa_mhi_connect_params connect_params = {0};
+
+	/* struct mhi_dma_function_params is not the same as struct ipa_mhi_connect_params.
+	  Casting needs to be done explictly.*/
+	connect_params.channel_id = in->channel_id;
+	connect_params.sys.desc_fifo_sz = in->desc_fifo_sz;
+	connect_params.sys.priv = in->priv;
+	connect_params.sys.notify = (ipa_notify_cb)in->notify;
+	connect_params.sys.int_modt = in->int_modt;
+	connect_params.sys.int_modc = in->int_modc;
+	connect_params.sys.buff_size = in->buff_size;
+
+	connect_params.sys.skip_ep_cfg = true;
+
+	return ipa_mhi_connect_pipe_internal(&connect_params, clnt_hdl);
+}
+EXPORT_SYMBOL(ipa_mhi_dma_connect_endp);
+
+int ipa_mhi_dma_disconnect_endp(struct mhi_dma_function_params function,
+                struct mhi_dma_disconnect_params *in)
+{
+	return ipa_mhi_disconnect_pipe_internal(in->clnt_hdl);
+}
+EXPORT_SYMBOL(ipa_mhi_dma_disconnect_endp);
+
+int ipa_mhi_dma_suspend(struct mhi_dma_function_params function, bool force)
+{
+	return ipa_mhi_suspend_internal(force);
+}
+EXPORT_SYMBOL(ipa_mhi_dma_suspend);
+
+int ipa_mhi_dma_resume(struct mhi_dma_function_params function)
+{
+	return ipa_mhi_resume_internal();
+}
+EXPORT_SYMBOL(ipa_mhi_dma_resume);
+
+int ipa_mhi_dma_update_mstate(struct mhi_dma_function_params function,
+		enum mhi_dma_mstate mstate_info)
+{
+	return ipa_mhi_update_mstate_internal((enum ipa_mhi_mstate)mstate_info);
+}
+EXPORT_SYMBOL(ipa_mhi_dma_update_mstate);
+
+void ipa_mhi_dma_destroy(struct mhi_dma_function_params function)
+{
+	ipa_mhi_destroy_internal();
+}
+EXPORT_SYMBOL(ipa_mhi_dma_destroy);
+
+static dma_addr_t ipa_mhi_dma_map_buffer(void* virt, size_t size,
+	enum dma_data_direction dir)
+{
+	dma_addr_t phys;
+	IPA_MHI_DBG("Begin\n");
+
+	phys = dma_map_single(ipa3_ctx->pdev, virt, size, dir);
+	if (dma_mapping_error(ipa3_ctx->pdev, phys)) {
+		IPA_MHI_ERR("failed to do dma map.\n");
+		ipa_assert();
+	}
+
+	return phys;
+}
+
+static void ipa_mhi_dma_unmap_buffer(dma_addr_t phys, size_t size,
+	enum dma_data_direction dir)
+{
+	IPA_MHI_DBG("Begin\n");
+	dma_unmap_single(ipa3_ctx->pdev, phys, size, dir);
+}
+
+static void *ipa_mhi_dma_alloc_buffer(size_t size,
+	dma_addr_t* phys, gfp_t gfp)
+{
+	IPA_MHI_DBG("Begin\n");
+	return  dma_alloc_coherent(ipa3_ctx->pdev, size, phys, gfp);
+}
+
+static void ipa_mhi_dma_free_buffer(size_t size, void* virt,
+	dma_addr_t phys)
+{
+	IPA_MHI_DBG("Begin\n");
+	dma_free_coherent(ipa3_ctx->pdev, size, virt, phys);
+}
+
+/* API exposed structure */
+const struct mhi_dma_ops ipa_dma_mhi_driver_ops = {
+	.mhi_dma_register_ready_cb = ipa_mhi_dma_register_ready_cb,
+	.mhi_dma_init = ipa_mhi_dma_init,
+	.mhi_dma_start = ipa_mhi_dma_start,
+	.mhi_dma_connect_endp = ipa_mhi_dma_connect_endp,
+	.mhi_dma_disconnect_endp = ipa_mhi_dma_disconnect_endp,
+	.mhi_dma_destroy = ipa_mhi_dma_destroy,
+	.mhi_dma_memcpy_init = ipa_mhi_dma_memcpy_init,
+	.mhi_dma_memcpy_destroy = ipa_mhi_dma_memcpy_destroy,
+	.mhi_dma_sync_memcpy = ipa_mhi_dma_sync_memcpy,
+	.mhi_dma_async_memcpy = ipa_mhi_dma_async_memcpy,
+	.mhi_dma_memcpy_enable = ipa_mhi_dma_memcpy_enable,
+	.mhi_dma_memcpy_disable = ipa_mhi_dma_memcpy_disable,
+	.mhi_dma_map_buffer = ipa_mhi_dma_map_buffer,
+	.mhi_dma_unmap_buffer = ipa_mhi_dma_unmap_buffer,
+	.mhi_dma_alloc_buffer = ipa_mhi_dma_alloc_buffer,
+	.mhi_dma_free_buffer = ipa_mhi_dma_free_buffer,
+	.mhi_dma_update_mstate = ipa_mhi_dma_update_mstate,
+	.mhi_dma_resume = ipa_mhi_dma_resume,
+	.mhi_dma_suspend = ipa_mhi_dma_suspend,
+};
+
+int ipa_dma_mhi_provide_ops()
+{
+	return mhi_dma_provide_ops(&ipa_dma_mhi_driver_ops);
+}
+EXPORT_SYMBOL(ipa_dma_mhi_provide_ops);
+/* End of the new mhi API */
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("IPA MHI client driver");

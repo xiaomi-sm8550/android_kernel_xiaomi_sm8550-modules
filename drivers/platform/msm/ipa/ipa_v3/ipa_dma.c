@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 
@@ -1118,6 +1119,50 @@ void ipa3_dma_async_memcpy_notify_cb(void *priv
 
 	IPADMA_FUNC_EXIT();
 }
+
+/* New dma API implementation for mhi_dma.h */
+
+int ipa_mhi_dma_memcpy_init(struct mhi_dma_function_params function)
+{
+	return ipa3_dma_init();
+}
+EXPORT_SYMBOL(ipa_mhi_dma_memcpy_init);
+
+void ipa_mhi_dma_memcpy_destroy(struct mhi_dma_function_params function)
+{
+	return ipa3_dma_destroy();
+}
+EXPORT_SYMBOL(ipa_mhi_dma_memcpy_destroy);
+
+int ipa_mhi_dma_sync_memcpy(u64 dest, u64 src, int len,
+		struct mhi_dma_function_params function)
+{
+	return ipa3_dma_sync_memcpy(dest, src, len);
+}
+EXPORT_SYMBOL(ipa_mhi_dma_sync_memcpy);
+
+int ipa_mhi_dma_async_memcpy(u64 dest, u64 src, int len,
+		 struct mhi_dma_function_params function,
+		 void (*user_cb)(void *user1), void *user_param)
+{
+	return ipa3_dma_async_memcpy(dest, src, len, user_cb, user_param);
+}
+EXPORT_SYMBOL(ipa_mhi_dma_async_memcpy);
+
+int ipa_mhi_dma_memcpy_enable(struct mhi_dma_function_params function)
+{
+	return ipa3_dma_enable();
+}
+EXPORT_SYMBOL(ipa_mhi_dma_memcpy_enable);
+
+int ipa_mhi_dma_memcpy_disable(struct mhi_dma_function_params function)
+{
+	return ipa3_dma_disable();
+}
+EXPORT_SYMBOL(ipa_mhi_dma_memcpy_disable);
+
+/* End of the new dma API */
+
 
 #ifdef CONFIG_DEBUG_FS
 static struct dentry *dent;

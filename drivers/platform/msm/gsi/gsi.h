@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef GSI_H
@@ -2200,6 +2200,18 @@ int gsi_stop_db_channel(unsigned long chan_hdl);
  */
 int gsi_query_channel_db_addr(unsigned long chan_hdl,
 		uint32_t *db_addr_wp_lsb, uint32_t *db_addr_wp_msb);
+
+/**
+ * gsi_get_channel_event_db_base_addr - Get the physical base addresses of
+ * gsi channel doorbell and event channel doorbell
+ *
+ * @ch_db_base_addr: Physical base address of gsi channel doorbell register
+ * @ev_db_base_addr: Physical base address of event channel doorbell register
+ *
+ * @Return gsi_status
+ */
+int gsi_get_channel_event_db_base_addr(uint64_t *ch_db_base_addr,
+		uint64_t *ev_db_base_addr);
 
 /**
  * gsi_query_channel_info - Peripheral can call this function to query the
