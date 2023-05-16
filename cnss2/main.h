@@ -41,6 +41,8 @@
 #endif
 #include <linux/iommu.h>
 #include "qmi.h"
+#include "cnss_prealloc.h"
+#include "cnss_common.h"
 
 #define MAX_NO_OF_MAC_ADDR		4
 #define QMI_WLFW_MAX_TIMESTAMP_LEN	32
@@ -555,7 +557,9 @@ struct cnss_plat_data {
 	u8 use_fw_path_with_prefix;
 	char firmware_name[MAX_FIRMWARE_NAME_LEN];
 	char fw_fallback_name[MAX_FIRMWARE_NAME_LEN];
+#ifndef CONFIG_DISABLE_CNSS_SRAM_DUMP
 	u8 *sram_dump;
+#endif
 	struct completion rddm_complete;
 	struct completion recovery_complete;
 	struct cnss_control_params ctrl_params;
@@ -607,6 +611,8 @@ struct cnss_plat_data {
 	const char *pld_bus_ops_name;
 	u32 on_chip_pmic_devices_count;
 	u32 *on_chip_pmic_board_ids;
+	bool no_bwscale;
+	bool sleep_clk;
 };
 
 #if IS_ENABLED(CONFIG_ARCH_QCOM)
@@ -632,12 +638,15 @@ static inline u64 cnss_get_host_timestamp(struct cnss_plat_data *plat_priv)
 int cnss_wlan_hw_disable_check(struct cnss_plat_data *plat_priv);
 int cnss_wlan_hw_enable(void);
 struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);
+struct cnss_plat_data *cnss_get_first_plat_priv(struct platform_device *plat_dev);
 void cnss_pm_stay_awake(struct cnss_plat_data *plat_priv);
 void cnss_pm_relax(struct cnss_plat_data *plat_priv);
 struct cnss_plat_data *cnss_get_plat_priv_by_rc_num(int rc_num);
 int cnss_get_plat_env_count(void);
 struct cnss_plat_data *cnss_get_plat_env(int index);
 void cnss_get_qrtr_info(struct cnss_plat_data *plat_priv);
+void cnss_get_sleep_clk_supported(struct cnss_plat_data *plat_priv);
+void cnss_get_bwscal_info(struct cnss_plat_data *plat_priv);
 bool cnss_is_dual_wlan_enabled(void);
 int cnss_driver_event_post(struct cnss_plat_data *plat_priv,
 			   enum cnss_driver_event_type type,

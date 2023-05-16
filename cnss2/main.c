@@ -150,6 +150,20 @@ struct cnss_plat_data *cnss_get_plat_priv(struct platform_device
 	return NULL;
 }
 
+struct cnss_plat_data *cnss_get_first_plat_priv(struct platform_device
+						 *plat_dev)
+{
+	int i;
+
+	if (!plat_dev) {
+		for (i = 0; i < plat_env_count; i++) {
+			if (plat_env[i])
+				return plat_env[i];
+		}
+	}
+	return NULL;
+}
+
 static void cnss_clear_plat_priv(struct cnss_plat_data *plat_priv)
 {
 	cnss_pr_dbg("Clear plat_priv at %d", plat_priv->plat_idx);
@@ -273,6 +287,20 @@ cnss_get_pld_bus_ops_name(struct cnss_plat_data *plat_priv)
 	return 0;
 }
 #endif
+
+void cnss_get_sleep_clk_supported(struct cnss_plat_data *plat_priv)
+{
+	plat_priv->sleep_clk = of_property_read_bool(plat_priv->dev_node,
+						     "qcom,sleep-clk-support");
+	cnss_pr_dbg("qcom,sleep-clk-support is %d\n",
+		    plat_priv->sleep_clk);
+}
+
+void cnss_get_bwscal_info(struct cnss_plat_data *plat_priv)
+{
+	plat_priv->no_bwscale = of_property_read_bool(plat_priv->dev_node,
+						      "qcom,no-bwscale");
+}
 
 static inline int
 cnss_get_rc_num(struct cnss_plat_data *plat_priv)
@@ -1320,7 +1348,9 @@ int cnss_idle_restart(struct device *dev)
 	ret = cnss_driver_event_post(plat_priv,
 				     CNSS_DRIVER_EVENT_IDLE_RESTART,
 				     CNSS_EVENT_SYNC_UNINTERRUPTIBLE, NULL);
-	if (ret)
+	if (ret == -EINTR && plat_priv->device_id != QCA6174_DEVICE_ID)
+		cnss_pr_err("Idle restart has been interrupted but device power up is still in progress");
+	else if (ret)
 		goto out;
 
 	if (plat_priv->device_id == QCA6174_DEVICE_ID) {
@@ -3112,10 +3142,6 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 		[CNSS_HOST_WMI_EVENT_LOG] = "wmi_event_log",
 		[CNSS_HOST_WMI_RX_EVENT] = "wmi_rx_event",
 		[CNSS_HOST_HAL_SOC] = "hal_soc",
-		[CNSS_HOST_WMI_HANG_DATA] = "wmi_hang_data",
-		[CNSS_HOST_CE_HANG_EVT] = "ce_hang_evt",
-		[CNSS_HOST_PEER_MAC_ADDR_HANG_DATA] = "peer_mac_addr_hang_data",
-		[CNSS_HOST_CP_VDEV_INFO] = "cp_vdev_info",
 		[CNSS_HOST_GWLAN_LOGGING] = "gwlan_logging",
 		[CNSS_HOST_WMI_DEBUG_LOG_INFO] = "wmi_debug_log_info",
 		[CNSS_HOST_HTC_CREDIT_IDX] = "htc_credit_history_idx",
@@ -3123,7 +3149,10 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 		[CNSS_HOST_WMI_TX_CMP_IDX] = "wmi_tx_cmp_idx",
 		[CNSS_HOST_WMI_COMMAND_LOG_IDX] = "wmi_command_log_idx",
 		[CNSS_HOST_WMI_EVENT_LOG_IDX] = "wmi_event_log_idx",
-		[CNSS_HOST_WMI_RX_EVENT_IDX] = "wmi_rx_event_idx"
+		[CNSS_HOST_WMI_RX_EVENT_IDX] = "wmi_rx_event_idx",
+		[CNSS_HOST_HIF_CE_DESC_HISTORY] = "hif_ce_desc_history",
+		[CNSS_HOST_HIF_CE_DESC_HISTORY_BUFF] = "hif_ce_desc_history_buff",
+		[CNSS_HOST_HANG_EVENT_DATA] = "hang_event_data"
 	};
 	int i;
 	int ret = 0;
@@ -4235,6 +4264,19 @@ int cnss_wlan_hw_disable_check(struct cnss_plat_data *plat_priv)
 }
 #endif
 
+#ifdef CONFIG_DISABLE_CNSS_SRAM_DUMP
+static void cnss_sram_dump_init(struct cnss_plat_data *plat_priv)
+{
+}
+#else
+static void cnss_sram_dump_init(struct cnss_plat_data *plat_priv)
+{
+	if (plat_priv->device_id == QCA6490_DEVICE_ID &&
+	    cnss_get_host_build_type() == QMI_HOST_BUILD_TYPE_PRIMARY_V01)
+		plat_priv->sram_dump = kcalloc(SRAM_DUMP_SIZE, 1, GFP_KERNEL);
+}
+#endif
+
 static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 {
 	int ret;
@@ -4278,9 +4320,7 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 		cnss_pr_err("QMI IPC connection call back register failed, err = %d\n",
 			    ret);
 
-	if (plat_priv->device_id == QCA6490_DEVICE_ID &&
-	    cnss_get_host_build_type() == QMI_HOST_BUILD_TYPE_PRIMARY_V01)
-		plat_priv->sram_dump = kcalloc(SRAM_DUMP_SIZE, 1, GFP_KERNEL);
+	cnss_sram_dump_init(plat_priv);
 
 	if (of_property_read_bool(plat_priv->plat_dev->dev.of_node,
 				  "qcom,rc-ep-short-channel"))
@@ -4288,6 +4328,19 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 
 	return 0;
 }
+
+#ifdef CONFIG_DISABLE_CNSS_SRAM_DUMP
+static void cnss_sram_dump_deinit(struct cnss_plat_data *plat_priv)
+{
+}
+#else
+static void cnss_sram_dump_deinit(struct cnss_plat_data *plat_priv)
+{
+	if (plat_priv->device_id == QCA6490_DEVICE_ID &&
+	    cnss_get_host_build_type() == QMI_HOST_BUILD_TYPE_PRIMARY_V01)
+		kfree(plat_priv->sram_dump);
+}
+#endif
 
 static void cnss_misc_deinit(struct cnss_plat_data *plat_priv)
 {
@@ -4303,7 +4356,7 @@ static void cnss_misc_deinit(struct cnss_plat_data *plat_priv)
 	del_timer(&plat_priv->fw_boot_timer);
 	wakeup_source_unregister(plat_priv->recovery_ws);
 	cnss_deinit_sol_gpio(plat_priv);
-	kfree(plat_priv->sram_dump);
+	cnss_sram_dump_deinit(plat_priv);
 	kfree(plat_priv->on_chip_pmic_board_ids);
 }
 
@@ -4521,8 +4574,16 @@ end:
 
 int cnss_wlan_hw_enable(void)
 {
-	struct cnss_plat_data *plat_priv = cnss_get_plat_priv(NULL);
+	struct cnss_plat_data *plat_priv;
 	int ret = 0;
+
+	if (cnss_is_dual_wlan_enabled())
+		plat_priv = cnss_get_first_plat_priv(NULL);
+	else
+		plat_priv = cnss_get_plat_priv(NULL);
+
+	if (!plat_priv)
+		return -ENODEV;
 
 	clear_bit(CNSS_WLAN_HW_DISABLED, &plat_priv->driver_state);
 
@@ -4806,6 +4867,8 @@ static int cnss_probe(struct platform_device *plat_dev)
 		goto reset_plat_dev;
 	}
 
+	cnss_initialize_prealloc_pool(plat_priv->device_id);
+
 	ret = cnss_get_pld_bus_ops_name(plat_priv);
 	if (ret)
 		cnss_pr_err("Failed to find bus ops name, err = %d\n",
@@ -4909,6 +4972,7 @@ free_res:
 	cnss_put_resources(plat_priv);
 reset_ctx:
 	platform_set_drvdata(plat_dev, NULL);
+	cnss_deinitialize_prealloc_pool();
 reset_plat_dev:
 	cnss_clear_plat_priv(plat_priv);
 out:
@@ -4937,6 +5001,8 @@ static int cnss_remove(struct platform_device *plat_dev)
 
 	if (!IS_ERR_OR_NULL(plat_priv->mbox_chan))
 		mbox_free_channel(plat_priv->mbox_chan);
+
+	cnss_deinitialize_prealloc_pool();
 
 	platform_set_drvdata(plat_dev, NULL);
 	cnss_clear_plat_priv(plat_priv);

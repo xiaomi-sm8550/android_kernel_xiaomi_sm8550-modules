@@ -819,6 +819,13 @@ static int cnss_mhi_device_get_sync_atomic(struct cnss_pci_data *pci_priv,
 					  timeout_us, in_panic);
 }
 
+#ifdef CONFIG_CNSS2_SMMU_DB_SUPPORT
+static int cnss_mhi_host_notify_db_disable_trace(struct cnss_pci_data *pci_priv)
+{
+	return mhi_host_notify_db_disable_trace(pci_priv->mhi_ctrl);
+}
+#endif
+
 static void
 cnss_mhi_controller_set_bw_scale_cb(struct cnss_pci_data *pci_priv,
 				    int (*cb)(struct mhi_controller *mhi_ctrl,
@@ -875,6 +882,13 @@ static int cnss_mhi_device_get_sync_atomic(struct cnss_pci_data *pci_priv,
 	return -EOPNOTSUPP;
 }
 
+#ifdef CONFIG_CNSS2_SMMU_DB_SUPPORT
+static int cnss_mhi_host_notify_db_disable_trace(struct cnss_pci_data *pci_priv)
+{
+	return -EOPNOTSUPP;
+}
+#endif
+
 static void
 cnss_mhi_controller_set_bw_scale_cb(struct cnss_pci_data *pci_priv,
 				    int (*cb)(struct mhi_controller *mhi_ctrl,
@@ -892,6 +906,37 @@ void cnss_mhi_controller_set_base(struct cnss_pci_data *pci_priv,
 {
 }
 #endif /* CONFIG_MHI_BUS_MISC */
+
+#ifdef CONFIG_CNSS2_SMMU_DB_SUPPORT
+#define CNSS_MHI_WAKE_TIMEOUT		500000
+static void cnss_pci_smmu_fault_handler_irq(struct iommu_domain *domain,
+					    void *handler_token)
+{
+	struct cnss_pci_data *pci_priv = handler_token;
+	int ret = 0;
+
+	ret = cnss_mhi_device_get_sync_atomic(pci_priv,
+					      CNSS_MHI_WAKE_TIMEOUT, true);
+	if (ret < 0) {
+		cnss_pr_err("Failed to bring mhi in M0 state, ret %d\n", ret);
+		return;
+	}
+
+	ret = cnss_mhi_host_notify_db_disable_trace(pci_priv);
+	if (ret < 0)
+		cnss_pr_err("Fail to notify wlan fw to stop trace collection, ret %d\n", ret);
+}
+
+void cnss_register_iommu_fault_handler_irq(struct cnss_pci_data *pci_priv)
+{
+	qcom_iommu_set_fault_handler_irq(pci_priv->iommu_domain,
+					 cnss_pci_smmu_fault_handler_irq, pci_priv);
+}
+#else
+void cnss_register_iommu_fault_handler_irq(struct cnss_pci_data *pci_priv)
+{
+}
+#endif
 
 int cnss_pci_check_link_status(struct cnss_pci_data *pci_priv)
 {
@@ -1611,6 +1656,7 @@ EXPORT_SYMBOL(cnss_get_pci_slot);
  */
 static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 {
+	enum mhi_ee_type ee;
 	u32 mem_addr, val, pbl_log_max_size, sbl_log_max_size;
 	u32 pbl_log_sram_start;
 	u32 pbl_stage, sbl_log_start, sbl_log_size;
@@ -1667,6 +1713,12 @@ static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 	cnss_pr_dbg("PBL_WLAN_BOOT_CFG: 0x%08x PBL_BOOTSTRAP_STATUS: 0x%08x\n",
 		    pbl_wlan_boot_cfg, pbl_bootstrap_status);
 
+	ee = mhi_get_exec_env(pci_priv->mhi_ctrl);
+	if (CNSS_MHI_IN_MISSION_MODE(ee)) {
+		cnss_pr_dbg("Avoid Dumping PBL log data in Mission mode\n");
+		return;
+	}
+
 	cnss_pr_dbg("Dumping PBL log data\n");
 	for (i = 0; i < pbl_log_max_size; i += sizeof(val)) {
 		mem_addr = pbl_log_sram_start + i;
@@ -1684,6 +1736,12 @@ static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 		return;
 	}
 
+	ee = mhi_get_exec_env(pci_priv->mhi_ctrl);
+	if (CNSS_MHI_IN_MISSION_MODE(ee)) {
+		cnss_pr_dbg("Avoid Dumping SBL log data in Mission mode\n");
+		return;
+	}
+
 	cnss_pr_dbg("Dumping SBL log data\n");
 	for (i = 0; i < sbl_log_size; i += sizeof(val)) {
 		mem_addr = sbl_log_start + i;
@@ -1693,6 +1751,11 @@ static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 	}
 }
 
+#ifdef CONFIG_DISABLE_CNSS_SRAM_DUMP
+static void cnss_pci_dump_sram(struct cnss_pci_data *pci_priv)
+{
+}
+#else
 static void cnss_pci_dump_sram(struct cnss_pci_data *pci_priv)
 {
 	struct cnss_plat_data *plat_priv;
@@ -1727,6 +1790,7 @@ static void cnss_pci_dump_sram(struct cnss_pci_data *pci_priv)
 			cond_resched();
 	}
 }
+#endif
 
 static int cnss_pci_handle_mhi_poweron_timeout(struct cnss_pci_data *pci_priv)
 {
@@ -6370,8 +6434,13 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	if (cnss_pci_get_drv_supported(pci_priv))
 		cnss_mhi_controller_set_base(pci_priv, bar_start);
 
+	cnss_get_bwscal_info(plat_priv);
+	cnss_pr_dbg("no_bwscale: %d\n", plat_priv->no_bwscale);
+
 	/* BW scale CB needs to be set after registering MHI per requirement */
-	cnss_mhi_controller_set_bw_scale_cb(pci_priv, cnss_mhi_bw_scale);
+	if (!plat_priv->no_bwscale)
+		cnss_mhi_controller_set_bw_scale_cb(pci_priv,
+						    cnss_mhi_bw_scale);
 
 	ret = cnss_pci_update_fw_name(pci_priv);
 	if (ret)
@@ -6737,6 +6806,8 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 		cnss_pr_err("Failed to get device cfg node, err = %d\n", ret);
 		goto reset_ctx;
 	}
+
+	cnss_get_sleep_clk_supported(plat_priv);
 
 	ret = cnss_dev_specific_power_on(plat_priv);
 	if (ret < 0)

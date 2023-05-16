@@ -4541,6 +4541,8 @@ static int icnss_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&priv->clk_list);
 	icnss_allow_recursive_recovery(dev);
 
+	cnss_initialize_prealloc_pool(priv->device_id);
+
 	icnss_init_control_params(priv);
 
 	icnss_read_device_configs(priv);
@@ -4656,6 +4658,7 @@ smmu_cleanup:
 out_free_resources:
 	icnss_put_resources(priv);
 out_reset_drvdata:
+	cnss_deinitialize_prealloc_pool();
 	dev_set_drvdata(dev, NULL);
 	return ret;
 }
@@ -4749,6 +4752,8 @@ static int icnss_remove(struct platform_device *pdev)
 	icnss_hw_power_off(priv);
 
 	icnss_put_resources(priv);
+
+	cnss_deinitialize_prealloc_pool();
 
 	dev_set_drvdata(&pdev->dev, NULL);
 
