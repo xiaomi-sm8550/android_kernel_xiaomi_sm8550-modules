@@ -976,4 +976,7 @@ struct cam_flash_query_cap_info_v2 {
 	__u32    params[3];
 } __attribute__ ((packed));
 
+#define VIDIOC_MSM_CCI_CFG \
+	_IOWR('V', BASE_VIDIOC_PRIVATE + 23, struct cam_cci_ctrl)
+
 #endif
