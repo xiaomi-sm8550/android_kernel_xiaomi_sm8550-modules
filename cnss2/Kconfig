@@ -164,3 +164,11 @@ config WCNSS_MEM_PRE_ALLOC
 	  This feature enable cld wlan driver to use pre allocated memory
 	  for it's internal usage and release it to back to pre allocated pool.
 	  This memory is allocated at the cold boot time.
+
+config CNSS2_ENUM_WITH_LOW_SPEED
+	bool "Enable/Disable enumurate with low speed feature"
+	depends on CNSS2
+	depends on PCI
+	help
+	  Set link target speed to Gen1 before enum, and then restore default
+	  RC speed to re-establish link speed. For Genoa chip, needn't restore.
