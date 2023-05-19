@@ -993,6 +993,7 @@ static int cam_tfe_hw_mgr_acquire_res_tfe_out_rdi(
 	tfe_out_res->res_id = tfe_out_res_id;
 	tfe_out_res->res_type = CAM_ISP_RESOURCE_TFE_OUT;
 	tfe_in_res->num_children++;
+	tfe_ctx->acquired_wm_mask |= (1 << out_port->res_id);
 
 	return 0;
 err:
@@ -1076,6 +1077,7 @@ static int cam_tfe_hw_mgr_acquire_res_tfe_out_pixel(
 		tfe_out_res->res_type = CAM_ISP_RESOURCE_TFE_OUT;
 		tfe_out_res->res_id = out_port->res_id;
 		tfe_in_res->num_children++;
+		tfe_ctx->acquired_wm_mask |= (1 << out_port->res_id);
 	}
 
 	return 0;
@@ -3990,6 +3992,7 @@ static int cam_tfe_mgr_release_hw(void *hw_mgr_priv,
 	ctx->last_cdm_done_req = 0;
 	ctx->is_shdr = false;
 	ctx->is_shdr_slave = false;
+	ctx->acquired_wm_mask = 0;
 	atomic_set(&ctx->overflow_pending, 0);
 
 	for (i = 0; i < ctx->last_submit_bl_cmd.bl_count; i++) {
@@ -4635,6 +4638,7 @@ static int cam_isp_tfe_packet_generic_blob_handler(void *user_data,
 		break;
 	case CAM_ISP_TFE_GENERIC_BLOB_TYPE_BW_LIMITER_CFG: {
 		struct cam_isp_tfe_out_rsrc_bw_limiter_config *bw_limit_config;
+
 		if (blob_size <
 			sizeof(struct cam_isp_tfe_out_rsrc_bw_limiter_config)) {
 			CAM_ERR(CAM_ISP, "Invalid blob size %u expected %lu",
@@ -5041,7 +5045,6 @@ static int cam_tfe_mgr_prepare_hw_update(void *hw_mgr_priv,
 			goto end;
 		}
 
-
 		/* get command buffers */
 		if (ctx->base[i].split_id != CAM_ISP_HW_SPLIT_MAX) {
 			rc = cam_tfe_add_command_buffers(prepare,
@@ -5060,6 +5063,8 @@ static int cam_tfe_mgr_prepare_hw_update(void *hw_mgr_priv,
 		memset(&frame_header_info, 0,
 			sizeof(struct cam_isp_frame_header_info));
 		frame_header_info.frame_header_enable = false;
+
+		prepare_hw_data->wm_bitmask = ctx->acquired_wm_mask;
 
 		/* get IO buffers */
 		rc = cam_isp_add_io_buffers(hw_mgr->mgr_common.img_iommu_hdl,
