@@ -4339,12 +4339,6 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 	timer_setup(&plat_priv->fw_boot_timer,
 		    cnss_bus_fw_boot_timeout_hdlr, 0);
 
-	plat_priv->reboot_nb.notifier_call = cnss_reboot_notifier;
-	ret = register_reboot_notifier(&plat_priv->reboot_nb);
-	if (ret)
-		cnss_pr_err("Failed to register reboot notifier, err = %d\n",
-			    ret);
-
 	ret = device_init_wakeup(&plat_priv->plat_dev->dev, true);
 	if (ret)
 		cnss_pr_err("Failed to init platform device wakeup source, err = %d\n",
@@ -4358,6 +4352,13 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 	init_completion(&plat_priv->daemon_connected);
 	mutex_init(&plat_priv->dev_lock);
 	mutex_init(&plat_priv->driver_ops_lock);
+
+	plat_priv->reboot_nb.notifier_call = cnss_reboot_notifier;
+	ret = register_reboot_notifier(&plat_priv->reboot_nb);
+	if (ret)
+		cnss_pr_err("Failed to register reboot notifier, err = %d\n",
+			    ret);
+
 	plat_priv->recovery_ws =
 		wakeup_source_register(&plat_priv->plat_dev->dev,
 				       "CNSS_FW_RECOVERY");
