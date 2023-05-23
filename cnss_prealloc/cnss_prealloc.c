@@ -169,6 +169,9 @@ static void cnss_pool_deinit(void)
 {
 	int i;
 
+	if (!cnss_pools)
+		return;
+
 	for (i = 0; i < cnss_prealloc_pool_size; i++) {
 		pr_info("cnss_prealloc: destroy mempool %s\n",
 			cnss_pools[i].name);
@@ -298,6 +301,9 @@ void *wcnss_prealloc_get(size_t size)
 	gfp_t gfp_mask = __GFP_ZERO;
 	int i;
 
+	if (!cnss_pools)
+		return mem;
+
 	if (in_interrupt() || !preemptible() || rcu_preempt_depth())
 		gfp_mask |= GFP_ATOMIC;
 	else
@@ -337,7 +343,7 @@ int wcnss_prealloc_put(void *mem)
 {
 	int i;
 
-	if (!mem)
+	if (!mem || !cnss_pools)
 		return 0;
 
 	i = cnss_pool_get_index(mem);
