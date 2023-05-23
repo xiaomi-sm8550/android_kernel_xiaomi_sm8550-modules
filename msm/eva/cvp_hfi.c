@@ -2908,7 +2908,7 @@ static int __response_handler(struct iris_hfi_device *device)
 		return 0;
 	}
 
-	if (device->intr_status & CVP_FATAL_INTR_BMSK) {
+	if (device->intr_status & CVP_WRAPPER_INTR_MASK_A2HWD_BMSK) {
 		struct cvp_hfi_sfr_struct *vsfr = (struct cvp_hfi_sfr_struct *)
 			device->sfr.align_virtual_addr;
 		struct msm_cvp_cb_info info = {
