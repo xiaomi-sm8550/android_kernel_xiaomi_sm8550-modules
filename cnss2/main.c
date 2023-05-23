@@ -4952,8 +4952,8 @@ static int cnss_probe(struct platform_device *plat_dev)
 
 	ret = cnss_get_pld_bus_ops_name(plat_priv);
 	if (ret)
-		cnss_pr_err("Failed to find bus ops name, err = %d\n",
-			    ret);
+		cnss_pr_vdbg("Failed to find bus ops name, err = %d\n",
+			     ret);
 
 	ret = cnss_get_rc_num(plat_priv);
 
