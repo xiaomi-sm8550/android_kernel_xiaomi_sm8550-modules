@@ -6296,6 +6296,17 @@ static struct msm_vidc_ubwc_config_data ubwc_config_crow[] = {
 	UBWC_CONFIG(8, 32, 15, 0, 1, 1, 1),
 };
 
+static struct allowed_clock_rates_table clock_data_crow[] = {
+	{165000000 }, {270000000}, {366000000 }, {384000000}
+};
+
+static struct msm_vidc_efuse_data efuse_data_crow[] = {
+	/* IRIS_DISABLE_10BIT_ENCODE, SKU VERSION: 2*/
+	EFUSE_ENTRY(0x221C8118, 4, 0x1000, 0xB, SKU_VERSION),
+	/* IRIS_FMAX_LIMIT_UHD30, SKU VERSION: 1 */
+	EFUSE_ENTRY(0x221C812C, 4, 0x40, 0x6, SKU_VERSION),
+};
+
 static const struct msm_vidc_platform_data crow_data = {
 	.core_data = core_data_crow_v0,
 	.core_data_size = ARRAY_SIZE(core_data_crow_v0),
@@ -6308,6 +6319,8 @@ static const struct msm_vidc_platform_data crow_data = {
 	.csc_data.vpe_csc_custom_limit_coeff = vpe_csc_custom_limit_coeff,
 	.ubwc_config = ubwc_config_crow,
 	.vpu_ver = VPU_VERSION_IRIS2_1,
+	.efuse_data = efuse_data_crow,
+	.efuse_data_size = ARRAY_SIZE(efuse_data_crow),
 };
 
 static int msm_vidc_init_data(struct msm_vidc_core *core)
@@ -6323,6 +6336,13 @@ static int msm_vidc_init_data(struct msm_vidc_core *core)
 
 	core->platform->data = crow_data;
 	platform_data = &core->platform->data;
+
+	/* Check for sku version */
+	rc = msm_vidc_read_efuse(core);
+	if (rc) {
+		d_vpr_e("%s: Failed to read efuse\n", __func__);
+		return rc;
+	}
 
 	if (platform_data->sku_version == SKU_VERSION_1) {
 		platform_data->core_data = core_data_crow_v1;
@@ -6344,6 +6364,13 @@ static int msm_vidc_init_data(struct msm_vidc_core *core)
 		platform_data->inst_cap_dependency_data = instance_cap_dependency_data_crow_v2;
 		platform_data->inst_cap_dependency_data_size =
 				ARRAY_SIZE(instance_cap_dependency_data_crow_v2);
+	}
+
+	if (platform_data->sku_version) {
+		/* Override with SKU clock data into dt */
+		core->dt->allowed_clks_tbl = clock_data_crow;
+		core->dt->allowed_clks_tbl_size =
+				ARRAY_SIZE(clock_data_crow);
 	}
 
 	/* Check for DDR variant */
