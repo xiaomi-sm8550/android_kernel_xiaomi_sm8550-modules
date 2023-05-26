@@ -193,7 +193,6 @@ struct cvp_iface_q_info {
 
 struct cvp_hal_data {
 	u32 irq;
-	u32 irq_wd;
 	phys_addr_t firmware_base;
 	u8 __iomem *register_base;
 	u8 __iomem *gcc_reg_base;
@@ -270,7 +269,6 @@ struct iris_hfi_device {
 };
 
 irqreturn_t cvp_hfi_isr(int irq, void *dev);
-irqreturn_t iris_hfi_isr_wd(int irq, void *dev);
 void cvp_iris_hfi_delete_device(void *device);
 
 int cvp_iris_hfi_initialize(struct cvp_hfi_device *hdev, u32 device_id,

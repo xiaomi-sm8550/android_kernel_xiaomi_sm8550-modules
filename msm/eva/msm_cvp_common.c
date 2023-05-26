@@ -577,7 +577,7 @@ static void msm_comm_clean_notify_client(struct msm_cvp_core *core)
 	mutex_unlock(&core->lock);
 }
 
-void handle_sys_error(enum hal_command_response cmd, void *data)
+static void handle_sys_error(enum hal_command_response cmd, void *data)
 {
 	struct msm_cvp_cb_cmd_done *response = data;
 	struct msm_cvp_core *core = NULL;
