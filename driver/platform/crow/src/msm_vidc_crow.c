@@ -276,6 +276,38 @@ static struct msm_platform_inst_capability instance_cap_data_crow_v0[] = {
 		HFI_PROP_SECURE,
 		CAP_FLAG_NONE},
 
+	{META_OUTBUF_FENCE, DEC, H264|HEVC|VP9,
+		V4L2_MPEG_VIDC_META_DISABLE,
+		V4L2_MPEG_VIDC_META_DISABLE | V4L2_MPEG_VIDC_META_RX_INPUT,
+		0, V4L2_MPEG_VIDC_META_DISABLE,
+		V4L2_CID_MPEG_VIDC_METADATA_OUTBUF_FENCE,
+		0,
+		CAP_FLAG_BITMASK},
+
+	/*
+	 * Client to do set_ctrl with FENCE_ID to set fence_id
+	 * and then client will do get_ctrl with FENCE_FD to get
+	 * fence_fd corresponding to client set fence_id.
+	 */
+	{FENCE_ID, DEC, CODECS_ALL,
+		0, 0, 1, 0,
+		V4L2_CID_MPEG_VIDC_SW_FENCE_ID,
+		0,
+		CAP_FLAG_DYNAMIC_ALLOWED | CAP_FLAG_OUTPUT_PORT},
+
+	{FENCE_FD, DEC, CODECS_ALL,
+		INVALID_FD, INVALID_FD, 1, INVALID_FD,
+		V4L2_CID_MPEG_VIDC_SW_FENCE_FD},
+
+
+	{META_PICTURE_TYPE, DEC, CODECS_ALL,
+		V4L2_MPEG_VIDC_META_DISABLE,
+		V4L2_MPEG_VIDC_META_DISABLE | V4L2_MPEG_VIDC_META_RX_INPUT,
+		0, V4L2_MPEG_VIDC_META_DISABLE,
+		V4L2_CID_MPEG_VIDC_METADATA_PICTURE_TYPE,
+		0,
+		CAP_FLAG_BITMASK},
+
 	{TS_REORDER, DEC, H264|HEVC,
 		V4L2_MPEG_MSM_VIDC_DISABLE, V4L2_MPEG_MSM_VIDC_ENABLE,
 		1, V4L2_MPEG_MSM_VIDC_DISABLE,
@@ -1565,6 +1597,12 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_crow
 		{0},
 		NULL,
 		msm_vidc_set_u32},
+
+	{META_OUTBUF_FENCE, DEC, H264|HEVC|VP9,
+		{0},
+		{0},
+		NULL,
+		NULL},
 
 	{HFLIP, ENC, H264|HEVC,
 		{0},
