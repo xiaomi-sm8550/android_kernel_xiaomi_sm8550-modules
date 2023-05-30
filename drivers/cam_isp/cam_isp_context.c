@@ -6378,8 +6378,8 @@ static int __cam_isp_ctx_config_dev_in_top_state(
 		goto put_ref;
 
 	CAM_DBG(CAM_REQ,
-		"Preprocessing Config req_id %lld successful on ctx %u",
-		req->request_id, ctx->ctx_id);
+		"Preprocessing Config req_id %lld successful on ctx %u aux: %d",
+		req->request_id, ctx->ctx_id, (int)ctx_isp->vfps_aux_context);
 
 	if (ctx_isp->offline_context && atomic_read(&ctx_isp->rxd_epoch))
 		__cam_isp_ctx_schedule_apply_req(ctx_isp);
@@ -6693,6 +6693,11 @@ end:
 	return rc;
 }
 
+static void cam_req_mgr_process_workq_apply_req_worker(struct work_struct *w)
+{
+	cam_req_mgr_process_workq(w);
+}
+
 static int __cam_isp_ctx_acquire_hw_v1(struct cam_context *ctx,
 	void *args)
 {
@@ -6815,6 +6820,17 @@ static int __cam_isp_ctx_acquire_hw_v1(struct cam_context *ctx,
 			cam_isp_ctx_activated_state_machine;
 	}
 
+	if (ctx_isp->offline_context || ctx_isp->vfps_aux_context) {
+		rc = cam_req_mgr_workq_create("ife_apply_req", 20,
+			&ctx_isp->workq, CRM_WORKQ_USAGE_IRQ, 0,
+			cam_req_mgr_process_workq_apply_req_worker);
+		if (rc)
+			CAM_ERR(CAM_ISP,
+				"Failed to create workq for IFE rc:%d offline: %s vfps: %s",
+				rc, CAM_BOOL_TO_YESNO(ctx_isp->offline_context),
+				CAM_BOOL_TO_YESNO(ctx_isp->vfps_aux_context));
+	}
+
 	ctx_isp->hw_ctx = param.ctxt_to_hw_map;
 	ctx_isp->hw_acquired = true;
 	ctx->ctxt_to_hw_map = param.ctxt_to_hw_map;
@@ -6840,11 +6856,6 @@ free_res:
 	kfree(acquire_hw_info);
 end:
 	return rc;
-}
-
-static void cam_req_mgr_process_workq_apply_req_worker(struct work_struct *w)
-{
-	cam_req_mgr_process_workq(w);
 }
 
 static int __cam_isp_ctx_acquire_hw_v2(struct cam_context *ctx,
