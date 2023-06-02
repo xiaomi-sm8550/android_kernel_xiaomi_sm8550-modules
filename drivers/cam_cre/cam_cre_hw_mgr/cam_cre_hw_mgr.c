@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/mutex.h>
@@ -209,9 +209,17 @@ static int cam_cre_mgr_process_cmd_io_buf_req(struct cam_cre_hw_mgr *hw_mgr,
 
 				/* Width for WE has to be updated in number of pixels */
 				if (acq_io_buf->direction == CAM_BUF_OUTPUT) {
-					/* PLAIN 128/8 = 16 Bytes per pixel */
-					plane_info->width =
-						io_cfg_ptr[j].planes[k].plane_stride/16;
+					if (plane_info->format == CAM_FORMAT_PLAIN16_10) {
+						plane_info->width =
+							io_cfg_ptr[j].planes[k].plane_stride/2;
+					} else if (plane_info->format == CAM_FORMAT_PLAIN128) {
+						/* PLAIN 128/8 = 16 Bytes per pixel */
+						plane_info->width =
+							io_cfg_ptr[j].planes[k].plane_stride/16;
+					} else {
+						plane_info->width =
+							io_cfg_ptr[j].planes[k].width;
+					}
 				} else {
 					/* FE width should be in bytes */
 					plane_info->width     =
