@@ -663,8 +663,10 @@ int gen7_start(struct adreno_device *adreno_dev)
 	_llc_gpuhtw_slice_activate(adreno_dev);
 
 	kgsl_regwrite(device, GEN7_CP_APRIV_CNTL, GEN7_BR_APRIV_DEFAULT);
-	kgsl_regwrite(device, GEN7_CP_BV_APRIV_CNTL, GEN7_APRIV_DEFAULT);
-	kgsl_regwrite(device, GEN7_CP_LPAC_APRIV_CNTL, GEN7_APRIV_DEFAULT);
+	if (!adreno_is_gen7_14_0(adreno_dev))
+		kgsl_regwrite(device, GEN7_CP_BV_APRIV_CNTL, GEN7_APRIV_DEFAULT);
+	if (ADRENO_FEATURE(adreno_dev, ADRENO_LPAC))
+		kgsl_regwrite(device, GEN7_CP_LPAC_APRIV_CNTL, GEN7_APRIV_DEFAULT);
 
 	/*
 	 * CP Icache prefetch brings no benefit on few gen7 variants because of
@@ -863,9 +865,11 @@ int gen7_rb_start(struct adreno_device *adreno_dev)
 	kgsl_regwrite(device, GEN7_CP_RB_RPTR_ADDR_LO, lower_32_bits(addr));
 	kgsl_regwrite(device, GEN7_CP_RB_RPTR_ADDR_HI, upper_32_bits(addr));
 
-	addr = SCRATCH_RB_GPU_ADDR(device, rb->id, bv_rptr);
-	kgsl_regwrite(device, GEN7_CP_BV_RB_RPTR_ADDR_LO, lower_32_bits(addr));
-	kgsl_regwrite(device, GEN7_CP_BV_RB_RPTR_ADDR_HI, upper_32_bits(addr));
+	if (!adreno_is_gen7_14_0(adreno_dev)) {
+		addr = SCRATCH_RB_GPU_ADDR(device, rb->id, bv_rptr);
+		kgsl_regwrite(device, GEN7_CP_BV_RB_RPTR_ADDR_LO, lower_32_bits(addr));
+		kgsl_regwrite(device, GEN7_CP_BV_RB_RPTR_ADDR_HI, upper_32_bits(addr));
+	}
 
 	kgsl_regwrite(device, GEN7_CP_RB_CNTL, GEN7_CP_RB_CNTL_DEFAULT);
 
@@ -1007,6 +1011,9 @@ static void gen7_cp_hw_err_callback(struct adreno_device *adreno_dev, int bit)
 	if (status1 & BIT(CP_INT_ILLEGALINSTRUCTION))
 		dev_crit_ratelimited(dev, "CP Illegal instruction error\n");
 
+	if (!ADRENO_FEATURE(adreno_dev, ADRENO_LPAC))
+		goto bv;
+
 	if (status1 & BIT(CP_INT_OPCODEERRORLPAC))
 		dev_crit_ratelimited(dev, "CP Opcode error LPAC\n");
 
@@ -1021,6 +1028,10 @@ static void gen7_cp_hw_err_callback(struct adreno_device *adreno_dev, int bit)
 
 	if (status1 & BIT(CP_INT_ILLEGALINSTRUCTIONLPAC))
 		dev_crit_ratelimited(dev, "CP illegal instruction LPAC\n");
+
+bv:
+	if (adreno_is_gen7_14_0(adreno_dev))
+		return;
 
 	if (status1 & BIT(CP_INT_OPCODEERRORBV)) {
 		kgsl_regwrite(device, GEN7_CP_BV_SQE_STAT_ADDR, 1);
