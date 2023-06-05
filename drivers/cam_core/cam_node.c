@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/debugfs.h>
@@ -80,6 +80,24 @@ static int __cam_node_handle_query_cap(struct cam_node *node,
 
 	if (node->hw_mgr_intf.hw_get_caps) {
 		rc = node->hw_mgr_intf.hw_get_caps(
+			node->hw_mgr_intf.hw_mgr_priv, query);
+	}
+
+	return rc;
+}
+
+static int __cam_node_handle_query_cap_v2(struct cam_node *node,
+	struct cam_query_cap_cmd *query)
+{
+	int rc = -EFAULT;
+
+	if (!query) {
+		CAM_ERR(CAM_CORE, "Invalid params");
+		return -EINVAL;
+	}
+
+	if (node->hw_mgr_intf.hw_get_caps_v2) {
+		rc = node->hw_mgr_intf.hw_get_caps_v2(
 			node->hw_mgr_intf.hw_mgr_priv, query);
 	}
 
@@ -785,6 +803,28 @@ int cam_node_handle_ioctl(struct cam_node *node, struct cam_control *cmd)
 		}
 
 		rc = __cam_node_handle_query_cap(node, &query);
+		if (rc) {
+			CAM_ERR(CAM_CORE, "querycap is failed(rc = %d)",
+				rc);
+			break;
+		}
+
+		if (copy_to_user(u64_to_user_ptr(cmd->handle), &query,
+			sizeof(query)))
+			rc = -EFAULT;
+
+		break;
+	}
+	case CAM_QUERY_CAP_V2:{
+		struct cam_query_cap_cmd query;
+
+		if (copy_from_user(&query, u64_to_user_ptr(cmd->handle),
+			sizeof(query))) {
+			rc = -EFAULT;
+			break;
+		}
+
+		rc = __cam_node_handle_query_cap_v2(node, &query);
 		if (rc) {
 			CAM_ERR(CAM_CORE, "querycap is failed(rc = %d)",
 				rc);
