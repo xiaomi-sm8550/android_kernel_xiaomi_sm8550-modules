@@ -10,7 +10,6 @@
 #include <linux/pm_opp.h>
 #include <linux/slab.h>
 #include <linux/module.h>
-#include <soc/qcom/socinfo.h>
 
 #include "cam_cpas_hw.h"
 #include "cam_cpas_hw_intf.h"
@@ -3420,7 +3419,7 @@ static struct cam_hw_info *cam_cpas_kobj_to_cpas_hw(struct kobject *kobj)
 	return container_of(kobj, struct cam_cpas_kobj_map, base_kobj)->cpas_hw;
 }
 
-static ssize_t cam_cpas_get_subparts_info(struct kobject *kobj, struct kobj_attribute *attr,
+static ssize_t cam_cpas_sysfs_get_subparts_info(struct kobject *kobj, struct kobj_attribute *attr,
 	char *buf)
 {
 	int index, len = 0;
@@ -3459,7 +3458,7 @@ static ssize_t cam_cpas_get_subparts_info(struct kobject *kobj, struct kobj_attr
 }
 
 static struct kobj_attribute cam_subparts_info_attribute = __ATTR(subparts_info, 0444,
-	cam_cpas_get_subparts_info, NULL);
+	cam_cpas_sysfs_get_subparts_info, NULL);
 
 static void cam_cpas_hw_kobj_release(struct kobject *kobj)
 {
@@ -3530,6 +3529,7 @@ int cam_cpas_hw_probe(struct platform_device *pdev,
 {
 	int rc = 0;
 	int i;
+	int num_cam = 0;
 	struct cam_hw_info *cpas_hw = NULL;
 	struct cam_hw_intf *cpas_hw_intf = NULL;
 	struct cam_cpas *cpas_core = NULL;
@@ -3675,17 +3675,10 @@ int cam_cpas_hw_probe(struct platform_device *pdev,
 	camnoc_info = cpas_core->camnoc_info;
 	cam_subpart_info = camnoc_info->cam_subpart_info;
 	if (cam_subpart_info) {
-		soc_private->num_cam = socinfo_get_part_count(PART_CAMERA);
-		if (soc_private->num_cam > CAM_CPAS_MAX_INSTANCE || soc_private->num_cam < 0) {
-			CAM_ERR(CAM_CPAS, "Unsupported number of parts %d", soc_private->num_cam);
-			goto disable_soc_res;
-		}
-
-		rc = socinfo_get_subpart_info(PART_CAMERA, soc_private->part_info,
-				soc_private->num_cam);
-		if (rc) {
-			CAM_ERR(CAM_CPAS, "Failed while getting subpart_info, rc = %d.",
-				rc);
+		rc = cam_get_subpart_info(&soc_private->part_info, &num_cam);
+		if (rc || (num_cam != CAM_MAX_CAMERA_INSTANCES)) {
+			CAM_ERR(CAM_CPAS, "Failed to get subpart_info, rc = %d num_cam: %d",
+				rc, num_cam);
 			goto disable_soc_res;
 		}
 	}
