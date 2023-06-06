@@ -4185,7 +4185,7 @@ static void icnss_sysfs_destroy(struct icnss_priv *priv)
 
 static int icnss_resource_parse(struct icnss_priv *priv)
 {
-	int ret = 0, i = 0;
+	int ret = 0, i = 0, irq = 0;
 	struct platform_device *pdev = priv->pdev;
 	struct device *dev = &pdev->dev;
 	struct resource *res;
@@ -4233,14 +4233,13 @@ static int icnss_resource_parse(struct icnss_priv *priv)
 			     priv->mem_base_va);
 
 		for (i = 0; i < ICNSS_MAX_IRQ_REGISTRATIONS; i++) {
-			res = platform_get_resource(priv->pdev,
-						    IORESOURCE_IRQ, i);
-			if (!res) {
+			irq = platform_get_irq(pdev, i);
+			if (irq < 0) {
 				icnss_pr_err("Fail to get IRQ-%d\n", i);
 				ret = -ENODEV;
 				goto put_clk;
 			} else {
-				priv->ce_irqs[i] = res->start;
+				priv->ce_irqs[i] = irq;
 			}
 		}
 
