@@ -369,11 +369,6 @@ struct icnss_ramdump_info {
 	struct device *dev;
 };
 
-#ifndef SLATE_MODULE_ENABLED
-struct seb_notif_info {
-};
-#endif
-
 struct icnss_priv {
 	uint32_t magic;
 	struct platform_device *pdev;
@@ -511,8 +506,10 @@ struct icnss_priv {
 	u32 rf_subtype;
 	u8 is_slate_rfa;
 	struct completion slate_boot_complete;
+#ifdef SLATE_MODULE_ENABLED
 	struct seb_notif_info *seb_handle;
 	struct notifier_block seb_nb;
+#endif
 	struct timer_list recovery_timer;
 	struct timer_list wpss_ssr_timer;
 	bool wpss_self_recovery_enabled;
