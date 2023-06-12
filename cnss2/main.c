@@ -811,6 +811,23 @@ int cnss_set_pcie_gen_speed(struct device *dev, u8 pcie_gen_speed)
 }
 EXPORT_SYMBOL(cnss_set_pcie_gen_speed);
 
+static bool cnss_is_aux_support_enabled(struct cnss_plat_data *plat_priv)
+{
+	switch (plat_priv->device_id) {
+	case PEACH_DEVICE_ID:
+		if (!plat_priv->fw_aux_uc_support) {
+			cnss_pr_dbg("FW does not support aux uc capability\n");
+			return false;
+		}
+		break;
+	default:
+		cnss_pr_dbg("Host does not support aux uc capability\n");
+		return false;
+	}
+
+	return true;
+}
+
 static int cnss_fw_mem_ready_hdlr(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
@@ -849,6 +866,16 @@ static int cnss_fw_mem_ready_hdlr(struct cnss_plat_data *plat_priv)
 	ret = cnss_wlfw_m3_dnld_send_sync(plat_priv);
 	if (ret)
 		goto out;
+
+	if (cnss_is_aux_support_enabled(plat_priv)) {
+		ret = cnss_bus_load_aux(plat_priv);
+		if (ret)
+			goto out;
+
+		ret = cnss_wlfw_aux_dnld_send_sync(plat_priv);
+		if (ret)
+			goto out;
+	}
 
 	cnss_wlfw_qdss_dnld_send_sync(plat_priv);
 
@@ -1884,18 +1911,29 @@ static void cnss_recovery_work_handler(struct work_struct *work)
 {
 }
 #else
-static void cnss_recovery_work_handler(struct work_struct *work)
+void cnss_recovery_handler(struct cnss_plat_data *plat_priv)
 {
 	int ret;
 
-	struct cnss_plat_data *plat_priv =
-		container_of(work, struct cnss_plat_data, recovery_work);
+	set_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state);
 
 	if (!plat_priv->recovery_enabled)
 		panic("subsys-restart: Resetting the SoC wlan crashed\n");
 
 	cnss_bus_dev_shutdown(plat_priv);
 	cnss_bus_dev_ramdump(plat_priv);
+
+	/* If recovery is triggered before Host driver registration,
+	 * avoid device power up because eventually device will be
+	 * power up as part of driver registration.
+	 */
+	if (!test_bit(CNSS_DRIVER_REGISTER, &plat_priv->driver_state) ||
+	    !test_bit(CNSS_DRIVER_REGISTERED, &plat_priv->driver_state)) {
+		cnss_pr_dbg("Host driver not registered yet, ignore Device Power Up, 0x%lx\n",
+			    plat_priv->driver_state);
+		return;
+	}
+
 	msleep(POWER_RESET_MIN_DELAY_MS);
 
 	ret = cnss_bus_dev_powerup(plat_priv);
@@ -1903,6 +1941,14 @@ static void cnss_recovery_work_handler(struct work_struct *work)
 		__pm_relax(plat_priv->recovery_ws);
 
 	return;
+}
+
+static void cnss_recovery_work_handler(struct work_struct *work)
+{
+	struct cnss_plat_data *plat_priv =
+		container_of(work, struct cnss_plat_data, recovery_work);
+
+	cnss_recovery_handler(plat_priv);
 }
 
 void cnss_device_crashed(struct device *dev)
@@ -2011,6 +2057,18 @@ self_recovery:
 	if (test_bit(LINK_DOWN_SELF_RECOVERY, &plat_priv->ctrl_params.quirks))
 		clear_bit(LINK_DOWN_SELF_RECOVERY,
 			  &plat_priv->ctrl_params.quirks);
+
+	/* If link down self recovery is triggered before Host driver
+	 * registration, avoid device power up because eventually device
+	 * will be power up as part of driver registration.
+	 */
+
+	if (!test_bit(CNSS_DRIVER_REGISTER, &plat_priv->driver_state) ||
+	    !test_bit(CNSS_DRIVER_REGISTERED, &plat_priv->driver_state)) {
+		cnss_pr_dbg("Host driver not registered yet, ignore Device Power Up, 0x%lx\n",
+			    plat_priv->driver_state);
+		return 0;
+	}
 
 	cnss_bus_dev_powerup(plat_priv);
 
@@ -3927,14 +3985,15 @@ static ssize_t shutdown_store(struct device *dev,
 {
 	struct cnss_plat_data *plat_priv = dev_get_drvdata(dev);
 
+	cnss_pr_dbg("Received shutdown notification\n");
 	if (plat_priv) {
 		set_bit(CNSS_IN_REBOOT, &plat_priv->driver_state);
+		cnss_bus_update_status(plat_priv, CNSS_SYS_REBOOT);
 		del_timer(&plat_priv->fw_boot_timer);
 		complete_all(&plat_priv->power_up_complete);
 		complete_all(&plat_priv->cal_complete);
+		cnss_pr_dbg("Shutdown notification handled\n");
 	}
-
-	cnss_pr_dbg("Received shutdown notification\n");
 
 	return count;
 }
@@ -4183,6 +4242,7 @@ static int cnss_reboot_notifier(struct notifier_block *nb,
 		container_of(nb, struct cnss_plat_data, reboot_nb);
 
 	set_bit(CNSS_IN_REBOOT, &plat_priv->driver_state);
+	cnss_bus_update_status(plat_priv, CNSS_SYS_REBOOT);
 	del_timer(&plat_priv->fw_boot_timer);
 	complete_all(&plat_priv->power_up_complete);
 	complete_all(&plat_priv->cal_complete);
@@ -4277,6 +4337,24 @@ static void cnss_sram_dump_init(struct cnss_plat_data *plat_priv)
 }
 #endif
 
+#ifdef CONFIG_WCNSS_MEM_PRE_ALLOC
+static void cnss_initialize_mem_pool(unsigned long device_id)
+{
+	cnss_initialize_prealloc_pool(device_id);
+}
+static void cnss_deinitialize_mem_pool(void)
+{
+	cnss_deinitialize_prealloc_pool();
+}
+#else
+static void cnss_initialize_mem_pool(unsigned long device_id)
+{
+}
+static void cnss_deinitialize_mem_pool(void)
+{
+}
+#endif
+
 static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 {
 	int ret;
@@ -4287,12 +4365,6 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 
 	timer_setup(&plat_priv->fw_boot_timer,
 		    cnss_bus_fw_boot_timeout_hdlr, 0);
-
-	plat_priv->reboot_nb.notifier_call = cnss_reboot_notifier;
-	ret = register_reboot_notifier(&plat_priv->reboot_nb);
-	if (ret)
-		cnss_pr_err("Failed to register reboot notifier, err = %d\n",
-			    ret);
 
 	ret = device_init_wakeup(&plat_priv->plat_dev->dev, true);
 	if (ret)
@@ -4307,6 +4379,13 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 	init_completion(&plat_priv->daemon_connected);
 	mutex_init(&plat_priv->dev_lock);
 	mutex_init(&plat_priv->driver_ops_lock);
+
+	plat_priv->reboot_nb.notifier_call = cnss_reboot_notifier;
+	ret = register_reboot_notifier(&plat_priv->reboot_nb);
+	if (ret)
+		cnss_pr_err("Failed to register reboot notifier, err = %d\n",
+			    ret);
+
 	plat_priv->recovery_ws =
 		wakeup_source_register(&plat_priv->plat_dev->dev,
 				       "CNSS_FW_RECOVERY");
@@ -4325,6 +4404,8 @@ static int cnss_misc_init(struct cnss_plat_data *plat_priv)
 	if (of_property_read_bool(plat_priv->plat_dev->dev.of_node,
 				  "qcom,rc-ep-short-channel"))
 		cnss_set_feature_list(plat_priv, CNSS_RC_EP_ULTRASHORT_CHANNEL_V01);
+	if (plat_priv->device_id == PEACH_DEVICE_ID)
+		cnss_set_feature_list(plat_priv, CNSS_AUX_UC_SUPPORT_V01);
 
 	return 0;
 }
@@ -4867,7 +4948,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 		goto reset_plat_dev;
 	}
 
-	cnss_initialize_prealloc_pool(plat_priv->device_id);
+	cnss_initialize_mem_pool(plat_priv->device_id);
 
 	ret = cnss_get_pld_bus_ops_name(plat_priv);
 	if (ret)
@@ -4895,7 +4976,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	cnss_power_misc_params_init(plat_priv);
 	cnss_get_tcs_info(plat_priv);
 	cnss_get_cpr_info(plat_priv);
-	cnss_aop_mbox_init(plat_priv);
+	cnss_aop_interface_init(plat_priv);
 	cnss_init_control_params(plat_priv);
 
 	ret = cnss_get_resources(plat_priv);
@@ -4971,8 +5052,9 @@ unreg_esoc:
 free_res:
 	cnss_put_resources(plat_priv);
 reset_ctx:
+	cnss_aop_interface_deinit(plat_priv);
 	platform_set_drvdata(plat_dev, NULL);
-	cnss_deinitialize_prealloc_pool();
+	cnss_deinitialize_mem_pool();
 reset_plat_dev:
 	cnss_clear_plat_priv(plat_priv);
 out:
@@ -4998,12 +5080,8 @@ static int cnss_remove(struct platform_device *plat_dev)
 	cnss_unregister_bus_scale(plat_priv);
 	cnss_unregister_esoc(plat_priv);
 	cnss_put_resources(plat_priv);
-
-	if (!IS_ERR_OR_NULL(plat_priv->mbox_chan))
-		mbox_free_channel(plat_priv->mbox_chan);
-
-	cnss_deinitialize_prealloc_pool();
-
+	cnss_aop_interface_deinit(plat_priv);
+	cnss_deinitialize_mem_pool();
 	platform_set_drvdata(plat_dev, NULL);
 	cnss_clear_plat_priv(plat_priv);
 

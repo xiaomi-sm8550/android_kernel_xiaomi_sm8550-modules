@@ -86,6 +86,7 @@ enum cnss_driver_status {
 	CNSS_FW_DOWN,
 	CNSS_HANG_EVENT,
 	CNSS_BUS_EVENT,
+	CNSS_SYS_REBOOT,
 };
 
 enum cnss_host_dump_type {
@@ -247,6 +248,7 @@ enum cnss_recovery_reason {
 
 enum cnss_fw_caps {
 	CNSS_FW_CAP_DIRECT_LINK_SUPPORT,
+	CNSS_FW_CAP_AUX_UC_SUPPORT,
 };
 
 enum cnss_remote_mem_type {
@@ -345,7 +347,7 @@ extern int cnss_get_pci_slot(struct device *dev);
 extern int cnss_pci_get_reg_dump(struct device *dev, uint8_t *buffer,
 				 uint32_t len);
 extern struct kobject *cnss_get_wifi_kobj(struct device *dev);
-extern int cnss_send_buffer_to_afcmem(struct device *dev, char *afcdb,
+extern int cnss_send_buffer_to_afcmem(struct device *dev, const uint8_t *afcdb,
 				      uint32_t len, uint8_t slotid);
 extern int cnss_reset_afcmem(struct device *dev, uint8_t slotid);
 extern bool cnss_get_fw_cap(struct device *dev, enum cnss_fw_caps fw_cap);
