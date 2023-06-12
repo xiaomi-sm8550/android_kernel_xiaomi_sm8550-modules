@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _CAM_HW_MGR_INTF_H_
@@ -163,6 +163,7 @@ struct cam_hw_acquire_stream_caps {
  * @hw_mgr_ctx_id          HWMgr context id(returned)
  * @op_flags:              Used as bitwise params from hw_mgr to ctx
  *                         See xxx_hw_mgr_intf.h for definitions
+ * @link_hdl:              Link handle
  * @acquired_hw_id:        Acquired hardware mask
  * @acquired_hw_path:      Acquired path mask for an input
  *                         if input splits into multiple paths,
@@ -183,6 +184,7 @@ struct cam_hw_acquire_args {
 	void                        *ctxt_to_hw_map;
 	uint32_t                     hw_mgr_ctx_id;
 	uint32_t                     op_flags;
+	int32_t                      link_hdl;
 
 	uint32_t    acquired_hw_id[CAM_MAX_ACQ_RES];
 	uint32_t    acquired_hw_path[CAM_MAX_ACQ_RES][CAM_MAX_HW_SPLIT];
@@ -570,6 +572,8 @@ struct cam_hw_err_param {
  * @hw_mgr_priv:               HW manager object
  * @hw_get_caps:               Function pointer for get hw caps
  *                               args = cam_query_cap_cmd
+ * @hw_get_caps_v2:            Function pointer for get hw caps v2
+ *                               args = cam_query_cap_cmd_v2
  * @hw_acquire:                Function poniter for acquire hw resources
  *                               args = cam_hw_acquire_args
  * @hw_release:                Function pointer for release hw device resource
@@ -601,6 +605,7 @@ struct cam_hw_mgr_intf {
 	void *hw_mgr_priv;
 
 	int (*hw_get_caps)(void *hw_priv, void *hw_caps_args);
+	int (*hw_get_caps_v2)(void *hw_priv, void *hw_caps_args);
 	int (*hw_acquire)(void *hw_priv, void *hw_acquire_args);
 	int (*hw_release)(void *hw_priv, void *hw_release_args);
 	int (*hw_start)(void *hw_priv, void *hw_start_args);

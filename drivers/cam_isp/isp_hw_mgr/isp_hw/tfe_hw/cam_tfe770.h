@@ -153,6 +153,8 @@ static struct cam_tfe_camif_reg_data tfe770_camif_reg_data = {
 	.ai_c_srl_en_shift            = 11,
 	.ds16_c_srl_en_shift          = 10,
 	.ds4_c_srl_en_shift           = 9,
+	.shdr_mode_shift              = 21,
+	.extern_mup_shift             = 22,
 };
 
 static struct cam_tfe_rdi_reg  tfe770_rdi0_reg = {
@@ -1378,7 +1380,7 @@ static struct cam_tfe_bus_hw_info  tfe770_bus_hw_info = {
 	.support_consumed_addr = true,
 	.pdaf_rdi2_mux_en = false,
 	.rdi_width = 128,
-	.en_cfg_shift = 16,
+	.mode_cfg_shift = 16,
 	.height_shift = 16,
 };
 

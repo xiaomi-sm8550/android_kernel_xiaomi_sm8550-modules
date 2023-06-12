@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/iopoll.h>
@@ -543,7 +543,7 @@ int cam_ife_csid_check_in_port_args(
 	uint32_t hw_idx)
 {
 
-	if (reserve->in_port->res_type >= CAM_ISP_IFE_IN_RES_MAX) {
+	if (reserve->in_port->res_type >= CAM_IFE_CSID_IN_RES_MAX) {
 
 		CAM_ERR(CAM_ISP, "CSID:%d  Invalid phy sel %d",
 			hw_idx, reserve->in_port->res_type);

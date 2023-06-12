@@ -622,11 +622,9 @@ int cam_cpas_get_hw_features(struct platform_device *pdev,
 
 	CAM_DBG(CAM_CPAS, "fuse info elements count %d", count);
 
-	if (count <= 0) {
-		CAM_INFO(CAM_CPAS, "No or invalid fuse entries count: %d",
-			count);
+	if (count <= 0)
 		goto end;
-	} else if (count%5 != 0) {
+	else if (count%5 != 0) {
 		CAM_INFO(CAM_CPAS, "fuse entries should be multiple of 5 %d",
 			count);
 		goto end;
@@ -961,34 +959,6 @@ int cam_cpas_get_custom_dt_info(struct cam_hw_info *cpas_hw,
 		&soc_private->arch_compat);
 	if (rc) {
 		CAM_ERR(CAM_CPAS, "device %s failed to read arch-compat",
-			pdev->name);
-		return rc;
-	}
-
-	rc = of_property_read_u32(of_node, "num-ifes", &soc_private->sysfs_info.num_ifes);
-	if (rc) {
-		CAM_ERR(CAM_CPAS, "device %s failed to read num-ifes",
-			pdev->name);
-		return rc;
-	}
-
-	rc = of_property_read_u32(of_node, "num-ife-lites", &soc_private->sysfs_info.num_ife_lites);
-	if (rc) {
-		CAM_ERR(CAM_CPAS, "device %s failed to read num-ife-lites",
-			pdev->name);
-		return rc;
-	}
-
-	rc = of_property_read_u32(of_node, "num-sfes", &soc_private->sysfs_info.num_sfes);
-	if (rc) {
-		CAM_ERR(CAM_CPAS, "device %s failed to read num-sfes",
-			pdev->name);
-		return rc;
-	}
-
-	rc = of_property_read_u32(of_node, "num-custom", &soc_private->sysfs_info.num_custom);
-	if (rc) {
-		CAM_ERR(CAM_CPAS, "device %s failed to read num-custom",
 			pdev->name);
 		return rc;
 	}

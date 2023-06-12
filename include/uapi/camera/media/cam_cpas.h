@@ -78,11 +78,12 @@
 #define CAM_CPAS_VOTE_LEVEL_HIGH   1
 #define CAM_CPAS_VOTE_LEVEL_LOW    2
 
-/* sysfs for number of IFEs, IFE_LITEs, SFEs and SBI */
-#define CAM_SYSFS_NUM_IFES_FILENAME      "num_ifes"
-#define CAM_SYSFS_NUM_IFE_LITES_FILENAME "num_ife_lites"
-#define CAM_SYSFS_NUM_SFES_FILENAME      "num_sfes"
-#define CAM_SYSFS_NUM_SBI_FILENAME       "num_sbi"
+/* sysfs entry of camera subparts info */
+#define CAM_SYSFS_SUBPARTS_INFO_FILENAME   "subparts_info"
+#define CAM_SYSFS_IFE_HW_IDX       0
+#define CAM_SYSFS_IFE_LITE_HW_IDX  1
+#define CAM_SYSFS_SFE_HW_IDX       2
+#define CAM_SYSFS_CUSTOM_HW_IDX    3
 
 /**
  * struct cam_cpas_fuse_value - CPAS fuse value
