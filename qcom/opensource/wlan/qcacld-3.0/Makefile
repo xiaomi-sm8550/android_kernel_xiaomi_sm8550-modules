@@ -35,6 +35,8 @@ KBUILD_OPTIONS += \
     WLAN_CTRL_NAME=wlan
 endif
 
+KBUILD_OPTIONS += KBUILD_EXTRA_SYMBOLS=$(OUT_DIR)/../sm8550-modules/qcom/opensource/wlan/platform/Module.symvers
+
 all:
 	$(MAKE) -C $(KERNEL_SRC) M=$(M) modules $(KBUILD_OPTIONS)
 
