@@ -4901,6 +4901,10 @@ void icnss_recovery_timeout_hdlr(struct timer_list *t)
 {
 	struct icnss_priv *priv = from_timer(priv, t, recovery_timer);
 
+	/* This is to handle if slate is not up and modem SSR is triggered */
+	if (priv->is_slate_rfa && !test_bit(ICNSS_SLATE_UP, &priv->state))
+		return;
+
 	icnss_pr_err("Timeout waiting for FW Ready 0x%lx\n", priv->state);
 	ICNSS_ASSERT(0);
 }
