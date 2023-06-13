@@ -3093,7 +3093,6 @@ err_no_work:
 irqreturn_t cvp_hfi_isr(int irq, void *dev)
 {
 	disable_irq_nosync(irq);
-	dprintk(CVP_ERR,"PALAK at cvp_hfi_isr\n");
 	return IRQ_WAKE_THREAD;
 }
 
