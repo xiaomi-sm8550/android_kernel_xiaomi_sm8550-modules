@@ -35,15 +35,20 @@
 #include "reg.h"
 
 #ifdef CONFIG_CNSS_HW_SECURE_DISABLE
+#ifdef CONFIG_CNSS_HW_SECURE_SMEM
+#include <linux/soc/qcom/smem.h>
+#define PERISEC_SMEM_ID 651
+#define HW_WIFI_UID 0x508
+#else
 #include "smcinvoke.h"
 #include "smcinvoke_object.h"
 #include "IClientEnv.h"
-
 #define HW_STATE_UID 0x108
 #define HW_OP_GET_STATE 1
 #define HW_WIFI_UID 0x508
 #define FEATURE_NOT_SUPPORTED 12
 #define PERIPHERAL_NOT_FOUND 10
+#endif
 #endif
 
 #define CNSS_DUMP_FORMAT_VER		0x11
@@ -4394,6 +4399,40 @@ static int cnss_reboot_notifier(struct notifier_block *nb,
 }
 
 #ifdef CONFIG_CNSS_HW_SECURE_DISABLE
+#ifdef CONFIG_CNSS_HW_SECURE_SMEM
+int cnss_wlan_hw_disable_check(struct cnss_plat_data *plat_priv)
+{
+	uint32_t *peripheralStateInfo = NULL;
+	size_t size = 0;
+
+	/* Once this flag is set, secure peripheral feature
+	 * will not be supported till next reboot
+	 */
+	if (plat_priv->sec_peri_feature_disable)
+		return 0;
+
+	peripheralStateInfo = qcom_smem_get(QCOM_SMEM_HOST_ANY, PERISEC_SMEM_ID, &size);
+	if (IS_ERR_OR_NULL(peripheralStateInfo)) {
+		if (PTR_ERR(peripheralStateInfo) != -ENOENT)
+			CNSS_ASSERT(0);
+
+		cnss_pr_dbg("Secure HW feature not enabled. ret = %d\n",
+			    PTR_ERR(peripheralStateInfo));
+		plat_priv->sec_peri_feature_disable = true;
+		return 0;
+	}
+
+	cnss_pr_dbg("Secure HW state: %d\n", *peripheralStateInfo);
+	if ((*peripheralStateInfo >> (HW_WIFI_UID - 0x500)) & 0x1)
+		set_bit(CNSS_WLAN_HW_DISABLED,
+			&plat_priv->driver_state);
+	else
+		clear_bit(CNSS_WLAN_HW_DISABLED,
+			  &plat_priv->driver_state);
+
+	return 0;
+}
+#else
 int cnss_wlan_hw_disable_check(struct cnss_plat_data *plat_priv)
 {
 	struct Object client_env;
@@ -4459,6 +4498,7 @@ end:
 	}
 	return ret;
 }
+#endif
 #else
 int cnss_wlan_hw_disable_check(struct cnss_plat_data *plat_priv)
 {
