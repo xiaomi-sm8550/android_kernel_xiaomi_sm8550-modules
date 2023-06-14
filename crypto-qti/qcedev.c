@@ -42,11 +42,16 @@
 #define CE_SHA_BLOCK_SIZE SHA256_BLOCK_SIZE
 #define MAX_CEHW_REQ_TRANSFER_SIZE (128*32*1024)
 /*
- * Max wait time once a crypto request is done.
- * Assuming 5ms per crypto operation, this is calculated for
- * the scenario of having 3 offload reqs + 1 tz req + buffer.
+ * Max wait time once a crypto request is submitted.
  */
-#define MAX_CRYPTO_WAIT_TIME 25
+#define MAX_CRYPTO_WAIT_TIME 1500
+/*
+ * Max wait time once a offload crypto request is submitted.
+ * This is low due to expected timeout and key pause errors.
+ * This is temporary, and we can use the 1500 value once the
+ * core irqs are enabled.
+ */
+#define MAX_OFFLOAD_CRYPTO_WAIT_TIME 25
 
 #define MAX_REQUEST_TIME 5000
 
@@ -747,6 +752,7 @@ static int submit_req(struct qcedev_async_req *qcedev_areq,
 	struct qcedev_async_req *new_req = NULL;
 	int retries = 0;
 	int req_wait = MAX_REQUEST_TIME;
+	unsigned int crypto_wait = 0;
 
 	qcedev_areq->err = 0;
 	podev = handle->cntl;
@@ -768,12 +774,15 @@ static int submit_req(struct qcedev_async_req *qcedev_areq,
 			case QCEDEV_CRYPTO_OPER_CIPHER:
 				ret = start_cipher_req(podev,
 						&current_req_info);
+				crypto_wait = MAX_CRYPTO_WAIT_TIME;
 				break;
 			case QCEDEV_CRYPTO_OPER_OFFLOAD_CIPHER:
 				ret = start_offload_cipher_req(podev,
 						&current_req_info);
+				crypto_wait = MAX_OFFLOAD_CRYPTO_WAIT_TIME;
 				break;
 			default:
+				crypto_wait = MAX_CRYPTO_WAIT_TIME;
 
 				ret = start_sha_req(podev,
 						&current_req_info);
@@ -819,7 +828,7 @@ static int submit_req(struct qcedev_async_req *qcedev_areq,
 	qcedev_areq->timed_out = false;
 	if (ret == 0)
 		wait = wait_for_completion_timeout(&qcedev_areq->complete,
-				msecs_to_jiffies(MAX_CRYPTO_WAIT_TIME));
+				msecs_to_jiffies(crypto_wait));
 
 	if (!wait) {
 	/*
@@ -830,6 +839,9 @@ static int submit_req(struct qcedev_async_req *qcedev_areq,
 	 */
 		pr_err("%s: wait timed out, req info = %d\n", __func__,
 					current_req_info);
+		spin_lock_irqsave(&podev->lock, flags);
+		qcedev_areq->timed_out = true;
+		spin_unlock_irqrestore(&podev->lock, flags);
 		qcedev_check_crypto_status(qcedev_areq, podev->qce);
 		if (qcedev_areq->offload_cipher_op_req.err ==
 			QCEDEV_OFFLOAD_NO_ERROR) {
@@ -844,7 +856,6 @@ static int submit_req(struct qcedev_async_req *qcedev_areq,
 			return 0;
 		}
 		spin_lock_irqsave(&podev->lock, flags);
-		qcedev_areq->timed_out = true;
 		ret = qce_manage_timeout(podev->qce, current_req_info);
 		if (ret)
 			pr_err("%s: error during manage timeout", __func__);
