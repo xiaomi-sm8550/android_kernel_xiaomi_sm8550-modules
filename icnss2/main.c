@@ -3356,6 +3356,9 @@ int icnss_get_soc_info(struct device *dev, struct icnss_soc_info *info)
 		WLFW_MAX_TIMESTAMP_LEN + 1);
 	strlcpy(info->fw_build_id, priv->fw_build_id,
 	        ICNSS_WLFW_MAX_BUILD_ID_LEN + 1);
+	info->rd_card_chain_cap = priv->rd_card_chain_cap;
+	info->phy_he_channel_width_cap = priv->phy_he_channel_width_cap;
+	info->phy_qam_cap = priv->phy_qam_cap;
 
 	return 0;
 }
