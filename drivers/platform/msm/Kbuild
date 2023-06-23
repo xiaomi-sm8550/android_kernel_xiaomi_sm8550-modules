@@ -26,7 +26,7 @@ LINUXINCLUDE    += -include $(srctree)/../../vendor/qcom/opensource/dataipa/conf
 endif
 endif
 
-ifeq ($(CONFIG_ARCH_KALAMA), y)
+ifeq ($(filter $(CONFIG_ARCH_KALAMA) $(CONFIG_ARCH_CROW), y), y)
 DATAIPADRVTOP = $(srctree)/../../vendor/qcom/opensource/dataipa/drivers/platform/msm
 LINUXINCLUDE    += -include $(srctree)/../../vendor/qcom/opensource/dataipa/config/dataipa_vendor.h
 include $(srctree)/../../vendor/qcom/opensource/dataipa/config/dataipa_GKI.conf
