@@ -652,6 +652,7 @@ static int cam_tfe_bus_acquire_rdi_wm(
 	int pack_fmt = 0;
 	int rdi_width = rsrc_data->common_data->rdi_width;
 	int mode_cfg_shift = rsrc_data->common_data->mode_cfg_shift;
+
 	if (rdi_width == 64)
 		pack_fmt = 0xa;
 	else if (rdi_width == 128)
@@ -2159,6 +2160,70 @@ end:
 
 }
 
+static int cam_tfe_bus_diable_wm(void *priv, void *cmd_args,
+	uint32_t arg_size)
+{
+	struct cam_tfe_bus_priv              *bus_priv;
+	struct cam_isp_hw_get_cmd_update     *update_buf;
+	struct cam_tfe_bus_tfe_out_data      *tfe_out_data = NULL;
+	struct cam_tfe_bus_wm_resource_data  *wm_data = NULL;
+	struct cam_cdm_utils_ops             *cdm_util_ops = NULL;
+	uint32_t *reg_val_pair;
+	uint32_t num_regval_pairs = 0;
+	uint32_t i, j, size = 0;
+
+	bus_priv = (struct cam_tfe_bus_priv  *) priv;
+	update_buf = (struct cam_isp_hw_get_cmd_update *) cmd_args;
+	tfe_out_data = (struct cam_tfe_bus_tfe_out_data *) update_buf->res->res_priv;
+
+	if (!tfe_out_data || !(tfe_out_data->cdm_util_ops)) {
+		CAM_ERR(CAM_ISP, "Failed! invalid data");
+		return -EINVAL;
+	}
+
+	cdm_util_ops = tfe_out_data->cdm_util_ops;
+
+	reg_val_pair = &tfe_out_data->common_data->io_buf_update[0];
+	for (i = 0, j = 0; i < tfe_out_data->num_wm; i++) {
+		if (j >= (MAX_REG_VAL_PAIR_SIZE - MAX_BUF_UPDATE_REG_NUM * 2)) {
+			CAM_ERR(CAM_ISP,
+				"reg_val_pair %d exceeds the array limit %zu",
+				j, MAX_REG_VAL_PAIR_SIZE);
+			return -ENOMEM;
+		}
+		wm_data = tfe_out_data->wm_res[i]->res_priv;
+
+		CAM_TFE_ADD_REG_VAL_PAIR(reg_val_pair, j, wm_data->hw_regs->cfg, 0);
+		CAM_DBG(CAM_ISP, "WM:%d disabled cfg %x", wm_data->index, wm_data->hw_regs->cfg);
+	}
+
+	num_regval_pairs = j / 2;
+
+	if (num_regval_pairs) {
+		size = cdm_util_ops->cdm_required_size_reg_random(num_regval_pairs);
+
+		/* cdm util returns dwords, need to convert to bytes */
+		if ((size * 4) > update_buf->cmd.size) {
+			CAM_ERR(CAM_ISP,
+				"Failed! Buf size:%d insufficient, expected size:%d",
+				update_buf->cmd.size, size);
+			return -ENOMEM;
+		}
+
+		cdm_util_ops->cdm_write_regrandom(
+			update_buf->cmd.cmd_buf_addr,
+			num_regval_pairs, reg_val_pair);
+
+		/* cdm util returns dwords, need to convert to bytes */
+		update_buf->cmd.used_bytes = size * 4;
+	} else {
+		update_buf->cmd.used_bytes = 0;
+		CAM_DBG(CAM_ISP, "No reg val pairs. num_wms: %u", tfe_out_data->num_wm);
+	}
+
+	return 0;
+}
+
 static int cam_tfe_bus_update_wm(void *priv, void *cmd_args,
 	uint32_t arg_size)
 {
@@ -2681,6 +2746,40 @@ static int cam_tfe_bus_deinit_hw(void *hw_priv,
 	return rc;
 }
 
+static int cam_tfe_bus_check_overflow(
+	struct cam_tfe_bus_priv    *bus_priv,
+	void *cmd_args, uint32_t arg_size)
+{
+	struct cam_tfe_bus_wm_resource_data  *rsrc_data;
+	struct cam_isp_hw_overflow_info      *overflow_info = NULL;
+	uint32_t                             bus_overflow_status = 0, i = 0, tmp = 0;
+
+	overflow_info = (struct cam_isp_hw_overflow_info *)cmd_args;
+
+	bus_overflow_status  = cam_io_r(bus_priv->common_data.mem_base +
+		bus_priv->common_data.common_reg->overflow_status);
+
+	if (bus_overflow_status) {
+		overflow_info->is_bus_overflow = true;
+		CAM_INFO(CAM_ISP, "TFE[%d] Bus overflow status: 0x%x",
+				bus_priv->common_data.core_index, bus_overflow_status);
+	}
+
+	tmp = bus_overflow_status;
+	while (tmp) {
+		if (tmp & 0x1) {
+			rsrc_data = bus_priv->bus_client[i].res_priv;
+			CAM_ERR(CAM_ISP, "TFE[%d] WM : %d %s overflow",
+				bus_priv->common_data.core_index, i,
+				rsrc_data->hw_regs->client_name);
+		}
+		tmp = tmp >> 1;
+		i++;
+	}
+
+	return 0;
+}
+
 static int cam_tfe_bus_process_cmd(void *priv,
 	uint32_t cmd_type, void *cmd_args, uint32_t arg_size)
 {
@@ -2740,6 +2839,12 @@ static int cam_tfe_bus_process_cmd(void *priv,
 	case CAM_ISP_HW_CMD_WM_BW_LIMIT_CONFIG:
 		rc = cam_tfe_bus_update_bw_limiter(priv, cmd_args, arg_size);
 		break;
+	case CAM_ISP_HW_CMD_BUS_WM_DISABLE:
+		rc = cam_tfe_bus_diable_wm(priv, cmd_args, arg_size);
+		break;
+	case CAM_ISP_HW_NOTIFY_OVERFLOW:
+		rc = cam_tfe_bus_check_overflow(priv, cmd_args, arg_size);
+		break;
 	default:
 		CAM_ERR_RATE_LIMIT(CAM_ISP, "Invalid camif process command:%d",
 			cmd_type);
@@ -2760,12 +2865,20 @@ int cam_tfe_bus_init(
 	struct cam_tfe_bus_priv    *bus_priv = NULL;
 	struct cam_tfe_bus         *tfe_bus_local;
 	struct cam_tfe_bus_hw_info *hw_info = bus_hw_info;
+	struct cam_tfe_soc_private       *soc_private = NULL;
 
 	if (!soc_info || !hw_intf || !bus_hw_info) {
 		CAM_ERR(CAM_ISP,
 			"Invalid params soc_info:%pK hw_intf:%pK hw_info%pK",
 			soc_info, hw_intf, bus_hw_info);
 		rc = -EINVAL;
+		goto end;
+	}
+
+	soc_private = soc_info->soc_private;
+	if (!soc_private) {
+		CAM_ERR(CAM_ISP, "Invalid soc_private");
+		rc = -ENODEV;
 		goto end;
 	}
 
@@ -2817,11 +2930,7 @@ int cam_tfe_bus_init(
 		bus_priv->bus_irq_error_mask[i] =
 			hw_info->bus_irq_error_mask[i];
 
-	if (strnstr(soc_info->compatible, "lite",
-		strlen(soc_info->compatible)) != NULL)
-		bus_priv->common_data.is_lite = true;
-	else
-		bus_priv->common_data.is_lite = false;
+	bus_priv->common_data.is_lite = soc_private->is_tfe_lite;
 
 	for (i = 0; i < CAM_TFE_BUS_RUP_GRP_MAX; i++)
 		bus_priv->common_data.rup_irq_enable[i] = false;

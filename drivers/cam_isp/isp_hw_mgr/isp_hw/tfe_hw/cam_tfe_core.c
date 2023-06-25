@@ -1495,8 +1495,9 @@ static int cam_tfe_top_get_reg_update(
 	struct cam_tfe_top_priv *top_priv,
 	void *cmd_args, uint32_t arg_size)
 {
+	int                               rc = 0;
 	uint32_t                          size = 0;
-	uint32_t                          reg_val_pair[2];
+	uint32_t                          reg_val_pair[2] = {0};
 	struct cam_isp_hw_get_cmd_update *cdm_args = cmd_args;
 	struct cam_cdm_utils_ops         *cdm_util_ops = NULL;
 	struct cam_tfe_camif_data        *camif_rsrc_data = NULL;
@@ -1507,19 +1508,22 @@ static int cam_tfe_top_get_reg_update(
 
 	if (arg_size != sizeof(struct cam_isp_hw_get_cmd_update)) {
 		CAM_ERR(CAM_ISP, "Invalid cmd size");
-		return -EINVAL;
+		rc = -EINVAL;
+		goto end;
 	}
 
 	if (!cdm_args || !cdm_args->res) {
 		CAM_ERR(CAM_ISP, "Invalid args");
-		return -EINVAL;
+		rc = -EINVAL;
+		goto end;
 	}
 
 	cdm_util_ops = (struct cam_cdm_utils_ops *)cdm_args->res->cdm_ops;
 
 	if (!cdm_util_ops) {
 		CAM_ERR(CAM_ISP, "Invalid CDM ops");
-		return -EINVAL;
+		rc = -EINVAL;
+		goto end;
 	}
 
 	soc_info = top_priv->common_data.soc_info;
@@ -1529,7 +1533,8 @@ static int cam_tfe_top_get_reg_update(
 	if ((!cdm_args->reg_write) && ((size * 4) > cdm_args->cmd.size)) {
 		CAM_ERR(CAM_ISP, "buf size:%d is not sufficient, expected: %d",
 			cdm_args->cmd.size, size);
-		return -EINVAL;
+		rc = -EINVAL;
+		goto end;
 	}
 
 	mup_config = (struct cam_isp_mode_switch_data *) cdm_args->data;
@@ -1548,7 +1553,11 @@ static int cam_tfe_top_get_reg_update(
 		CAM_DBG(CAM_ISP, "Reg update not supported for res %d",
 			in_res->res_id);
 		cdm_args->cmd.used_bytes = 0;
-		return 0;
+		goto end;
+	} else {
+		CAM_ERR(CAM_ISP, "Unknown resource with res_id = %d", in_res->res_id);
+		rc = -EINVAL;
+		goto end;
 	}
 
 	reg_val_pair[1] |= cam_tfe_top_update_mup(top_priv, mup_config);
@@ -1559,11 +1568,11 @@ static int cam_tfe_top_get_reg_update(
 	} else {
 		cdm_util_ops->cdm_write_regrandom(cdm_args->cmd.cmd_buf_addr,
 			1, reg_val_pair);
-
 		cdm_args->cmd.used_bytes = size * 4;
 	}
 
-	return 0;
+end:
+	return rc;
 }
 
 static int cam_tfe_top_init_config_update(
@@ -2885,8 +2894,8 @@ int cam_tfe_top_init(
 				hw_info->ppp_hw_info.ppp_reg;
 			ppp_priv->reg_data    =
 				hw_info->ppp_hw_info.reg_data;
-		} else if (hw_info->in_port[i] ==
-			CAM_TFE_RDI_VER_1_0) {
+		} else if (hw_info->in_port[i] == CAM_TFE_RDI_VER_1_0 &&
+				(j < CAM_TFE_RDI_MAX)) {
 			top_priv->in_rsrc[i].res_id =
 				CAM_ISP_HW_TFE_IN_RDI0 + j;
 
@@ -2910,8 +2919,8 @@ int cam_tfe_top_init(
 			rdi_priv->reg_data =
 				hw_info->rdi_hw_info[j++].reg_data;
 		}  else {
-			CAM_WARN(CAM_ISP, "TFE:%d Invalid inport type: %u",
-				core_info->core_index, hw_info->in_port[i]);
+			CAM_WARN(CAM_ISP, "TFE:%d Invalid inport type: %u at i = %d. j = %d",
+				core_info->core_index, hw_info->in_port[i], i, j);
 		}
 	}
 
@@ -3367,7 +3376,8 @@ int cam_tfe_process_cmd(void *hw_priv, uint32_t cmd_type,
 
 	if (!hw_priv) {
 		CAM_ERR(CAM_ISP, "Invalid arguments");
-		return -EINVAL;
+		rc = -EINVAL;
+		goto end;
 	}
 
 	soc_info = &tfe_hw->soc_info;
@@ -3422,6 +3432,7 @@ int cam_tfe_process_cmd(void *hw_priv, uint32_t cmd_type,
 		rc = cam_tfe_top_init_config_update(core_info->top_priv, cmd_args,
 			arg_size);
 		break;
+	case CAM_ISP_HW_NOTIFY_OVERFLOW:
 	case CAM_ISP_HW_CMD_GET_BUF_UPDATE:
 	case CAM_ISP_HW_CMD_GET_HFR_UPDATE:
 	case CAM_ISP_HW_CMD_STRIPE_UPDATE:
@@ -3432,6 +3443,7 @@ int cam_tfe_process_cmd(void *hw_priv, uint32_t cmd_type,
 	case CAM_ISP_HW_CMD_DUMP_BUS_INFO:
 	case CAM_ISP_HW_CMD_IS_PDAF_RDI2_MUX_EN:
 	case CAM_ISP_HW_CMD_WM_BW_LIMIT_CONFIG:
+	case CAM_ISP_HW_CMD_BUS_WM_DISABLE:
 		rc = core_info->tfe_bus->hw_ops.process_cmd(
 			core_info->tfe_bus->bus_priv, cmd_type, cmd_args,
 			arg_size);
@@ -3449,6 +3461,12 @@ int cam_tfe_process_cmd(void *hw_priv, uint32_t cmd_type,
 		rc = -EINVAL;
 		break;
 	}
+end:
+	if (rc) {
+		CAM_ERR(CAM_ISP, "TFE: %d error with cmd type: %d",
+			core_info->core_index, cmd_type);
+	}
+
 	return rc;
 }
 

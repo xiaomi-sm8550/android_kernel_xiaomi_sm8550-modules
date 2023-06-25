@@ -31,7 +31,7 @@
 
 
 /* maximum context numbers for TFE */
-#define CAM_TFE_CTX_MAX      4
+#define CAM_TFE_CTX_MAX      6
 
 /* maximum context numbers for IFE */
 #define CAM_IFE_CTX_MAX      8
@@ -251,6 +251,7 @@ struct cam_isp_bw_clk_config_info {
  * @packet:                CSL packet from user mode driver
  * @mup_val:               MUP value if configured
  * @num_exp:               Num of exposures
+ * @wm_bitmask:            Bitmask of acquired out resource
  * @mup_en:                Flag if dynamic sensor switch is enabled
  *
  */
@@ -270,6 +271,7 @@ struct cam_isp_prepare_hw_update_data {
 	struct cam_kmd_buf_info               kmd_cmd_buff_info;
 	uint32_t                              mup_val;
 	uint32_t                              num_exp;
+	uint64_t                              wm_bitmask;
 	bool                                  mup_en;
 };
 

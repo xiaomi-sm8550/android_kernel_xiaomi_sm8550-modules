@@ -993,6 +993,7 @@ static int cam_tfe_hw_mgr_acquire_res_tfe_out_rdi(
 	tfe_out_res->res_id = tfe_out_res_id;
 	tfe_out_res->res_type = CAM_ISP_RESOURCE_TFE_OUT;
 	tfe_in_res->num_children++;
+	tfe_ctx->acquired_wm_mask |= (1 << out_port->res_id);
 
 	return 0;
 err:
@@ -1076,6 +1077,7 @@ static int cam_tfe_hw_mgr_acquire_res_tfe_out_pixel(
 		tfe_out_res->res_type = CAM_ISP_RESOURCE_TFE_OUT;
 		tfe_out_res->res_id = out_port->res_id;
 		tfe_in_res->num_children++;
+		tfe_ctx->acquired_wm_mask |= (1 << out_port->res_id);
 	}
 
 	return 0;
@@ -1935,6 +1937,7 @@ void cam_tfe_cam_cdm_callback(uint32_t handle, void *userdata,
 				ctx->last_submit_bl_cmd.cmd[i].input_len - 1);
 
 			cam_cdm_util_dump_cmd_buf(buf_start, buf_end);
+			cam_mem_put_cpu_buf(ctx->last_submit_bl_cmd.cmd[i].mem_handle);
 		}
 		if (ctx->packet != NULL)
 			cam_packet_util_dump_patch_info(ctx->packet,
@@ -3889,6 +3892,7 @@ static int cam_tfe_mgr_dump(void *hw_mgr_priv, void *args)
 	}
 	dump_args->offset = isp_hw_dump_args.offset;
 	CAM_DBG(CAM_ISP, "offset %u", dump_args->offset);
+	cam_mem_put_cpu_buf(dump_args->buf_handle);
 	return rc;
 }
 
@@ -3988,6 +3992,7 @@ static int cam_tfe_mgr_release_hw(void *hw_mgr_priv,
 	ctx->last_cdm_done_req = 0;
 	ctx->is_shdr = false;
 	ctx->is_shdr_slave = false;
+	ctx->acquired_wm_mask = 0;
 	atomic_set(&ctx->overflow_pending, 0);
 
 	for (i = 0; i < ctx->last_submit_bl_cmd.bl_count; i++) {
@@ -4633,6 +4638,7 @@ static int cam_isp_tfe_packet_generic_blob_handler(void *user_data,
 		break;
 	case CAM_ISP_TFE_GENERIC_BLOB_TYPE_BW_LIMITER_CFG: {
 		struct cam_isp_tfe_out_rsrc_bw_limiter_config *bw_limit_config;
+
 		if (blob_size <
 			sizeof(struct cam_isp_tfe_out_rsrc_bw_limiter_config)) {
 			CAM_ERR(CAM_ISP, "Invalid blob size %u expected %lu",
@@ -4724,6 +4730,7 @@ static int cam_tfe_update_dual_config(
 		(cmd_desc->offset >=
 			(len - sizeof(struct cam_isp_tfe_dual_config)))) {
 		CAM_ERR(CAM_ISP, "not enough buffer provided");
+		cam_mem_put_cpu_buf(cmd_desc->mem_handle);
 		return -EINVAL;
 	}
 
@@ -4736,6 +4743,7 @@ static int cam_tfe_update_dual_config(
 		(remain_len -
 			offsetof(struct cam_isp_tfe_dual_config, stripes))) {
 		CAM_ERR(CAM_ISP, "not enough buffer for all the dual configs");
+		cam_mem_put_cpu_buf(cmd_desc->mem_handle);
 		return -EINVAL;
 	}
 
@@ -4797,6 +4805,7 @@ static int cam_tfe_update_dual_config(
 	}
 
 end:
+	cam_mem_put_cpu_buf(cmd_desc->mem_handle);
 	return rc;
 }
 
@@ -5036,7 +5045,6 @@ static int cam_tfe_mgr_prepare_hw_update(void *hw_mgr_priv,
 			goto end;
 		}
 
-
 		/* get command buffers */
 		if (ctx->base[i].split_id != CAM_ISP_HW_SPLIT_MAX) {
 			rc = cam_tfe_add_command_buffers(prepare,
@@ -5055,6 +5063,8 @@ static int cam_tfe_mgr_prepare_hw_update(void *hw_mgr_priv,
 		memset(&frame_header_info, 0,
 			sizeof(struct cam_isp_frame_header_info));
 		frame_header_info.frame_header_enable = false;
+
+		prepare_hw_data->wm_bitmask = ctx->acquired_wm_mask;
 
 		/* get IO buffers */
 		rc = cam_isp_add_io_buffers(hw_mgr->mgr_common.img_iommu_hdl,
@@ -5436,6 +5446,7 @@ static void cam_tfe_mgr_dump_pf_data(
 outportlog:
 	cam_packet_util_dump_io_bufs(packet, hw_mgr->mgr_common.img_iommu_hdl,
 		hw_mgr->mgr_common.img_iommu_hdl_secure, pf_cmd_args->pf_args, true);
+	cam_packet_util_put_packet_addr(pf_cmd_args->pf_req_info->packet_handle);
 
 }
 
@@ -6040,31 +6051,113 @@ end:
 	return rc;
 }
 
+static int cam_tfe_hw_mgr_check_and_notify_overflow(
+	struct cam_isp_hw_event_info    *evt,
+	struct cam_tfe_hw_mgr_ctx       *hw_mgr_ctx,
+	bool                            *is_bus_overflow)
+{
+	int                             i;
+	struct cam_hw_intf             *hw_if = NULL;
+	struct cam_isp_hw_overflow_info overflow_info;
+
+	for (i = 0; i < hw_mgr_ctx->num_base; i++) {
+		if (hw_mgr_ctx->base[i].idx != evt->hw_idx)
+			continue;
+
+		hw_if = g_tfe_hw_mgr.tfe_devices[evt->hw_idx]->hw_intf;
+		if (!hw_if) {
+			CAM_ERR_RATE_LIMIT(CAM_ISP, "hw_intf is null");
+			return -EINVAL;
+		}
+
+		if (hw_if->hw_ops.process_cmd) {
+			overflow_info.res_id = evt->res_id;
+			hw_if->hw_ops.process_cmd(hw_if->hw_priv,
+				CAM_ISP_HW_NOTIFY_OVERFLOW,
+				&overflow_info,
+				sizeof(struct cam_isp_hw_overflow_info));
+
+			CAM_DBG(CAM_ISP,
+				"check and notify hw idx %d type %d bus overflow happened %d",
+				hw_mgr_ctx->base[i].idx, hw_mgr_ctx->base[i].hw_type,
+				overflow_info.is_bus_overflow);
+
+			if (overflow_info.is_bus_overflow)
+				*is_bus_overflow = true;
+		}
+	}
+
+	return 0;
+}
+
 static int cam_tfe_hw_mgr_handle_csid_event(
 	uint32_t                      err_type,
-	struct cam_isp_hw_event_info *event_info)
+	struct cam_isp_hw_event_info *event_info,
+	void                         *ctx)
 {
 	struct cam_isp_hw_error_event_data  error_event_data = {0};
 	struct cam_tfe_hw_event_recovery_data     recovery_data = {0};
+	bool                                is_bus_overflow = false;
+	struct cam_tfe_hw_mgr_ctx           *tfe_hw_mgr_ctx = ctx;
+
+	/* Default error types */
+	error_event_data.error_type = CAM_ISP_HW_ERROR_CSID_FATAL;
+	recovery_data.error_type = CAM_ISP_HW_ERROR_OVERFLOW;
 
 	/* this can be extended based on the types of error
 	 * received from CSID
 	 */
 	switch (err_type) {
+	case CAM_ISP_HW_ERROR_CSID_FRAME_SIZE:
 	case CAM_ISP_HW_ERROR_CSID_FATAL: {
 
-		if (!g_tfe_hw_mgr.debug_cfg.enable_csid_recovery)
-			break;
+		if (!g_tfe_hw_mgr.debug_cfg.enable_csid_recovery) {
+			CAM_ERR(CAM_ISP,
+				"CSID:%d err: %d not handled, csid_recovery_enable: %d",
+				event_info->hw_idx, err_type,
+				g_tfe_hw_mgr.debug_cfg.enable_csid_recovery);
+			return 0;
+		}
+		break;
+	}
+	case CAM_ISP_HW_ERROR_CSID_OUTPUT_FIFO_OVERFLOW: {
+		cam_tfe_hw_mgr_check_and_notify_overflow(event_info,
+			tfe_hw_mgr_ctx, &is_bus_overflow);
 
-		error_event_data.error_type = err_type;
-		cam_tfe_hw_mgr_find_affected_ctx(&error_event_data,
-			event_info->hw_idx,
-			&recovery_data);
+		if (is_bus_overflow) {
+			if (tfe_hw_mgr_ctx->try_recovery_cnt <
+				MAX_TFE_INTERNAL_RECOVERY_ATTEMPTS) {
+
+				error_event_data.try_internal_recovery = true;
+				if (!atomic_read(&tfe_hw_mgr_ctx->overflow_pending))
+					tfe_hw_mgr_ctx->try_recovery_cnt++;
+
+				if (!tfe_hw_mgr_ctx->recovery_req_id)
+					tfe_hw_mgr_ctx->recovery_req_id =
+						tfe_hw_mgr_ctx->applied_req_id;
+
+				error_event_data.error_type = err_type;
+			}
+
+			CAM_DBG(CAM_ISP,
+				"CSID[%u] error: %u current_recovery_cnt: %u  recovery_req: %llu",
+				event_info->hw_idx, err_type, tfe_hw_mgr_ctx->try_recovery_cnt,
+				tfe_hw_mgr_ctx->recovery_req_id);
+		}
 		break;
 	}
 	default:
-		break;
+		CAM_ERR(CAM_ISP, "CSID:%d, unahandled error: %d",
+			event_info->hw_idx, err_type);
+		return 0;
 	}
+
+	CAM_ERR(CAM_ISP, "CSID:[%u] error: %u on ctx: %u", event_info->hw_idx,
+		error_event_data.error_type, tfe_hw_mgr_ctx->ctx_index);
+
+	cam_tfe_hw_mgr_find_affected_ctx(&error_event_data, event_info->hw_idx,
+		&recovery_data);
+
 	return 0;
 }
 
@@ -6119,8 +6212,10 @@ static int cam_tfe_hw_mgr_handle_hw_err(
 	}
 
 	spin_lock(&g_tfe_hw_mgr.ctx_lock);
-	if (err_evt_info->err_type == CAM_ISP_HW_ERROR_CSID_FATAL) {
-		rc = cam_tfe_hw_mgr_handle_csid_event(err_evt_info->err_type, event_info);
+	/* CAM_ISP_RESOURCE_PIX_PATH denotes error event coming from CSID */
+	if (event_info->res_type == CAM_ISP_RESOURCE_PIX_PATH) {
+		rc = cam_tfe_hw_mgr_handle_csid_event(err_evt_info->err_type, event_info,
+			tfe_hw_mgr_ctx);
 		spin_unlock(&g_tfe_hw_mgr.ctx_lock);
 		return rc;
 	}
