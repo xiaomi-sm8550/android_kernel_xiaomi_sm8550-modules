@@ -345,6 +345,11 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 		cnss_pr_dbg("Sending feature list 0x%llx\n",
 			    req->feature_list);
 	}
+
+	if (cnss_get_platform_name(plat_priv, req->platform_name,
+				   QMI_WLFW_MAX_PLATFORM_NAME_LEN_V01))
+		req->platform_name_valid = 1;
+
 	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 			   wlfw_host_cap_resp_msg_v01_ei, resp);
 	if (ret < 0) {

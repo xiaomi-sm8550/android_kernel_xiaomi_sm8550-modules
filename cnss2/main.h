@@ -744,4 +744,6 @@ int cnss_get_input_gpio_value(struct cnss_plat_data *plat_priv, int gpio_num);
 bool cnss_check_driver_loading_allowed(void);
 int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv);
 void cnss_recovery_handler(struct cnss_plat_data *plat_priv);
+size_t cnss_get_platform_name(struct cnss_plat_data *plat_priv,
+			      char *buf, const size_t buf_len);
 #endif /* _CNSS_MAIN_H */
