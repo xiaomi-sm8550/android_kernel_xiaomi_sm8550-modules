@@ -327,6 +327,14 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 		req->nm_modem |= SLEEP_CLOCK_SELECT_INTERNAL_BIT;
 	}
 
+	if (plat_priv->supported_link_speed) {
+		req->pcie_link_info_valid = 1;
+		req->pcie_link_info.pci_link_speed =
+					plat_priv->supported_link_speed;
+		cnss_pr_dbg("Supported link speed in Host Cap %d\n",
+			    plat_priv->supported_link_speed);
+	}
+
 	if (cnss_bus_is_smmu_s1_enabled(plat_priv) &&
 	    !cnss_bus_get_iova(plat_priv, &iova_start, &iova_size) &&
 	    !cnss_bus_get_iova_ipa(plat_priv, &iova_ipa_start,

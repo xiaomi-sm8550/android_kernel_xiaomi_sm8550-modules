@@ -1311,6 +1311,42 @@ static int cnss_set_pci_config_space(struct cnss_pci_data *pci_priv, bool save)
 	return 0;
 }
 
+static int cnss_update_supported_link_info(struct cnss_pci_data *pci_priv)
+{
+	int ret = 0;
+	struct pci_dev *root_port;
+	struct device_node *root_of_node;
+	struct cnss_plat_data *plat_priv;
+
+	if (!pci_priv)
+		return -EINVAL;
+
+	if (pci_priv->device_id != KIWI_DEVICE_ID)
+		return ret;
+
+	plat_priv = pci_priv->plat_priv;
+	root_port = pcie_find_root_port(pci_priv->pci_dev);
+
+	if (!root_port) {
+		cnss_pr_err("PCIe root port is null\n");
+		return -EINVAL;
+	}
+
+	root_of_node = root_port->dev.of_node;
+	if (root_of_node && root_of_node->parent) {
+		ret = of_property_read_u32(root_of_node->parent,
+					   "qcom,target-link-speed",
+					   &plat_priv->supported_link_speed);
+		if (!ret)
+			cnss_pr_dbg("Supported PCIe Link Speed: %d\n",
+				    plat_priv->supported_link_speed);
+		else
+			plat_priv->supported_link_speed = 0;
+	}
+
+	return ret;
+}
+
 static int cnss_pci_get_link_status(struct cnss_pci_data *pci_priv)
 {
 	u16 link_status;
@@ -7143,6 +7179,8 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 
 	/* update drv support flag */
 	cnss_pci_update_drv_supported(pci_priv);
+
+	cnss_update_supported_link_info(pci_priv);
 
 	ret = cnss_reg_pci_event(pci_priv);
 	if (ret) {
