@@ -33,10 +33,15 @@
 #define INI_FILE_NAME_LEN		100
 
 #define QDSS_TRACE_CONFIG_FILE		"qdss_trace_config"
+/*
+ * Download QDSS config file based on build type. Add build type string to
+ * file name. Download "qdss_trace_config_debug_v<n>.cfg" for debug build
+ * and "qdss_trace_config_perf_v<n>.cfg" for perf build.
+ */
 #ifdef CONFIG_CNSS2_DEBUG
-#define QDSS_DEBUG_FILE_STR		"debug_"
+#define QDSS_FILE_BUILD_STR		"debug_"
 #else
-#define QDSS_DEBUG_FILE_STR		""
+#define QDSS_FILE_BUILD_STR		"perf_"
 #endif
 #define HW_V1_NUMBER			"v1"
 #define HW_V2_NUMBER			"v2"
@@ -1436,22 +1441,21 @@ end:
 }
 
 void cnss_get_qdss_cfg_filename(struct cnss_plat_data *plat_priv,
-				char *filename, u32 filename_len)
+				char *filename, u32 filename_len,
+				bool fallback_file)
 {
 	char filename_tmp[MAX_FIRMWARE_NAME_LEN];
-	char *debug_str = QDSS_DEBUG_FILE_STR;
+	char *build_str = QDSS_FILE_BUILD_STR;
 
-	if (plat_priv->device_id == KIWI_DEVICE_ID ||
-	    plat_priv->device_id == MANGO_DEVICE_ID ||
-	    plat_priv->device_id == PEACH_DEVICE_ID)
-		debug_str = "";
+	if (fallback_file)
+		build_str = "";
 
 	if (plat_priv->device_version.major_version == FW_V2_NUMBER)
 		snprintf(filename_tmp, filename_len, QDSS_TRACE_CONFIG_FILE
-			 "_%s%s.cfg", debug_str, HW_V2_NUMBER);
+			 "_%s%s.cfg", build_str, HW_V2_NUMBER);
 	else
 		snprintf(filename_tmp, filename_len, QDSS_TRACE_CONFIG_FILE
-			 "_%s%s.cfg", debug_str, HW_V1_NUMBER);
+			 "_%s%s.cfg", build_str, HW_V1_NUMBER);
 
 	cnss_bus_add_fw_prefix_name(plat_priv, filename, filename_tmp);
 }
@@ -1480,13 +1484,23 @@ int cnss_wlfw_qdss_dnld_send_sync(struct cnss_plat_data *plat_priv)
 		return -ENOMEM;
 	}
 
-	cnss_get_qdss_cfg_filename(plat_priv, qdss_cfg_filename, sizeof(qdss_cfg_filename));
+	cnss_get_qdss_cfg_filename(plat_priv, qdss_cfg_filename,
+				   sizeof(qdss_cfg_filename), false);
 	ret = cnss_request_firmware_direct(plat_priv, &fw_entry,
 					   qdss_cfg_filename);
 	if (ret) {
-		cnss_pr_dbg("Unable to load %s\n",
-			    qdss_cfg_filename);
-		goto err_req_fw;
+		cnss_pr_dbg("Unable to load %s ret %d, try default file\n",
+			    qdss_cfg_filename, ret);
+		cnss_get_qdss_cfg_filename(plat_priv, qdss_cfg_filename,
+					   sizeof(qdss_cfg_filename),
+					   true);
+		ret = cnss_request_firmware_direct(plat_priv, &fw_entry,
+						   qdss_cfg_filename);
+		if (ret) {
+			cnss_pr_err("Unable to load %s ret %d\n",
+				    qdss_cfg_filename, ret);
+			goto err_req_fw;
+		}
 	}
 
 	temp = fw_entry->data;
