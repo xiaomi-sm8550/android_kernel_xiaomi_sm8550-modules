@@ -2075,8 +2075,7 @@ static int cam_tfe_mgr_acquire_get_unified_structure_v2(
 	in_port->lane_cfg        =  in->lane_cfg;
 	in_port->num_valid_vc_dt =  in->num_valid_vc_dt;
 
-	if (in_port->num_valid_vc_dt == 0 ||
-		in_port->num_valid_vc_dt >= CAM_ISP_TFE_VC_DT_CFG) {
+	if (in_port->num_valid_vc_dt == 0) {
 		CAM_ERR(CAM_ISP, "Invalid i/p arg invalid vc-dt: %d",
 			in->num_valid_vc_dt);
 		rc = -EINVAL;
@@ -4764,7 +4763,7 @@ static int cam_isp_tfe_packet_generic_blob_handler(void *user_data,
 		}
 
 		mup_config = (struct cam_isp_mode_switch_info *)blob_data;
-		CAM_DBG(CAM_ISP,
+		CAM_INFO(CAM_ISP,
 			"Ctx id %d request id %lld csid mup value=%u", tfe_mgr_ctx->ctx_index,
 			prepare->packet->header.request_id, mup_config->mup);
 
