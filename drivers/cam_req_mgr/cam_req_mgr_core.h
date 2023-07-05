@@ -219,11 +219,13 @@ struct cam_req_mgr_apply {
  * @apply_at_eof    : Boolean Identifier for request to be applied at EOF
  * @is_applied      : Flag to identify if request is already applied to device
  *                    in previous frame
+ * @skip_isp_apply  : Flag to indicate skip apply req for ISP
  */
 struct crm_tbl_slot_special_ops {
 	int32_t dev_hdl;
 	bool apply_at_eof;
 	bool is_applied;
+	bool skip_isp_apply;
 };
 
 /**

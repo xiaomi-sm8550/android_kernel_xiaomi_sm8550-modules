@@ -307,6 +307,7 @@ struct cam_isp_context_event_record {
  * @mode_switch_en:            Indicates if mode switch is enabled
  * @is_shdr:                   true, if usecase is sdhr
  * @is_shdr_master:            Flag to indicate master context in shdr usecase
+ * @last_num_exp:              Last num of exposure
  *
  */
 struct cam_isp_context {
@@ -374,6 +375,7 @@ struct cam_isp_context {
 	bool                                  mode_switch_en;
 	bool                                  is_tfe_shdr;
 	bool                                  is_shdr_master;
+	uint32_t                              last_num_exp;
 };
 
 /**
