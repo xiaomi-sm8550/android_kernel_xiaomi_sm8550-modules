@@ -2211,7 +2211,7 @@ cnss_get_plat_priv_by_driver_ops(struct cnss_wlan_driver *driver_ops)
 		}
 	}
 
-	cnss_pr_err("Invalid cnss driver name from ko %s\n", driver_ops->name);
+	cnss_pr_vdbg("Invalid cnss driver name from ko %s\n", driver_ops->name);
 	/* in the dual wlan card case, the pld_bus_ops_name from dts
 	 * and driver_ops-> name from ko should match, otherwise
 	 * wlanhost driver don't know which plat_env it can use;
@@ -5596,8 +5596,13 @@ int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv)
 	if (!test_bit(CNSS_MHI_POWER_ON, &pci_priv->mhi_state) ||
 	    test_bit(CNSS_MHI_POWERING_OFF, &pci_priv->mhi_state))
 		return -EINVAL;
-
-	cnss_auto_resume(&pci_priv->pci_dev->dev);
+	/*
+	 * Call pm_runtime_get_sync insteat of auto_resume to get
+	 * reference and make sure runtime_suspend wont get called.
+	 */
+	ret = cnss_pci_pm_runtime_get_sync(pci_priv, RTPM_ID_CNSS);
+	if (ret < 0)
+		goto runtime_pm_put;
 
 	if (!pci_priv->is_smmu_fault)
 		cnss_pci_mhi_reg_dump(pci_priv);
@@ -5606,6 +5611,8 @@ int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv)
 	ret = cnss_pci_check_link_status(pci_priv);
 	if (ret) {
 		cnss_pci_link_down(&pci_priv->pci_dev->dev);
+		cnss_pci_pm_runtime_mark_last_busy(pci_priv);
+		cnss_pci_pm_runtime_put_autosuspend(pci_priv, RTPM_ID_CNSS);
 		return 0;
 	}
 
@@ -5618,15 +5625,20 @@ int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv)
 		if (!test_bit(CNSS_MHI_POWER_ON, &pci_priv->mhi_state) ||
 		    test_bit(CNSS_MHI_POWERING_OFF, &pci_priv->mhi_state)) {
 			cnss_pr_dbg("MHI is not powered on, ignore RDDM failure\n");
+			cnss_pci_pm_runtime_mark_last_busy(pci_priv);
+			cnss_pci_pm_runtime_put_autosuspend(pci_priv, RTPM_ID_CNSS);
 			return 0;
 		}
 		cnss_fatal_err("Failed to trigger RDDM, err = %d\n", ret);
-		if (!cnss_pci_assert_host_sol(pci_priv))
+		if (!cnss_pci_assert_host_sol(pci_priv)) {
+			cnss_pci_pm_runtime_mark_last_busy(pci_priv);
+			cnss_pci_pm_runtime_put_autosuspend(pci_priv, RTPM_ID_CNSS);
 			return 0;
+		}
 		cnss_pci_dump_debug_reg(pci_priv);
 		cnss_schedule_recovery(&pci_priv->pci_dev->dev,
 				       CNSS_REASON_DEFAULT);
-		return ret;
+		goto runtime_pm_put;
 	}
 
 	if (pci_priv->is_smmu_fault) {
@@ -5639,7 +5651,10 @@ int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv)
 			  jiffies + msecs_to_jiffies(DEV_RDDM_TIMEOUT));
 	}
 
-	return 0;
+runtime_pm_put:
+	cnss_pci_pm_runtime_mark_last_busy(pci_priv);
+	cnss_pci_pm_runtime_put_autosuspend(pci_priv, RTPM_ID_CNSS);
+	return ret;
 }
 
 static void cnss_pci_add_dump_seg(struct cnss_pci_data *pci_priv,

@@ -9,10 +9,7 @@ _module_enablement_map = {
     "icnss2": [],
     "cnss_nl": ["ALL"],
     "cnss_prealloc": ["ALL"],
-    # List specific target/variants if needed
-    "cnss_utils": [
-        "pineapple_consolidate",
-    ],
+    "cnss_utils": ["ALL"],
     "wlan_firmware_service": ["ALL"],
     "cnss_plat_ipc_qmi_svc": ["ALL"],
 }
