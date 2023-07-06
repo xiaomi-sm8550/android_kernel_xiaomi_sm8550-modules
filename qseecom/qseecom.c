@@ -3,7 +3,7 @@
  * QTI Secure Execution Environment Communicator (QSEECOM) driver
  *
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "QSEECOM: %s: " fmt, __func__
@@ -12,6 +12,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/fs.h>
+#include <linux/reboot.h>
 #include <linux/platform_device.h>
 #include <linux/debugfs.h>
 #include <linux/cdev.h>
@@ -370,6 +371,7 @@ struct qseecom_control {
 
 	struct list_head  unload_app_pending_list_head;
 	struct task_struct *unload_app_kthread_task;
+	struct notifier_block reboot_nb;
 	wait_queue_head_t unload_app_kthread_wq;
 	atomic_t unload_app_kthread_state;
 };
@@ -2050,8 +2052,8 @@ static int qseecom_set_client_mem_param(struct qseecom_dev_handle *data,
 
 	if ((req.ifd_data_fd <= 0) || (req.virt_sb_base == NULL) ||
 					(req.sb_len == 0)) {
-		pr_err("Invalid input(s)ion_fd(%d), sb_len(%d), vaddr(0x%pK)\n",
-			req.ifd_data_fd, req.sb_len, req.virt_sb_base);
+		pr_err("Invalid input(s)ion_fd(%d), sb_len(%d)\n",
+			req.ifd_data_fd, req.sb_len);
 		return -EFAULT;
 	}
 	if (!access_ok((void __user *)req.virt_sb_base,
@@ -9513,6 +9515,49 @@ static void qseecom_release_ce_data(void)
 	}
 }
 
+static int qseecom_reboot_worker(struct notifier_block *nb, unsigned long val, void * data)
+{
+	int rc = 0;
+	struct qseecom_registered_listener_list *entry = NULL;
+
+	/* Mark all the listener as abort since system is going
+	 * for a reboot so every pending listener request should
+         * be aborted.
+         */
+	list_for_each_entry(entry,
+			&qseecom.registered_listener_list_head, list) {
+		if (entry)
+			entry->abort = 1;
+	}
+
+	/* stop CA thread waiting for listener response */
+	wake_up_interruptible_all(&qseecom.send_resp_wq);
+
+	/* Assumption is sytem going in reboot
+	 * every registered listener from userspace waiting
+	 * on event interruptible will receive interrupt as
+         * TASK_INTERRUPTIBLE flag will be set for them
+         */
+
+	return rc;
+}
+static int qseecom_register_reboot_notifier()
+{
+	int rc = 0;
+
+        /* Registering reboot notifier for resource cleanup at reboot.
+	 * Current implementation is for listener use case,
+	 * it can be extended to App also in case of any corner
+	 * case issue found.
+         */
+
+	qseecom.reboot_nb.notifier_call = qseecom_reboot_worker;
+	rc = register_reboot_notifier(&(qseecom.reboot_nb));
+	if (rc)
+		pr_err("failed to register reboot notifier ");
+	return rc;
+}
+
 static int qseecom_init_dev(struct platform_device *pdev)
 {
 	int rc = 0;
@@ -9567,6 +9612,19 @@ static int qseecom_init_dev(struct platform_device *pdev)
 		pr_err("Failed to initialize reserved mem, ret %d\n", rc);
 		goto exit_del_cdev;
 	}
+
+	rc = qseecom_register_reboot_notifier();
+	if (rc) {
+		pr_err("failed in registering reboot notifier %d\n", rc);
+		/* exit even if notifier registeration fail.
+		 * Although, thats not a functional failure from qseecom
+		 * driver prespective but this registeration
+		 * failure will cause more complex issue at the
+		 * time of reboot or possibly halt the reboot.
+		 */
+		goto exit_del_cdev;
+	}
+
 	return 0;
 
 exit_del_cdev:
@@ -9585,6 +9643,7 @@ static void qseecom_deinit_dev(void)
 {
 	kfree(qseecom.dev->dma_parms);
 	qseecom.dev->dma_parms = NULL;
+	unregister_reboot_notifier(&(qseecom.reboot_nb));
 	cdev_del(&qseecom.cdev);
 	device_destroy(qseecom.driver_class, qseecom.qseecom_device_no);
 	class_destroy(qseecom.driver_class);
