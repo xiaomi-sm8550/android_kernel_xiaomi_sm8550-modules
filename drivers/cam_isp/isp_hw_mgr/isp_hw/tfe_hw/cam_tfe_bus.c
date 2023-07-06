@@ -111,7 +111,12 @@ struct cam_tfe_bus_wm_resource_data {
 	uint32_t             acquired_width;
 	uint32_t             acquired_height;
 	uint32_t             acquired_stride;
+
+	uint32_t             buffer_offset;
+	bool                 is_buffer_aligned;
 	bool                 limiter_blob_status;
+
+	bool                 is_dim_update;
 };
 
 struct cam_tfe_bus_comp_grp_data {
@@ -2160,6 +2165,39 @@ end:
 
 }
 
+static int cam_tfe_bus_update_wm_config(void *priv, void *cmd_args,
+	uint32_t arg_size)
+{
+	struct cam_tfe_bus_priv                    *bus_priv;
+	struct cam_isp_hw_get_cmd_update           *update_wm_cmd;
+	struct cam_tfe_bus_tfe_out_data            *tfe_out_data = NULL;
+	struct cam_tfe_bus_wm_resource_data        *wm_data = NULL;
+	struct cam_isp_tfe_wm_dimension_config     *update_out_cfg;
+	uint32_t  i, rc = 0;
+
+	bus_priv = (struct cam_tfe_bus_priv  *) priv;
+	update_wm_cmd = (struct cam_isp_hw_get_cmd_update *) cmd_args;
+	update_out_cfg = (struct cam_isp_tfe_wm_dimension_config *) update_wm_cmd->data;
+
+	tfe_out_data = (struct cam_tfe_bus_tfe_out_data *) update_wm_cmd->res->res_priv;
+
+	if (!tfe_out_data) {
+		CAM_ERR(CAM_ISP, "Failed! invalid data");
+		return -EINVAL;
+	}
+
+	for (i = 0; i < tfe_out_data->num_wm; i++) {
+		wm_data = tfe_out_data->wm_res[i]->res_priv;
+		wm_data->is_dim_update = true;
+		wm_data->width = update_out_cfg->width;
+		wm_data->height = update_out_cfg->height;
+		CAM_DBG(CAM_ISP, "WM %d width %lld height %lld", wm_data->index,
+			wm_data->width, wm_data->height);
+	}
+
+	return rc;
+}
+
 static int cam_tfe_bus_diable_wm(void *priv, void *cmd_args,
 	uint32_t arg_size)
 {
@@ -2288,6 +2326,7 @@ static int cam_tfe_bus_update_wm(void *priv, void *cmd_args,
 			(wm_data->mode == CAM_ISP_TFE_WM_LINE_BASED_MODE)) ||
 			(wm_data->out_id == CAM_TFE_BUS_TFE_OUT_PDAF) ||
 			(wm_data->index >= 11 && wm_data->index <= 15)) {
+
 			CAM_TFE_ADD_REG_VAL_PAIR(reg_val_pair, j,
 				wm_data->hw_regs->image_cfg_2,
 				io_cfg->planes[i].plane_stride);
@@ -2298,6 +2337,9 @@ static int cam_tfe_bus_update_wm(void *priv, void *cmd_args,
 
 		frame_inc = io_cfg->planes[i].plane_stride *
 			io_cfg->planes[i].slice_height;
+
+		if (wm_data->is_buffer_aligned)
+			update_buf->wm_update->image_buf[i] += wm_data->buffer_offset;
 
 		CAM_TFE_ADD_REG_VAL_PAIR(reg_val_pair, j,
 			wm_data->hw_regs->image_addr,
@@ -2345,6 +2387,38 @@ static int cam_tfe_bus_update_wm(void *priv, void *cmd_args,
 	}
 
 	return 0;
+}
+static int cam_tfe_buffer_alignment_update(void *priv, void *cmd_args,
+	uint32_t arg_size)
+{
+	struct cam_tfe_bus_priv                    *bus_priv;
+	struct cam_isp_hw_get_cmd_update           *alignment_cmd;
+	struct cam_tfe_bus_tfe_out_data            *tfe_out_data = NULL;
+	struct cam_tfe_bus_wm_resource_data        *wm_data = NULL;
+	struct cam_isp_tfe_alignment_offset_config *alignment_port_cfg = NULL;
+	uint32_t  i, rc = 0;
+
+	bus_priv = (struct cam_tfe_bus_priv  *) priv;
+	alignment_cmd = (struct cam_isp_hw_get_cmd_update *) cmd_args;
+	alignment_port_cfg = (struct cam_isp_tfe_alignment_offset_config *) alignment_cmd->data;
+
+	tfe_out_data = (struct cam_tfe_bus_tfe_out_data *) alignment_cmd->res->res_priv;
+
+	if (!tfe_out_data) {
+		CAM_ERR(CAM_ISP, "Failed! invalid data");
+		return -EINVAL;
+	}
+
+	for (i = 0; i < tfe_out_data->num_wm; i++) {
+		wm_data = tfe_out_data->wm_res[i]->res_priv;
+		wm_data->is_buffer_aligned = true;
+		wm_data->offset = alignment_port_cfg->x_offset;
+		wm_data->buffer_offset = alignment_port_cfg->y_offset;
+		CAM_DBG(CAM_ISP, "wm %d X-Offset %x Y-Offset %x", wm_data->index,
+			wm_data->offset, wm_data->buffer_offset);
+	}
+
+	return rc;
 }
 
 static int cam_tfe_bus_update_hfr(void *priv, void *cmd_args,
@@ -2784,7 +2858,7 @@ static int cam_tfe_bus_process_cmd(void *priv,
 	uint32_t cmd_type, void *cmd_args, uint32_t arg_size)
 {
 	struct cam_tfe_bus_priv      *bus_priv;
-	int rc = -EINVAL;
+	int rc = 0;
 	uint32_t i, val;
 	bool *support_consumed_addr;
 	bool *pdaf_rdi2_mux_en;
@@ -2845,9 +2919,16 @@ static int cam_tfe_bus_process_cmd(void *priv,
 	case CAM_ISP_HW_NOTIFY_OVERFLOW:
 		rc = cam_tfe_bus_check_overflow(priv, cmd_args, arg_size);
 		break;
+	case CAM_ISP_HW_CMD_BUFFER_ALIGNMENT_UPDATE:
+		rc = cam_tfe_buffer_alignment_update(priv, cmd_args, arg_size);
+		break;
+	case CAM_ISP_HW_CMD_WM_CONFIG_UPDATE:
+		rc = cam_tfe_bus_update_wm_config(priv, cmd_args, arg_size);
+		break;
 	default:
 		CAM_ERR_RATE_LIMIT(CAM_ISP, "Invalid camif process command:%d",
 			cmd_type);
+		rc = -EINVAL;
 		break;
 	}
 
