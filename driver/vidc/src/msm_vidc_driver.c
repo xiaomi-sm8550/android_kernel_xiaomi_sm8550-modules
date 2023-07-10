@@ -2750,16 +2750,32 @@ exit:
 	return rc;
 }
 
-int msm_vidc_update_input_rate(struct msm_vidc_inst *inst, u64 time_us)
+int msm_vidc_update_input_rate(struct msm_vidc_inst *inst, struct vb2_buffer *vb2, u64 time_us)
 {
 	struct msm_vidc_input_timer *input_timer;
 	struct msm_vidc_input_timer *prev_timer = NULL;
 	u64 counter = 0;
 	u64 input_timer_sum_us = 0;
+	u32 slice_size = 0;
 
 	if (!inst || !inst->capabilities) {
 		d_vpr_e("%s: invalid params\n", __func__);
 		return -EINVAL;
+	}
+
+	if (is_decode_session(inst) && is_slice_decode_enabled(inst)) {
+		slice_size = vb2->planes[0].bytesused - vb2->planes[0].data_offset;
+		if (vb2->timestamp == inst->slice_decode.prev_ts) {
+			inst->slice_decode.slice_count++;
+			inst->slice_decode.frame_size += slice_size;
+			return 0;
+		} else { // First Slice of a Frame
+			inst->slice_decode.frame_data_size = max(inst->slice_decode.frame_size,
+					(slice_size * inst->slice_decode.slice_count));
+			inst->slice_decode.prev_ts = vb2->timestamp;
+			inst->slice_decode.slice_count = 1;
+			inst->slice_decode.frame_size = slice_size;
+		}
 	}
 
 	input_timer = msm_memory_pool_alloc(inst, MSM_MEM_POOL_BUF_TIMER);
