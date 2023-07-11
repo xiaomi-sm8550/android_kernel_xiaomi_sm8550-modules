@@ -1424,7 +1424,8 @@ int cnss_suspend_pci_link(struct cnss_pci_data *pci_priv)
 	pci_disable_device(pci_priv->pci_dev);
 
 	if (pci_priv->pci_dev->device != QCA6174_DEVICE_ID) {
-		if (pci_set_power_state(pci_priv->pci_dev, PCI_D3hot))
+		ret = pci_set_power_state(pci_priv->pci_dev, PCI_D3hot);
+		if (ret)
 			cnss_pr_err("Failed to set D3Hot, err =  %d\n", ret);
 	}
 
