@@ -5126,7 +5126,7 @@ int cam_ife_csid_ver2_stop(void *hw_priv,
 			res->res_name);
 	}
 	if (csid_hw->buf_done_irq_handle) {
-		rc = cam_irq_controller_unsubscribe_irq(
+		rc = cam_irq_controller_unsubscribe_irq_evt(
 			csid_hw->top_irq_controller,
 			csid_hw->buf_done_irq_handle);
 		csid_hw->buf_done_irq_handle = 0;
@@ -5136,14 +5136,14 @@ int cam_ife_csid_ver2_stop(void *hw_priv,
 	}
 
 	if (csid_hw->top_err_irq_handle) {
-		rc = cam_irq_controller_unsubscribe_irq(
+		rc = cam_irq_controller_unsubscribe_irq_evt(
 			csid_hw->top_irq_controller,
 			csid_hw->top_err_irq_handle);
 		csid_hw->top_err_irq_handle = 0;
 	}
 
 	if (csid_hw->debug_info.top_mask) {
-		cam_irq_controller_unsubscribe_irq(csid_hw->top_irq_controller,
+		cam_irq_controller_unsubscribe_irq_evt(csid_hw->top_irq_controller,
 			csid_hw->top_info_irq_handle);
 		csid_hw->top_info_irq_handle = 0;
 	}
