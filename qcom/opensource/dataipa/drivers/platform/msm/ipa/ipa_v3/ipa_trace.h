@@ -394,7 +394,7 @@ TRACE_EVENT(
 /* This part must be outside protection */
 #undef TRACE_INCLUDE_PATH
 #ifdef CONFIG_IPA_VENDOR_DLKM
-#define TRACE_INCLUDE_PATH ../../../../vendor/qcom/opensource/dataipa/drivers/platform/msm/ipa/ipa_v3
+#define TRACE_INCLUDE_PATH ../../../../sm8550-modules/qcom/opensource/dataipa/drivers/platform/msm/ipa/ipa_v3
 #else
 #define TRACE_INCLUDE_PATH ../../techpack/dataipa/drivers/platform/msm/ipa/ipa_v3
 #endif
