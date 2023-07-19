@@ -317,8 +317,7 @@ bool cam_cpas_is_feature_supported(uint32_t flag, uint32_t hw_map,
 		return false;
 	}
 
-	/* we are supporting only one camera so use idx 0 */
-	supported = cam_cpas_is_part_supported(flag, hw_map, soc_private->part_info[0]);
+	supported = cam_cpas_is_part_supported(flag, hw_map, soc_private->part_info);
 
 	for (i = 0; i < soc_private->num_feature_info; i++)
 		if (soc_private->feature_info[i].feature == flag)

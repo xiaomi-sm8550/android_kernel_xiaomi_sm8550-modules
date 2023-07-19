@@ -52,6 +52,9 @@
 #define CAM_RPMH_BCM_MNOC_INDEX 4
 #define CAM_RPMH_BCM_INFO_MAX   5
 
+/* Number of camera (CAM_SS) instances */
+#define CAM_MAX_CAMERA_INSTANCES 1
+
 #define CAM_CPAS_MONITOR_MAX_ENTRIES   100
 #define CAM_CPAS_INC_MONITOR_HEAD(head, ret) \
 	div_u64_rem(atomic64_add_return(1, head),\
