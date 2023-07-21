@@ -6443,8 +6443,8 @@ int msm_vidc_check_core_mbps(struct msm_vidc_inst *inst)
 
 	if (is_encode_session(inst)) {
 		/* reject encoder if all encoders mbps is greater than MAX_MBPS */
-		if (enc_mbps > core->capabilities[MAX_MBPS].value) {
-			i_vpr_e(inst, "%s: Hardware overloaded. needed %u, max %u", __func__,
+		if (enc_mbps > core->capabilities[MAX_ENC_MBPS].value) {
+			i_vpr_e(inst, "%s: Encoder Hardware overloaded. needed %u, max %u", __func__,
 				mbps, core->capabilities[MAX_MBPS].value);
 			return -ENOMEM;
 		}
