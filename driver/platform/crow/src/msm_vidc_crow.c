@@ -386,10 +386,10 @@ static struct msm_platform_inst_capability instance_cap_data_crow_v0[] = {
 
 	{META_OUTBUF_FENCE, DEC, H264|HEVC|VP9,
 		V4L2_MPEG_VIDC_META_DISABLE,
-		V4L2_MPEG_VIDC_META_DISABLE | V4L2_MPEG_VIDC_META_RX_INPUT,
+		V4L2_MPEG_VIDC_META_ENABLE | V4L2_MPEG_VIDC_META_RX_INPUT,
 		0, V4L2_MPEG_VIDC_META_DISABLE,
 		V4L2_CID_MPEG_VIDC_METADATA_OUTBUF_FENCE,
-		0,
+		HFI_PROP_FENCE,
 		CAP_FLAG_BITMASK},
 
 	/*
@@ -398,22 +398,22 @@ static struct msm_platform_inst_capability instance_cap_data_crow_v0[] = {
 	 * fence_fd corresponding to client set fence_id.
 	 */
 	{FENCE_ID, DEC, CODECS_ALL,
-		0, 0, 1, 0,
+		0, INT_MAX, 1, 0,
 		V4L2_CID_MPEG_VIDC_SW_FENCE_ID,
 		0,
 		CAP_FLAG_DYNAMIC_ALLOWED | CAP_FLAG_OUTPUT_PORT},
 
 	{FENCE_FD, DEC, CODECS_ALL,
-		INVALID_FD, INVALID_FD, 1, INVALID_FD,
+		INVALID_FD, INT_MAX, 1, INVALID_FD,
 		V4L2_CID_MPEG_VIDC_SW_FENCE_FD},
 
 
 	{META_PICTURE_TYPE, DEC, CODECS_ALL,
 		V4L2_MPEG_VIDC_META_DISABLE,
-		V4L2_MPEG_VIDC_META_DISABLE | V4L2_MPEG_VIDC_META_RX_INPUT,
+		V4L2_MPEG_VIDC_META_ENABLE | V4L2_MPEG_VIDC_META_RX_INPUT,
 		0, V4L2_MPEG_VIDC_META_DISABLE,
 		V4L2_CID_MPEG_VIDC_METADATA_PICTURE_TYPE,
-		0,
+		HFI_PROP_PICTURE_TYPE,
 		CAP_FLAG_BITMASK},
 
 	{TS_REORDER, DEC, H264|HEVC,
@@ -1707,9 +1707,9 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_crow
 		msm_vidc_set_u32},
 
 	{META_OUTBUF_FENCE, DEC, H264|HEVC|VP9,
-		{0},
-		{0},
-		NULL,
+		{OUTPUT_ORDER},
+		{LOWLATENCY_MODE},
+		msm_vidc_adjust_dec_outbuf_fence,
 		NULL},
 
 	{HFLIP, ENC, H264|HEVC,
@@ -1833,6 +1833,12 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_crow
 		{BITRATE_MODE},
 		{STAGE},
 		msm_vidc_adjust_enc_lowlatency_mode,
+		NULL},
+
+	{LOWLATENCY_MODE, DEC, H264|HEVC|VP9,
+		{META_OUTBUF_FENCE},
+		{STAGE},
+		msm_vidc_adjust_dec_lowlatency_mode,
 		NULL},
 
 	{LTR_COUNT, ENC, H264|HEVC,
@@ -2122,7 +2128,7 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_crow
 
 	{OUTPUT_ORDER, DEC, H264|HEVC|VP9,
 		{THUMBNAIL_MODE, DISPLAY_DELAY, DISPLAY_DELAY_ENABLE},
-		{0},
+		{META_OUTBUF_FENCE},
 		msm_vidc_adjust_output_order,
 		msm_vidc_set_u32},
 
@@ -2436,6 +2442,38 @@ static struct msm_platform_inst_capability instance_cap_data_crow_v1[] = {
 		V4L2_CID_MPEG_VIDC_SECURE,
 		HFI_PROP_SECURE,
 		CAP_FLAG_NONE},
+
+	{META_OUTBUF_FENCE, DEC, H264|HEVC|VP9,
+		V4L2_MPEG_VIDC_META_DISABLE,
+		V4L2_MPEG_VIDC_META_ENABLE | V4L2_MPEG_VIDC_META_RX_INPUT,
+		0, V4L2_MPEG_VIDC_META_DISABLE,
+		V4L2_CID_MPEG_VIDC_METADATA_OUTBUF_FENCE,
+		HFI_PROP_FENCE,
+		CAP_FLAG_BITMASK},
+
+	/*
+	 * Client to do set_ctrl with FENCE_ID to set fence_id
+	 * and then client will do get_ctrl with FENCE_FD to get
+	 * fence_fd corresponding to client set fence_id.
+	 */
+	{FENCE_ID, DEC, CODECS_ALL,
+		0, INT_MAX, 1, 0,
+		V4L2_CID_MPEG_VIDC_SW_FENCE_ID,
+		0,
+		CAP_FLAG_DYNAMIC_ALLOWED | CAP_FLAG_OUTPUT_PORT},
+
+	{FENCE_FD, DEC, CODECS_ALL,
+		INVALID_FD, INT_MAX, 1, INVALID_FD,
+		V4L2_CID_MPEG_VIDC_SW_FENCE_FD},
+
+
+	{META_PICTURE_TYPE, DEC, CODECS_ALL,
+		V4L2_MPEG_VIDC_META_DISABLE,
+		V4L2_MPEG_VIDC_META_ENABLE | V4L2_MPEG_VIDC_META_RX_INPUT,
+		0, V4L2_MPEG_VIDC_META_DISABLE,
+		V4L2_CID_MPEG_VIDC_METADATA_PICTURE_TYPE,
+		HFI_PROP_PICTURE_TYPE,
+		CAP_FLAG_BITMASK},
 
 	{TS_REORDER, DEC, H264|HEVC,
 		V4L2_MPEG_MSM_VIDC_DISABLE, V4L2_MPEG_MSM_VIDC_ENABLE,
@@ -3727,6 +3765,12 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_crow
 		NULL,
 		msm_vidc_set_u32},
 
+	{META_OUTBUF_FENCE, DEC, H264|HEVC|VP9,
+		{OUTPUT_ORDER},
+		{LOWLATENCY_MODE},
+		msm_vidc_adjust_dec_outbuf_fence,
+		NULL},
+
 	{HFLIP, ENC, H264|HEVC,
 		{0},
 		{0},
@@ -3848,6 +3892,12 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_crow
 		{BITRATE_MODE},
 		{STAGE},
 		msm_vidc_adjust_enc_lowlatency_mode,
+		NULL},
+
+	{LOWLATENCY_MODE, DEC, H264|HEVC|VP9,
+		{META_OUTBUF_FENCE},
+		{STAGE},
+		msm_vidc_adjust_dec_lowlatency_mode,
 		NULL},
 
 	{LTR_COUNT, ENC, H264|HEVC,
@@ -4137,7 +4187,7 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_crow
 
 	{OUTPUT_ORDER, DEC, H264|HEVC|VP9,
 		{THUMBNAIL_MODE, DISPLAY_DELAY, DISPLAY_DELAY_ENABLE},
-		{0},
+		{META_OUTBUF_FENCE},
 		msm_vidc_adjust_output_order,
 		msm_vidc_set_u32},
 
@@ -4455,6 +4505,38 @@ static struct msm_platform_inst_capability instance_cap_data_crow_v2[] = {
 		V4L2_CID_MPEG_VIDC_SECURE,
 		HFI_PROP_SECURE,
 		CAP_FLAG_NONE},
+
+	{META_OUTBUF_FENCE, DEC, H264|HEVC|VP9,
+		V4L2_MPEG_VIDC_META_DISABLE,
+		V4L2_MPEG_VIDC_META_ENABLE | V4L2_MPEG_VIDC_META_RX_INPUT,
+		0, V4L2_MPEG_VIDC_META_DISABLE,
+		V4L2_CID_MPEG_VIDC_METADATA_OUTBUF_FENCE,
+		HFI_PROP_FENCE,
+		CAP_FLAG_BITMASK},
+
+	/*
+	 * Client to do set_ctrl with FENCE_ID to set fence_id
+	 * and then client will do get_ctrl with FENCE_FD to get
+	 * fence_fd corresponding to client set fence_id.
+	 */
+	{FENCE_ID, DEC, CODECS_ALL,
+		0, INT_MAX, 1, 0,
+		V4L2_CID_MPEG_VIDC_SW_FENCE_ID,
+		0,
+		CAP_FLAG_DYNAMIC_ALLOWED | CAP_FLAG_OUTPUT_PORT},
+
+	{FENCE_FD, DEC, CODECS_ALL,
+		INVALID_FD, INT_MAX, 1, INVALID_FD,
+		V4L2_CID_MPEG_VIDC_SW_FENCE_FD},
+
+
+	{META_PICTURE_TYPE, DEC, CODECS_ALL,
+		V4L2_MPEG_VIDC_META_DISABLE,
+		V4L2_MPEG_VIDC_META_ENABLE | V4L2_MPEG_VIDC_META_RX_INPUT,
+		0, V4L2_MPEG_VIDC_META_DISABLE,
+		V4L2_CID_MPEG_VIDC_METADATA_PICTURE_TYPE,
+		HFI_PROP_PICTURE_TYPE,
+		CAP_FLAG_BITMASK},
 
 	{TS_REORDER, DEC, H264|HEVC,
 		V4L2_MPEG_MSM_VIDC_DISABLE, V4L2_MPEG_MSM_VIDC_ENABLE,
@@ -5746,6 +5828,12 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_crow
 		NULL,
 		msm_vidc_set_u32},
 
+	{META_OUTBUF_FENCE, DEC, H264|HEVC|VP9,
+		{OUTPUT_ORDER},
+		{LOWLATENCY_MODE},
+		msm_vidc_adjust_dec_outbuf_fence,
+		NULL},
+
 	{HFLIP, ENC, H264|HEVC,
 		{0},
 		{0},
@@ -5867,6 +5955,12 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_crow
 		{BITRATE_MODE},
 		{STAGE},
 		msm_vidc_adjust_enc_lowlatency_mode,
+		NULL},
+
+	{LOWLATENCY_MODE, DEC, H264|HEVC|VP9,
+		{META_OUTBUF_FENCE},
+		{STAGE},
+		msm_vidc_adjust_dec_lowlatency_mode,
 		NULL},
 
 	{LTR_COUNT, ENC, H264|HEVC,
@@ -6156,7 +6250,7 @@ static struct msm_platform_inst_cap_dependency instance_cap_dependency_data_crow
 
 	{OUTPUT_ORDER, DEC, H264|HEVC|VP9,
 		{THUMBNAIL_MODE, DISPLAY_DELAY, DISPLAY_DELAY_ENABLE},
-		{0},
+		{META_OUTBUF_FENCE},
 		msm_vidc_adjust_output_order,
 		msm_vidc_set_u32},
 
