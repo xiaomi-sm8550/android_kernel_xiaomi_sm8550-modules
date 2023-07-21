@@ -83,10 +83,12 @@ static struct kgsl_iommu_pt *to_iommu_pt(struct kgsl_pagetable *pagetable)
 
 static u32 get_llcc_flags(struct kgsl_mmu *mmu)
 {
-	if (mmu->subtype == KGSL_IOMMU_SMMU_V500)
-		return IOMMU_USE_LLC_NWA;
-	else
-		return IOMMU_USE_UPSTREAM_HINT;
+	/* Return no-write-allocate if mmu feature for no-write-allocate is set */
+	if (test_bit(KGSL_MMU_FORCE_LLCC_NWA, &mmu->features))
+		return IOMMU_SYS_CACHE_NWA;
+
+	/* Return write allocate as default llcc allocation policy */
+	return IOMMU_SYS_CACHE;
 }
 
 static int _iommu_get_protection_flags(struct kgsl_mmu *mmu,
