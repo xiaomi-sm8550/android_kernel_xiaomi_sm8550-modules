@@ -1906,7 +1906,8 @@ static int __cam_isp_ctx_handle_buf_done_for_request_verify_addr(
 	bool defer_buf_done)
 {
 	int rc = 0;
-	int i, j;
+	int i, j, k, def_idx;
+	bool duplicate_defer_buf_done = false;
 	struct cam_isp_ctx_req *req_isp;
 	struct cam_context *ctx = ctx_isp->base;
 	const char *handle_type;
@@ -1990,6 +1991,32 @@ static int __cam_isp_ctx_handle_buf_done_for_request_verify_addr(
 
 		if (defer_buf_done) {
 			uint32_t deferred_indx = req_isp->num_deferred_acks;
+			duplicate_defer_buf_done = false;
+
+			for (k = 0; k < req_isp->num_deferred_acks; k++) {
+				def_idx = req_isp->deferred_fence_map_index[k];
+				if (def_idx == j) {
+					CAM_WARN(CAM_ISP,
+						"duplicate deferred ack for ctx[%u] link[0x%x] req %lld res 0x%x sync_id 0x%x",
+						ctx->ctx_id, ctx->link_hdl,
+						req->request_id,
+						req_isp->fence_map_out[j].resource_handle,
+						req_isp->fence_map_out[j].sync_id);
+					duplicate_defer_buf_done = true;
+					break;
+				}
+			}
+
+			if (duplicate_defer_buf_done)
+				continue;
+
+			if (req_isp->num_deferred_acks == req_isp->num_fence_map_out) {
+				CAM_WARN(CAM_ISP,
+					"WARNING: req_id %lld num_deferred_acks %d > map_out %d, ctx_idx:%u link[0x%x]",
+					req->request_id, req_isp->num_deferred_acks,
+					req_isp->num_fence_map_out, ctx->ctx_id, ctx->link_hdl);
+				continue;
+			}
 
 			if (deferred_indx >= CAM_ISP_CTX_RES_MAX) {
 				CAM_WARN(CAM_ISP, "ctx: %u req: %llu number of Deferred buf done %u is more than %u",
@@ -2982,7 +3009,7 @@ static int __cam_isp_ctx_epoch_in_applied(struct cam_isp_context *ctx_isp,
 		 * The previous req is applied after SOF and there is only
 		 * one applied req, we don't need to report bubble for this case.
 		 */
-		if (wait_req_cnt == 1) {
+		if (wait_req_cnt == 1 && !ctx_isp->is_tfe_shdr) {
 			req = list_first_entry(&ctx->wait_req_list,
 				struct cam_ctx_request, list);
 			request_id = req->request_id;
@@ -6792,6 +6819,8 @@ static int __cam_isp_ctx_acquire_hw_v1(struct cam_context *ctx,
 
 	ctx_isp->support_consumed_addr =
 		(param.op_flags & CAM_IFE_CTX_CONSUME_ADDR_EN);
+	ctx_isp->is_tfe_shdr = (param.op_flags & CAM_IFE_CTX_SHDR_EN);
+	ctx_isp->is_shdr_master = (param.op_flags & CAM_IFE_CTX_SHDR_IS_MASTER);
 
 	/* Query the context has rdi only resource */
 	hw_cmd_args.ctxt_to_hw_map = param.ctxt_to_hw_map;
