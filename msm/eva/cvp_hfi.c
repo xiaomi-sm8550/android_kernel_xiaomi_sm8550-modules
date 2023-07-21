@@ -2908,7 +2908,7 @@ static int __response_handler(struct iris_hfi_device *device)
 		return 0;
 	}
 
-	if (device->intr_status & CVP_FATAL_INTR_BMSK) {
+	if (device->intr_status & CVP_WRAPPER_INTR_MASK_A2HWD_BMSK) {
 		struct cvp_hfi_sfr_struct *vsfr = (struct cvp_hfi_sfr_struct *)
 			device->sfr.align_virtual_addr;
 		struct msm_cvp_cb_info info = {
@@ -3013,7 +3013,7 @@ exit:
 	return packet_count;
 }
 
-static void iris_hfi_core_work_handler(struct work_struct *work)
+irqreturn_t iris_hfi_core_work_handler(int irq, void *data)
 {
 	struct msm_cvp_core *core;
 	struct iris_hfi_device *device;
@@ -3025,7 +3025,7 @@ static void iris_hfi_core_work_handler(struct work_struct *work)
 	if (core)
 		device = core->device->hfi_device_data;
 	else
-		return;
+		return IRQ_HANDLED;
 
 	mutex_lock(&device->lock);
 
@@ -3087,21 +3087,13 @@ err_no_work:
 	if (!(intr_status & CVP_WRAPPER_INTR_STATUS_A2HWD_BMSK))
 		enable_irq(device->cvp_hal_data->irq);
 
-	/*
-	 * XXX: Don't add any code beyond here.  Reacquiring locks after release
-	 * it above doesn't guarantee the atomicity that we're aiming for.
-	 */
+	return IRQ_HANDLED;
 }
-
-static DECLARE_WORK(iris_hfi_work, iris_hfi_core_work_handler);
 
 irqreturn_t cvp_hfi_isr(int irq, void *dev)
 {
-	struct iris_hfi_device *device = dev;
-
 	disable_irq_nosync(irq);
-	queue_work(device->cvp_workq, &iris_hfi_work);
-	return IRQ_HANDLED;
+	return IRQ_WAKE_THREAD;
 }
 
 static int __handle_reset_clk(struct msm_cvp_platform_resources *res,
