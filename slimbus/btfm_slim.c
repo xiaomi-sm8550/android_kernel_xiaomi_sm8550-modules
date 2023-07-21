@@ -36,6 +36,8 @@ struct btfmslim *btfm_slim_drv_data;
 
 static int btfm_num_ports_open;
 
+static bool is_registered = false;
+
 int btfm_slim_write(struct btfmslim *btfmslim,
 		uint16_t reg, uint8_t reg_val, uint8_t pgd)
 {
@@ -593,13 +595,20 @@ static int btfm_slim_status(struct slim_device *sdev,
 	btfm_slim = dev_get_drvdata(dev);
 
 #if IS_ENABLED(CONFIG_BTFM_SLIM)
-	ret = btfm_slim_register_codec(btfm_slim);
+	if (!is_registered) {
+		ret = btfm_slim_register_codec(btfm_slim);
+	}
 #else
-	btfm_slim_get_hwep_details(sdev, btfm_slim);
-	ret = btfm_slim_register_hw_ep(btfm_slim);
+	if (!is_registered) {
+		btfm_slim_get_hwep_details(sdev, btfm_slim);
+		ret = btfm_slim_register_hw_ep(btfm_slim);
+	}
 #endif
-	if (ret)
+	if (!ret)
+		is_registered = true;
+	else
 		BTFMSLIM_ERR("error, registering slimbus codec failed");
+
 	return ret;
 }
 
