@@ -3356,6 +3356,9 @@ int icnss_get_soc_info(struct device *dev, struct icnss_soc_info *info)
 		WLFW_MAX_TIMESTAMP_LEN + 1);
 	strlcpy(info->fw_build_id, priv->fw_build_id,
 	        ICNSS_WLFW_MAX_BUILD_ID_LEN + 1);
+	info->rd_card_chain_cap = priv->rd_card_chain_cap;
+	info->phy_he_channel_width_cap = priv->phy_he_channel_width_cap;
+	info->phy_qam_cap = priv->phy_qam_cap;
 
 	return 0;
 }
@@ -4182,7 +4185,7 @@ static void icnss_sysfs_destroy(struct icnss_priv *priv)
 
 static int icnss_resource_parse(struct icnss_priv *priv)
 {
-	int ret = 0, i = 0;
+	int ret = 0, i = 0, irq = 0;
 	struct platform_device *pdev = priv->pdev;
 	struct device *dev = &pdev->dev;
 	struct resource *res;
@@ -4230,14 +4233,13 @@ static int icnss_resource_parse(struct icnss_priv *priv)
 			     priv->mem_base_va);
 
 		for (i = 0; i < ICNSS_MAX_IRQ_REGISTRATIONS; i++) {
-			res = platform_get_resource(priv->pdev,
-						    IORESOURCE_IRQ, i);
-			if (!res) {
+			irq = platform_get_irq(pdev, i);
+			if (irq < 0) {
 				icnss_pr_err("Fail to get IRQ-%d\n", i);
 				ret = -ENODEV;
 				goto put_clk;
 			} else {
-				priv->ce_irqs[i] = res->start;
+				priv->ce_irqs[i] = irq;
 			}
 		}
 
@@ -4297,14 +4299,13 @@ static int icnss_resource_parse(struct icnss_priv *priv)
 
 		icnss_get_msi_assignment(priv);
 		for (i = 0; i < priv->msi_config->total_vectors; i++) {
-			res = platform_get_resource(priv->pdev,
-						    IORESOURCE_IRQ, i);
-			if (!res) {
+			irq = platform_get_irq(priv->pdev, i);
+			if (irq < 0) {
 				icnss_pr_err("Fail to get IRQ-%d\n", i);
 				ret = -ENODEV;
 				goto put_clk;
 			} else {
-				priv->srng_irqs[i] = res->start;
+				priv->srng_irqs[i] = irq;
 			}
 		}
 	}

@@ -548,6 +548,7 @@ struct cnss_plat_data {
 	u32 fw_mem_seg_len;
 	struct cnss_fw_mem fw_mem[QMI_WLFW_MAX_NUM_MEM_SEG_V01];
 	struct cnss_fw_mem m3_mem;
+	struct cnss_fw_mem tme_lite_mem;
 	struct cnss_fw_mem *cal_mem;
 	struct cnss_fw_mem aux_mem;
 	u64 cal_time;
@@ -743,4 +744,6 @@ int cnss_get_input_gpio_value(struct cnss_plat_data *plat_priv, int gpio_num);
 bool cnss_check_driver_loading_allowed(void);
 int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv);
 void cnss_recovery_handler(struct cnss_plat_data *plat_priv);
+size_t cnss_get_platform_name(struct cnss_plat_data *plat_priv,
+			      char *buf, const size_t buf_len);
 #endif /* _CNSS_MAIN_H */
