@@ -6392,7 +6392,7 @@ static struct msm_vidc_ubwc_config_data ubwc_config_crow[] = {
 };
 
 static struct allowed_clock_rates_table clock_data_crow[] = {
-	{165000000 }, {270000000}, {366000000 }, {384000000}
+	{384000000}, {366000000}, {270000000}, {165000000}
 };
 
 static struct msm_vidc_efuse_data efuse_data_crow[] = {
