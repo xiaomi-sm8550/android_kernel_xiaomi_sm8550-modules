@@ -67,7 +67,7 @@ static void cam_cre_update_read_reg_val(struct plane_info p_info,
 		p_info.alignment);
 
 	/* Fetch engine width has to be updated in number of bytes */
-	rd_client_reg_val->img_width  = p_info.stride;
+	rd_client_reg_val->img_width  = p_info.width;
 	rd_client_reg_val->stride     = p_info.stride;
 	rd_client_reg_val->img_height = p_info.height;
 	rd_client_reg_val->alignment  = p_info.alignment;
@@ -180,7 +180,7 @@ static int cam_cre_bus_rd_update(struct cam_cre_hw *cam_cre_hw_info,
 		/* Buffer size */
 		update_cre_reg_set(cre_reg_buf,
 			rd_reg->offset + rd_reg_client->rd_width,
-			rd_client_reg_val->img_width);
+			ctx_data->cre_acquire.in_res[in_port_idx].width);
 		update_cre_reg_set(cre_reg_buf,
 			rd_reg->offset + rd_reg_client->rd_height,
 			rd_client_reg_val->img_height);

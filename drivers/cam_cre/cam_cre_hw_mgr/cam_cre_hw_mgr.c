@@ -1550,6 +1550,12 @@ static int cam_cre_validate_acquire_res_info(
 					cre_acquire->in_res[i].format);
 				return -EINVAL;
 		}
+
+		if (!cre_acquire->in_res[i].width || !cre_acquire->in_res[i].height) {
+			CAM_ERR(CAM_CRE, "Invalid width %d height %d for in res %d",
+				cre_acquire->in_res[i].width, cre_acquire->in_res[i].height, i);
+			return -EINVAL;
+		}
 	}
 
 	for (i = 0; i < cre_acquire->num_out_res; i++) {
