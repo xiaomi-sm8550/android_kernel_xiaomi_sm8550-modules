@@ -2629,7 +2629,7 @@ const struct mhi_dma_ops ipa_dma_mhi_driver_ops = {
 	.mhi_dma_suspend = ipa_mhi_dma_suspend,
 };
 
-int ipa_dma_mhi_provide_ops()
+int ipa_dma_mhi_provide_ops(void)
 {
 	return mhi_dma_provide_ops(&ipa_dma_mhi_driver_ops);
 }
