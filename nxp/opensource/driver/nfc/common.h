@@ -145,7 +145,7 @@ do { \
 } while (0)
 
 static struct semaphore sem_eSE_pwr_off;
-static chk_eSE_pwr_off;
+static int chk_eSE_pwr_off;
 
 enum ese_ioctl_request {
 	/* eSE POWER ON */
