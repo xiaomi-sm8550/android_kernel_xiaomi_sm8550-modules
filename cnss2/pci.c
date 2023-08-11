@@ -82,6 +82,9 @@ static DEFINE_SPINLOCK(time_sync_lock);
 #define WLAON_PWR_CTRL_SHUTDOWN_DELAY_MIN_US	1000
 #define WLAON_PWR_CTRL_SHUTDOWN_DELAY_MAX_US	2000
 
+#define RDDM_LINK_RECOVERY_RETRY		20
+#define RDDM_LINK_RECOVERY_RETRY_DELAY_MS	20
+
 #define FORCE_WAKE_DELAY_MIN_US			4000
 #define FORCE_WAKE_DELAY_MAX_US			6000
 #define FORCE_WAKE_DELAY_TIMEOUT_US		60000
@@ -1492,46 +1495,6 @@ out:
 	return ret;
 }
 
-int cnss_pci_recover_link_down(struct cnss_pci_data *pci_priv)
-{
-	int ret;
-
-	switch (pci_priv->device_id) {
-	case QCA6390_DEVICE_ID:
-	case QCA6490_DEVICE_ID:
-	case KIWI_DEVICE_ID:
-	case MANGO_DEVICE_ID:
-	case PEACH_DEVICE_ID:
-		break;
-	default:
-		return -EOPNOTSUPP;
-	}
-
-	/* Always wait here to avoid missing WAKE assert for RDDM
-	 * before link recovery
-	 */
-	msleep(WAKE_EVENT_TIMEOUT);
-
-	ret = cnss_suspend_pci_link(pci_priv);
-	if (ret)
-		cnss_pr_err("Failed to suspend PCI link, err = %d\n", ret);
-
-	ret = cnss_resume_pci_link(pci_priv);
-	if (ret) {
-		cnss_pr_err("Failed to resume PCI link, err = %d\n", ret);
-		del_timer(&pci_priv->dev_rddm_timer);
-		return ret;
-	}
-
-	mod_timer(&pci_priv->dev_rddm_timer,
-		  jiffies + msecs_to_jiffies(DEV_RDDM_TIMEOUT));
-
-	cnss_mhi_debug_reg_dump(pci_priv);
-	cnss_pci_soc_scratch_reg_dump(pci_priv);
-
-	return 0;
-}
-
 static void cnss_pci_update_link_event(struct cnss_pci_data *pci_priv,
 				       enum cnss_bus_event_type type,
 				       void *data)
@@ -1577,6 +1540,7 @@ void cnss_pci_handle_linkdown(struct cnss_pci_data *pci_priv)
 	cnss_pci_update_link_event(pci_priv, BUS_EVENT_PCI_LINK_DOWN, NULL);
 
 	cnss_fatal_err("PCI link down, schedule recovery\n");
+	reinit_completion(&pci_priv->wake_event_complete);
 	cnss_schedule_recovery(&pci_dev->dev, CNSS_REASON_LINK_DOWN);
 }
 
@@ -5731,6 +5695,70 @@ static void cnss_pci_mhi_reg_dump(struct cnss_pci_data *pci_priv)
 	cnss_pci_dump_shadow_reg(pci_priv);
 }
 
+int cnss_pci_recover_link_down(struct cnss_pci_data *pci_priv)
+{
+	int ret;
+	int retry = 0;
+	enum mhi_ee_type mhi_ee;
+
+	switch (pci_priv->device_id) {
+	case QCA6390_DEVICE_ID:
+	case QCA6490_DEVICE_ID:
+	case KIWI_DEVICE_ID:
+	case MANGO_DEVICE_ID:
+	case PEACH_DEVICE_ID:
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+
+	/* Always wait here to avoid missing WAKE assert for RDDM
+	 * before link recovery
+	 */
+	ret = wait_for_completion_timeout(&pci_priv->wake_event_complete,
+					  msecs_to_jiffies(WAKE_EVENT_TIMEOUT));
+	if (!ret)
+		cnss_pr_err("Timeout waiting for wake event after link down\n");
+
+	ret = cnss_suspend_pci_link(pci_priv);
+	if (ret)
+		cnss_pr_err("Failed to suspend PCI link, err = %d\n", ret);
+
+	ret = cnss_resume_pci_link(pci_priv);
+	if (ret) {
+		cnss_pr_err("Failed to resume PCI link, err = %d\n", ret);
+		del_timer(&pci_priv->dev_rddm_timer);
+		return ret;
+	}
+
+retry:
+	/*
+	 * After PCIe link resumes, 20 to 400 ms delay is observerved
+	 * before device moves to RDDM.
+	 */
+	msleep(RDDM_LINK_RECOVERY_RETRY_DELAY_MS);
+	mhi_ee = mhi_get_exec_env(pci_priv->mhi_ctrl);
+	if (mhi_ee == MHI_EE_RDDM) {
+		del_timer(&pci_priv->dev_rddm_timer);
+		cnss_pr_info("Device in RDDM after link recovery, try to collect dump\n");
+		cnss_schedule_recovery(&pci_priv->pci_dev->dev,
+				       CNSS_REASON_RDDM);
+		return 0;
+	} else if (retry++ < RDDM_LINK_RECOVERY_RETRY) {
+		cnss_pr_dbg("Wait for RDDM after link recovery, retry #%d, Device EE: %d\n",
+			    retry, mhi_ee);
+		goto retry;
+	}
+
+	if (!cnss_pci_assert_host_sol(pci_priv))
+		return 0;
+	cnss_mhi_debug_reg_dump(pci_priv);
+	cnss_pci_soc_scratch_reg_dump(pci_priv);
+	cnss_schedule_recovery(&pci_priv->pci_dev->dev,
+			       CNSS_REASON_TIMEOUT);
+	return 0;
+}
+
 int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv)
 {
 	int ret;
@@ -6388,7 +6416,7 @@ static void cnss_dev_rddm_timeout_hdlr(struct timer_list *t)
 
 	mhi_ee = mhi_get_exec_env(pci_priv->mhi_ctrl);
 	if (mhi_ee == MHI_EE_PBL)
-		cnss_pr_err("Unable to collect ramdumps due to abrupt reset\n");
+		cnss_pr_err("Device MHI EE is PBL, unable to collect dump\n");
 
 	if (mhi_ee == MHI_EE_RDDM) {
 		cnss_pr_info("Device MHI EE is RDDM, try to collect dump\n");
@@ -6439,6 +6467,7 @@ static int cnss_pci_handle_mhi_sys_err(struct cnss_pci_data *pci_priv)
 	cnss_ignore_qmi_failure(true);
 	set_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state);
 	del_timer(&plat_priv->fw_boot_timer);
+	reinit_completion(&pci_priv->wake_event_complete);
 	mod_timer(&pci_priv->dev_rddm_timer,
 		  jiffies + msecs_to_jiffies(DEV_RDDM_TIMEOUT));
 	cnss_pci_update_status(pci_priv, CNSS_FW_DOWN);
@@ -7278,6 +7307,7 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 		cnss_pci_get_link_status(pci_priv);
 		cnss_pci_set_wlaon_pwr_ctrl(pci_priv, false, true, false);
 		cnss_pci_wake_gpio_init(pci_priv);
+		init_completion(&pci_priv->wake_event_complete);
 		break;
 	default:
 		cnss_pr_err("Unknown PCI device found: 0x%x\n",
