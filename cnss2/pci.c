@@ -5946,11 +5946,17 @@ exit:
 #ifdef CONFIG_CNSS2_SSR_DRIVER_DUMP
 void cnss_pci_collect_host_dump_info(struct cnss_pci_data *pci_priv)
 {
-	struct cnss_ssr_driver_dump_entry ssr_entry[CNSS_HOST_DUMP_TYPE_MAX] = {0};
+	struct cnss_ssr_driver_dump_entry *ssr_entry;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	size_t num_entries_loaded = 0;
 	int x;
 	int ret = -1;
+
+	ssr_entry = kmalloc(sizeof(*ssr_entry) * CNSS_HOST_DUMP_TYPE_MAX, GFP_KERNEL);
+	if (!ssr_entry) {
+		cnss_pr_err("ssr_entry malloc failed");
+		return;
+	}
 
 	if (pci_priv->driver_ops &&
 	    pci_priv->driver_ops->collect_driver_dump) {
@@ -5971,6 +5977,8 @@ void cnss_pci_collect_host_dump_info(struct cnss_pci_data *pci_priv)
 	} else {
 		cnss_pr_info("Host SSR elf dump collection feature disabled\n");
 	}
+
+	kfree(ssr_entry);
 }
 #endif
 
