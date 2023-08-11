@@ -567,6 +567,7 @@ struct cnss_plat_data {
 	struct mutex dev_lock; /* mutex for register access through debugfs */
 	struct mutex driver_ops_lock; /* mutex for external driver ops */
 	struct cnss_wlan_driver *driver_ops;
+	u32 supported_link_speed;
 	u32 device_freq_hz;
 	u32 diag_reg_read_addr;
 	u32 diag_reg_read_mem_type;
