@@ -4831,7 +4831,7 @@ static int cam_isp_tfe_packet_generic_blob_handler(void *user_data,
 		struct cam_isp_tfe_alignment_resource_info   *alignment_info =
 			(struct cam_isp_tfe_alignment_resource_info *)blob_data;
 
-		if (tfe_mgr_ctx->is_dual) {
+		if (tfe_mgr_ctx->is_dual || !tfe_mgr_ctx->is_shdr) {
 			CAM_ERR(CAM_ISP, "Alignment blob can't be use in dual mode ctx %d",
 				tfe_mgr_ctx->ctx_index);
 			return -EINVAL;
@@ -5372,9 +5372,6 @@ static int cam_tfe_mgr_prepare_hw_update(void *hw_mgr_priv,
 				i, ctx->base[i].idx, rc);
 			goto end;
 		}
-
-		if (ctx->is_shdr_slave)
-			continue;
 
 		/*Add reg update */
 		rc = cam_isp_add_reg_update(prepare, &ctx->res_list_tfe_in,
