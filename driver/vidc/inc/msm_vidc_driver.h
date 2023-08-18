@@ -70,6 +70,11 @@ static inline bool is_output_meta_buffer(enum msm_vidc_buffer_type buffer_type)
 	return buffer_type == MSM_VIDC_BUF_OUTPUT_META;
 }
 
+static inline bool is_slice_decode_enabled(struct msm_vidc_inst *inst)
+{
+	return !!(inst->capabilities->cap[SLICE_DECODE].value);
+}
+
 static inline bool is_early_notify_enabled(struct msm_vidc_inst *inst)
 {
 	return !!(inst->capabilities->cap[EARLY_NOTIFY_ENABLE].value);
