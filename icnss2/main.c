@@ -1590,15 +1590,22 @@ out:
 static int icnss_fw_crashed(struct icnss_priv *priv,
 			    struct icnss_event_pd_service_down_data *event_data)
 {
+	struct icnss_uevent_fw_down_data fw_down_data = {0};
+
 	icnss_pr_dbg("FW crashed, state: 0x%lx\n", priv->state);
 
 	set_bit(ICNSS_PD_RESTART, &priv->state);
-	clear_bit(ICNSS_FW_READY, &priv->state);
 
 	icnss_pm_stay_awake(priv);
 
-	if (test_bit(ICNSS_DRIVER_PROBED, &priv->state))
-		icnss_call_driver_uevent(priv, ICNSS_UEVENT_FW_CRASHED, NULL);
+	if (test_bit(ICNSS_DRIVER_PROBED, &priv->state) &&
+	    test_bit(ICNSS_FW_READY, &priv->state)) {
+		clear_bit(ICNSS_FW_READY, &priv->state);
+		fw_down_data.crashed = true;
+		icnss_call_driver_uevent(priv,
+					 ICNSS_UEVENT_FW_DOWN,
+					 &fw_down_data);
+	}
 
 	if (event_data && event_data->fw_rejuvenate)
 		wlfw_rejuvenate_ack_send_sync_msg(priv);
