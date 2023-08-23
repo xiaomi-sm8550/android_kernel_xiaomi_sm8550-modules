@@ -16,7 +16,6 @@
 #include <linux/suspend.h>
 #include <linux/version.h>
 #include <linux/sched.h>
-
 #include "main.h"
 #include "bus.h"
 #include "debug.h"
@@ -427,7 +426,9 @@ static const struct mhi_controller_config cnss_mhi_config_genoa = {
 		CNSS_MHI_SATELLITE_EVT_COUNT,
 	.event_cfg = cnss_mhi_events,
 	.m2_no_db = true,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0))
 	.bhie_offset = 0x0324,
+#endif
 };
 
 static const struct mhi_controller_config cnss_mhi_config_no_satellite = {
@@ -5153,8 +5154,8 @@ int cnss_smmu_map(struct device *dev,
 
 	cnss_pr_dbg("IOMMU map: iova %lx, len %zu\n", iova, len);
 
-	ret = iommu_map(pci_priv->iommu_domain, iova,
-			rounddown(paddr, PAGE_SIZE), len, flag);
+	ret = cnss_iommu_map(pci_priv->iommu_domain, iova,
+			     rounddown(paddr, PAGE_SIZE), len, flag);
 	if (ret) {
 		cnss_pr_err("PA to IOVA mapping failed, ret %d\n", ret);
 		return ret;
@@ -6351,7 +6352,8 @@ static char *cnss_mhi_notify_status_to_str(enum mhi_callback status)
 		return "FATAL_ERROR";
 	case MHI_CB_EE_MISSION_MODE:
 		return "MISSION_MODE";
-#if IS_ENABLED(CONFIG_MHI_BUS_MISC)
+#if IS_ENABLED(CONFIG_MHI_BUS_MISC) && \
+(LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0))
 	case MHI_CB_FALLBACK_IMG:
 		return "FW_FALLBACK";
 #endif
@@ -6479,7 +6481,8 @@ static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl,
 		cnss_pci_update_status(pci_priv, CNSS_FW_DOWN);
 		cnss_reason = CNSS_REASON_RDDM;
 		break;
-#if IS_ENABLED(CONFIG_MHI_BUS_MISC)
+#if IS_ENABLED(CONFIG_MHI_BUS_MISC) && \
+(LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0))
 	case MHI_CB_FALLBACK_IMG:
 		/* for kiwi_v2 binary fallback is used, skip path fallback here */
 		if (!(pci_priv->device_id == KIWI_DEVICE_ID &&
@@ -6489,6 +6492,7 @@ static void cnss_mhi_notify_status(struct mhi_controller *mhi_ctrl,
 		}
 		return;
 #endif
+
 	default:
 		cnss_pr_err("Unsupported MHI status cb reason: %d\n", reason);
 		return;
@@ -6664,7 +6668,8 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	mhi_ctrl->cntrl_dev = &pci_dev->dev;
 
 	mhi_ctrl->fw_image = plat_priv->firmware_name;
-#if IS_ENABLED(CONFIG_MHI_BUS_MISC)
+#if IS_ENABLED(CONFIG_MHI_BUS_MISC) && \
+(LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0))
 	mhi_ctrl->fallback_fw_image = plat_priv->fw_fallback_name;
 #endif
 
