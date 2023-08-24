@@ -423,12 +423,14 @@ int cam_dma_fence_signal_fd(struct cam_dma_fence_signal *signal_dma_fence)
 	struct dma_fence *dma_fence = NULL;
 	struct cam_dma_fence_row *row = NULL;
 
+	mutex_lock(&g_cam_dma_fence_dev->dev_lock);
 	dma_fence = __cam_dma_fence_find_fence_in_table(
 		signal_dma_fence->dma_fence_fd, &idx);
 
 	if (IS_ERR_OR_NULL(dma_fence)) {
 		CAM_ERR(CAM_DMA_FENCE, "Failed to find dma fence for fd: %d",
 			signal_dma_fence->dma_fence_fd);
+		mutex_unlock(&g_cam_dma_fence_dev->dev_lock);
 		return -EINVAL;
 	}
 
@@ -440,6 +442,7 @@ int cam_dma_fence_signal_fd(struct cam_dma_fence_signal *signal_dma_fence)
 	 */
 	if (row->state == CAM_DMA_FENCE_STATE_INVALID) {
 		spin_unlock_bh(&g_cam_dma_fence_dev->row_spinlocks[idx]);
+		mutex_unlock(&g_cam_dma_fence_dev->dev_lock);
 		CAM_ERR(CAM_DMA_FENCE,
 			"dma fence fd: %d is invalid row_idx: %u, failed to signal",
 			signal_dma_fence->dma_fence_fd, idx);
@@ -448,6 +451,7 @@ int cam_dma_fence_signal_fd(struct cam_dma_fence_signal *signal_dma_fence)
 
 	if (row->state == CAM_DMA_FENCE_STATE_SIGNALED) {
 		spin_unlock_bh(&g_cam_dma_fence_dev->row_spinlocks[idx]);
+		mutex_unlock(&g_cam_dma_fence_dev->dev_lock);
 		CAM_WARN(CAM_DMA_FENCE,
 			"dma fence fd: %d[seqno: %llu] already in signaled state",
 			signal_dma_fence->dma_fence_fd, dma_fence->seqno);
@@ -464,6 +468,7 @@ int cam_dma_fence_signal_fd(struct cam_dma_fence_signal *signal_dma_fence)
 
 	row->state = CAM_DMA_FENCE_STATE_SIGNALED;
 	spin_unlock_bh(&g_cam_dma_fence_dev->row_spinlocks[idx]);
+	mutex_unlock(&g_cam_dma_fence_dev->dev_lock);
 
 	CAM_DBG(CAM_DMA_FENCE,
 		"dma fence fd: %d[seqno: %llu] signaled with status: %d rc: %d",
@@ -559,12 +564,14 @@ static int __cam_dma_fence_release(int32_t dma_row_idx)
 	struct dma_fence *dma_fence = NULL;
 	struct cam_dma_fence_row *row = NULL;
 
+	mutex_lock(&g_cam_dma_fence_dev->dev_lock);
 	spin_lock_bh(&g_cam_dma_fence_dev->row_spinlocks[dma_row_idx]);
 	row = &g_cam_dma_fence_dev->rows[dma_row_idx];
 	dma_fence = row->fence;
 
 	if (row->state == CAM_DMA_FENCE_STATE_INVALID) {
 		spin_unlock_bh(&g_cam_dma_fence_dev->row_spinlocks[dma_row_idx]);
+		mutex_unlock(&g_cam_dma_fence_dev->dev_lock);
 		CAM_ERR(CAM_DMA_FENCE, "Invalid row index: %u, state: %u",
 			dma_row_idx, row->state);
 		return -EINVAL;
@@ -594,6 +601,7 @@ static int __cam_dma_fence_release(int32_t dma_row_idx)
 	memset(row, 0, sizeof(struct cam_dma_fence_row));
 	clear_bit(dma_row_idx, g_cam_dma_fence_dev->bitmap);
 	spin_unlock_bh(&g_cam_dma_fence_dev->row_spinlocks[dma_row_idx]);
+	mutex_unlock(&g_cam_dma_fence_dev->dev_lock);
 	return 0;
 }
 
