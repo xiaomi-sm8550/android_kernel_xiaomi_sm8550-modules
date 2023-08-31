@@ -3243,9 +3243,14 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 		[CNSS_HOST_WMI_COMMAND_LOG_IDX] = "wmi_command_log_idx",
 		[CNSS_HOST_WMI_EVENT_LOG_IDX] = "wmi_event_log_idx",
 		[CNSS_HOST_WMI_RX_EVENT_IDX] = "wmi_rx_event_idx",
-		[CNSS_HOST_HIF_CE_DESC_HISTORY] = "hif_ce_desc_history",
 		[CNSS_HOST_HIF_CE_DESC_HISTORY_BUFF] = "hif_ce_desc_history_buff",
-		[CNSS_HOST_HANG_EVENT_DATA] = "hang_event_data"
+		[CNSS_HOST_HANG_EVENT_DATA] = "hang_event_data",
+		[CNSS_HOST_CE_DESC_HIST] = "hif_ce_desc_hist",
+		[CNSS_HOST_CE_COUNT_MAX] = "hif_ce_count_max",
+		[CNSS_HOST_CE_HISTORY_MAX] = "hif_ce_history_max",
+		[CNSS_HOST_ONLY_FOR_CRIT_CE] = "hif_ce_only_for_crit",
+		[CNSS_HOST_HIF_EVENT_HISTORY] = "hif_event_history",
+		[CNSS_HOST_HIF_EVENT_HIST_MAX] = "hif_event_hist_max"
 	};
 	int i;
 	int ret = 0;
@@ -3693,8 +3698,8 @@ int cnss_minidump_remove_region(struct cnss_plat_data *plat_priv,
 	md_entry.size = size;
 	md_entry.id = MSM_DUMP_DATA_CNSS_WLAN;
 
-	cnss_pr_dbg("Remove mini dump region: %s, va: %pK, pa: %pa, size: 0x%zx\n",
-		    md_entry.name, va, &pa, size);
+	cnss_pr_vdbg("Remove mini dump region: %s, va: %pK, pa: %pa, size: 0x%zx\n",
+		     md_entry.name, va, &pa, size);
 
 	ret = msm_minidump_remove_region(&md_entry);
 	if (ret)
