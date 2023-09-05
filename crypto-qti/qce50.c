@@ -86,7 +86,8 @@ static LIST_HEAD(qce50_bam_list);
 
 #define AES_CTR_IV_CTR_SIZE	64
 
-#define QCE_STATUS1_NO_ERROR	0x2000006
+#define QCE_NO_ERROR_VAL1	0x2000006
+#define QCE_NO_ERROR_VAL2	0x2000004
 
 // Crypto Engines 5.7 and below
 // Key timer expiry for pipes 1-15 (Status3)
@@ -243,14 +244,10 @@ void qce_get_crypto_status(void *handle, struct qce_error *error)
 	status[5] = readl_relaxed(pce_dev->iobase + CRYPTO_STATUS6_REG);
 
 #ifdef QCE_DEBUG
-	dump_status_regs(&status[0]);
+	dump_status_regs(status);
 #endif
 
-	if (status[0] == QCE_STATUS1_NO_ERROR) {
-		error->no_error = true;
-		pr_err("%s: No crypto error, status1 = 0x%x\n",
-			__func__, status[0]);
-	} else {
+	if (status[0] != QCE_NO_ERROR_VAL1 && status[0] != QCE_NO_ERROR_VAL2) {
 		if (pce_dev->ce_bam_info.minor_version >= 8) {
 			if (status[2] & CRYPTO58_TIMER_EXPIRED) {
 				error->timer_error = true;
@@ -283,8 +280,13 @@ void qce_get_crypto_status(void *handle, struct qce_error *error)
 				error->generic_error = true;
 			}
 		}
-		dump_status_regs(&status[0]);
+		dump_status_regs(status);
+		return;
 	}
+
+	error->no_error = true;
+	pr_info("%s: No crypto error, status1 = 0x%x\n",
+		   __func__, status[0]);
 
 	return;
 }
@@ -2418,6 +2420,8 @@ exit:
 	return rc;
 }
 
+#define MAX_RESET_TIME_RETRIES 1000
+
 int qce_manage_timeout(void *handle, int req_info)
 {
 	struct qce_device *pce_dev = (struct qce_device *) handle;
@@ -2425,6 +2429,8 @@ int qce_manage_timeout(void *handle, int req_info)
 	struct ce_request_info *preq_info;
 	qce_comp_func_ptr_t qce_callback;
 	uint16_t op = pce_dev->ce_request_info[req_info].offload_op;
+	struct qce_error error = {0};
+	int retries = 0;
 
 	preq_info = &pce_dev->ce_request_info[req_info];
 	qce_callback = preq_info->qce_cb;
@@ -2435,10 +2441,21 @@ int qce_manage_timeout(void *handle, int req_info)
 	if (qce_sps_pipe_reset(pce_dev, op))
 		pr_err("%s: pipe reset failed\n", __func__);
 
-	qce_enable_clock_gating(pce_dev);
+	qce_get_crypto_status(pce_dev, &error);
+	while (!error.no_error && retries < MAX_RESET_TIME_RETRIES) {
+		usleep_range(3000, 5000);
+		retries++;
+		qce_get_crypto_status(pce_dev, &error);
+		pr_info("%s: waiting for reset to complete\n", __func__);
+	}
+
+	// Write memory barrier
+	wmb();
 
 	if (_qce_unlock_other_pipes(pce_dev, req_info))
 		pr_err("%s: fail unlock other pipes\n", __func__);
+
+	qce_enable_clock_gating(pce_dev);
 
 	if (!atomic_read(&preq_info->in_use)) {
 		pr_err("request information %d already done\n", req_info);
