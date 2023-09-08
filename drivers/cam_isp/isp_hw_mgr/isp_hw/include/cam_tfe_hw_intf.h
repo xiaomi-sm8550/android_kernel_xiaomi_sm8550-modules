@@ -245,6 +245,24 @@ struct cam_tfe_irq_evt_payload {
 };
 
 /*
+ * cam_tfe_get_num_tfe_hws()
+ *
+ * @brief:         Gets number of TFEs
+ *
+ * @num_tfes:      Fills number of TFES in the address passed
+ */
+void cam_tfe_get_num_tfe_hws(uint32_t *num_tfes);
+
+/*
+ * cam_tfe_get_num_tfe_lite_hws()
+ *
+ * @brief:         Gets number of TFE-LITEs
+ *
+ * @num_tfe_lites: Fills number of TFE-LITEs in the address passed
+ */
+void cam_tfe_get_num_tfe_lite_hws(uint32_t *num_tfe_lites);
+
+/*
  * cam_tfe_hw_init()
  *
  * @Brief:                  Initialize TFE HW device

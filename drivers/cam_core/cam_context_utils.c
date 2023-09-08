@@ -1641,7 +1641,8 @@ size_t cam_context_parse_config_cmd(struct cam_context *ctx, struct cam_config_d
 
 	if (!ctx || !cmd || !packet) {
 		CAM_ERR(CAM_CTXT, "invalid args");
-		return  -EINVAL;
+		rc = -EINVAL;
+		goto err;
 	}
 
 	/* for config dev, only memory handle is supported */
@@ -1650,7 +1651,8 @@ size_t cam_context_parse_config_cmd(struct cam_context *ctx, struct cam_config_d
 	if (rc != 0) {
 		CAM_ERR(CAM_CTXT, "[%s][%d] Can not get packet address for handle:%llx",
 			ctx->dev_name, ctx->ctx_id, cmd->packet_handle);
-		return  -EINVAL;
+		rc = -EINVAL;
+		goto err;
 	}
 
 	if ((len < sizeof(struct cam_packet)) ||
@@ -1658,7 +1660,7 @@ size_t cam_context_parse_config_cmd(struct cam_context *ctx, struct cam_config_d
 		CAM_ERR(CAM_CTXT, "invalid buff length: %zu or offset: %zu", len,
 			(size_t)cmd->offset);
 		rc = -EINVAL;
-		goto err;
+		goto put_cpu_buf;
 	}
 
 	*packet = (struct cam_packet *) ((uint8_t *)packet_addr + (uint32_t)cmd->offset);
@@ -1671,11 +1673,14 @@ size_t cam_context_parse_config_cmd(struct cam_context *ctx, struct cam_config_d
 	cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
 	return (len - (size_t)cmd->offset);
 
+put_cpu_buf:
+	if (cmd)
+		cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
+
 err:
 	if (packet)
 		*packet = ERR_PTR(rc);
-	if (cmd)
-		cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
+
 	return 0;
 }
 
