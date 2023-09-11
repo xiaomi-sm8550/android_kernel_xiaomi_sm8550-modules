@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 
@@ -1853,9 +1853,10 @@ static int cam_vfe_bus_ver3_handle_comp_done_bottom_half(
 	uint32_t                              *cam_ife_irq_regs;
 	uint32_t                               status_0;
 
-	if (!evt_payload)
+	if (!evt_payload || !rsrc_data) {
+		CAM_ERR(CAM_ISP, "Either evt_payload or rsrc_data is invalid");
 		return rc;
-
+	}
 	if (rsrc_data->is_dual && (!rsrc_data->is_master)) {
 		CAM_ERR(CAM_ISP, "Invalid comp_grp:%u is_master:%u",
 			rsrc_data->comp_grp_type, rsrc_data->is_master);
@@ -2461,6 +2462,11 @@ static int cam_vfe_bus_ver3_handle_vfe_out_done_bottom_half(
 	uint32_t                               evt_id = 0;
 	uint64_t                               comp_mask = 0;
 	uint32_t                               out_list[CAM_VFE_BUS_VER3_VFE_OUT_MAX];
+
+	if (!rsrc_data) {
+		CAM_ERR(CAM_ISP, "Invalid rsrc data pointer, returning from bottom half");
+		return rc;
+	}
 
 	rc = cam_vfe_bus_ver3_handle_comp_done_bottom_half(
 		rsrc_data, evt_payload_priv, &comp_mask);
