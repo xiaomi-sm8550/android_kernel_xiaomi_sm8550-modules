@@ -397,6 +397,16 @@ int cam_dma_fence_internal_signal(
 		return 0;
 	}
 
+	if (row->cb_registered_for_sync) {
+		if (!dma_fence_remove_callback(row->fence, &row->fence_cb)) {
+			CAM_ERR(CAM_DMA_FENCE,
+				"Failed to remove cb for dma fence seqno: %llu fd: %d",
+				dma_fence->seqno, row->fd);
+			spin_unlock_bh(&g_cam_dma_fence_dev->row_spinlocks[dma_fence_row_idx]);
+			return -EINVAL;
+		}
+	}
+
 	rc = __cam_dma_fence_signal_fence(dma_fence, signal_dma_fence->status);
 	if (rc) {
 		CAM_WARN(CAM_DMA_FENCE,
@@ -421,7 +431,6 @@ int cam_dma_fence_signal_fd(struct cam_dma_fence_signal *signal_dma_fence)
 	int rc = 0;
 	uint32_t idx;
 	struct dma_fence *dma_fence = NULL;
-	struct cam_dma_fence_row *row = NULL;
 
 	mutex_lock(&g_cam_dma_fence_dev->dev_lock);
 	dma_fence = __cam_dma_fence_find_fence_in_table(
@@ -434,46 +443,8 @@ int cam_dma_fence_signal_fd(struct cam_dma_fence_signal *signal_dma_fence)
 		return -EINVAL;
 	}
 
-	spin_lock_bh(&g_cam_dma_fence_dev->row_spinlocks[idx]);
-	row = &g_cam_dma_fence_dev->rows[idx];
-	/*
-	 * Check for invalid state again, there could be a contention
-	 * between signal and release
-	 */
-	if (row->state == CAM_DMA_FENCE_STATE_INVALID) {
-		spin_unlock_bh(&g_cam_dma_fence_dev->row_spinlocks[idx]);
-		mutex_unlock(&g_cam_dma_fence_dev->dev_lock);
-		CAM_ERR(CAM_DMA_FENCE,
-			"dma fence fd: %d is invalid row_idx: %u, failed to signal",
-			signal_dma_fence->dma_fence_fd, idx);
-		return -EINVAL;
-	}
-
-	if (row->state == CAM_DMA_FENCE_STATE_SIGNALED) {
-		spin_unlock_bh(&g_cam_dma_fence_dev->row_spinlocks[idx]);
-		mutex_unlock(&g_cam_dma_fence_dev->dev_lock);
-		CAM_WARN(CAM_DMA_FENCE,
-			"dma fence fd: %d[seqno: %llu] already in signaled state",
-			signal_dma_fence->dma_fence_fd, dma_fence->seqno);
-		return 0;
-	}
-
-	rc = __cam_dma_fence_signal_fence(dma_fence, signal_dma_fence->status);
-	if (rc) {
-		CAM_WARN(CAM_DMA_FENCE,
-			"dma fence seqno: %llu fd: %d already signaled rc: %d",
-			dma_fence->seqno, row->fd, rc);
-		rc = 0;
-	}
-
-	row->state = CAM_DMA_FENCE_STATE_SIGNALED;
-	spin_unlock_bh(&g_cam_dma_fence_dev->row_spinlocks[idx]);
+	rc = cam_dma_fence_internal_signal(idx, signal_dma_fence);
 	mutex_unlock(&g_cam_dma_fence_dev->dev_lock);
-
-	CAM_DBG(CAM_DMA_FENCE,
-		"dma fence fd: %d[seqno: %llu] signaled with status: %d rc: %d",
-		signal_dma_fence->dma_fence_fd, dma_fence->seqno,
-		signal_dma_fence->status, rc);
 
 	return rc;
 }
