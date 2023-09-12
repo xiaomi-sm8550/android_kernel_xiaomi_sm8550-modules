@@ -903,8 +903,6 @@ static int cnss_fw_mem_ready_hdlr(struct cnss_plat_data *plat_priv)
 	if (plat_priv->device_id == QCN7605_DEVICE_ID)
 		plat_priv->ctrl_params.bdf_type = CNSS_BDF_BIN;
 
-	cnss_wlfw_ini_file_send_sync(plat_priv, WLFW_CONN_ROAM_INI_V01);
-
 	ret = cnss_wlfw_bdf_dnld_send_sync(plat_priv,
 					   plat_priv->ctrl_params.bdf_type);
 	if (ret)
