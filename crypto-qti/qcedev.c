@@ -2535,37 +2535,6 @@ static int qcedev_probe_device(struct platform_device *pdev)
 
 	podev = &qce_dev[0];
 
-	rc = alloc_chrdev_region(&qcedev_device_no, 0, 1, QCEDEV_DEV);
-	if (rc < 0) {
-		pr_err("alloc_chrdev_region failed %d\n", rc);
-		return rc;
-	}
-
-	driver_class = class_create(THIS_MODULE, QCEDEV_DEV);
-	if (IS_ERR(driver_class)) {
-		rc = -ENOMEM;
-		pr_err("class_create failed %d\n", rc);
-		goto exit_unreg_chrdev_region;
-	}
-
-	class_dev = device_create(driver_class, NULL, qcedev_device_no, NULL,
-			QCEDEV_DEV);
-	if (IS_ERR(class_dev)) {
-		pr_err("class_device_create failed %d\n", rc);
-		rc = -ENOMEM;
-		goto exit_destroy_class;
-	}
-
-	cdev_init(&podev->cdev, &qcedev_fops);
-	podev->cdev.owner = THIS_MODULE;
-
-	rc = cdev_add(&podev->cdev, MKDEV(MAJOR(qcedev_device_no), 0), 1);
-	if (rc < 0) {
-		pr_err("cdev_add failed %d\n", rc);
-		goto exit_destroy_device;
-	}
-	podev->minor = 0;
-
 	podev->high_bw_req_count = 0;
 	INIT_LIST_HEAD(&podev->ready_commands);
 	podev->active_command = NULL;
@@ -2663,6 +2632,36 @@ static int qcedev_probe_device(struct platform_device *pdev)
 			__func__, rc);
 		goto exit_mem_new_client;
 	}
+	rc = alloc_chrdev_region(&qcedev_device_no, 0, 1, QCEDEV_DEV);
+	if (rc < 0) {
+		pr_err("alloc_chrdev_region failed %d\n", rc);
+		return rc;
+	}
+
+	driver_class = class_create(THIS_MODULE, QCEDEV_DEV);
+	if (IS_ERR(driver_class)) {
+		rc = -ENOMEM;
+		pr_err("class_create failed %d\n", rc);
+		goto exit_unreg_chrdev_region;
+	}
+
+	class_dev = device_create(driver_class, NULL, qcedev_device_no, NULL,
+			QCEDEV_DEV);
+	if (IS_ERR(class_dev)) {
+		pr_err("class_device_create failed %d\n", rc);
+		rc = -ENOMEM;
+		goto exit_destroy_class;
+	}
+
+	cdev_init(&podev->cdev, &qcedev_fops);
+	podev->cdev.owner = THIS_MODULE;
+
+	rc = cdev_add(&podev->cdev, MKDEV(MAJOR(qcedev_device_no), 0), 1);
+	if (rc < 0) {
+		pr_err("cdev_add failed %d\n", rc);
+		goto exit_destroy_device;
+	}
+	podev->minor = 0;
 
 	return 0;
 
