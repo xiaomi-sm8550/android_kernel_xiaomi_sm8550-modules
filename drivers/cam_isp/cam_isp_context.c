@@ -5012,19 +5012,22 @@ static int __cam_isp_ctx_dump_in_top_state(
 	struct cam_isp_hw_cmd_args          isp_hw_cmd_args;
 
 	spin_lock_bh(&ctx->lock);
+
+	ctx_isp = (struct cam_isp_context *) ctx->ctx_priv;
+
 	list_for_each_entry_safe(req, req_temp,
 		&ctx->active_req_list, list) {
 		if (req->request_id == dump_info->req_id) {
-			CAM_INFO(CAM_ISP, "isp dump active list req: %lld",
-			    dump_info->req_id);
+			CAM_INFO(CAM_ISP, "isp dump active list req: %lld init timestamp %lld",
+			    dump_info->req_id, ctx_isp->init_timestamp);
 			goto hw_dump;
 		}
 	}
 	list_for_each_entry_safe(req, req_temp,
 		&ctx->wait_req_list, list) {
 		if (req->request_id == dump_info->req_id) {
-			CAM_INFO(CAM_ISP, "isp dump wait list req: %lld",
-			    dump_info->req_id);
+			CAM_INFO(CAM_ISP, "isp dump wait list req: %lld init timestamp %lld",
+			    dump_info->req_id, ctx_isp->init_timestamp);
 			goto hw_dump;
 		}
 	}
@@ -5057,7 +5060,6 @@ hw_dump:
 		return -ENOSPC;
 	}
 
-	ctx_isp = (struct cam_isp_context *) ctx->ctx_priv;
 	req_isp = (struct cam_isp_ctx_req *) req->req_priv;
 	cur_time = ktime_get();
 	diff = ktime_us_delta(
