@@ -1900,12 +1900,10 @@ static int cam_tfe_bus_rup_bottom_half(
 	struct cam_tfe_bus_priv            *bus_priv,
 	struct cam_tfe_irq_evt_payload *evt_payload)
 {
-	struct cam_tfe_bus_common_data     *common_data;
-	struct cam_tfe_bus_tfe_out_data    *out_rsrc_data;
+	struct cam_tfe_bus_tfe_out_data    *out_rsrc_data = NULL;
 	struct cam_isp_hw_event_info        evt_info;
 	uint32_t i, j;
 
-	common_data = &bus_priv->common_data;
 	evt_info.hw_idx = bus_priv->common_data.core_index;
 	evt_info.res_type = CAM_ISP_RESOURCE_TFE_OUT;
 
@@ -1919,10 +1917,8 @@ static int cam_tfe_bus_rup_bottom_half(
 				out_rsrc_data =
 					(struct cam_tfe_bus_tfe_out_data *)
 					bus_priv->tfe_out[j].res_priv;
-				if (!out_rsrc_data) {
-					CAM_ERR(CAM_ISP, "out_rsrc_data null for %d", j);
+				if (!out_rsrc_data)
 					break;
-				}
 				if ((out_rsrc_data->rup_group_id == i) &&
 					(bus_priv->tfe_out[j].res_state ==
 					CAM_ISP_RESOURCE_STATE_STREAMING))
@@ -1941,6 +1937,13 @@ static int cam_tfe_bus_rup_bottom_half(
 				bus_priv->common_data.core_index,
 				cam_tfe_bus_rup_type(i));
 			evt_info.res_id = i;
+
+			if (!out_rsrc_data) {
+				CAM_ERR(CAM_ISP,
+					"out_rsrc_data null for out_res: %d, RUP_group: %d",
+					j, i);
+				break;
+			}
 			if (out_rsrc_data->event_cb) {
 				out_rsrc_data->event_cb(
 					out_rsrc_data->priv,
