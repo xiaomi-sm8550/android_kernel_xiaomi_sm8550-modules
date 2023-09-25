@@ -1563,7 +1563,7 @@ static int qseecom_register_listener(struct qseecom_dev_handle *data,
 		return -EINVAL;
 	}
 
-	ret = copy_from_user(&rcvd_lstnr, argp, sizeof(rcvd_lstnr));
+	K_COPY_FROM_USER(ret, &rcvd_lstnr, argp, sizeof(rcvd_lstnr));
 	if (ret) {
 		pr_err("copy_from_user failed\n");
 		return ret;
