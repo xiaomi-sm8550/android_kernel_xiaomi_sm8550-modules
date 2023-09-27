@@ -2857,6 +2857,7 @@ int cnss_pci_call_driver_remove(struct cnss_pci_data *pci_priv)
 
 	if (test_bit(CNSS_DRIVER_RECOVERY, &plat_priv->driver_state) &&
 	    test_bit(CNSS_DRIVER_PROBED, &plat_priv->driver_state)) {
+		complete(&plat_priv->rddm_complete);
 		pci_priv->driver_ops->shutdown(pci_priv->pci_dev);
 	} else if (test_bit(CNSS_DRIVER_UNLOADING, &plat_priv->driver_state)) {
 		pci_priv->driver_ops->remove(pci_priv->pci_dev);
@@ -5821,6 +5822,7 @@ int cnss_pci_force_fw_assert_hdlr(struct cnss_pci_data *pci_priv)
 		cnss_pci_dump_debug_reg(pci_priv);
 		cnss_schedule_recovery(&pci_priv->pci_dev->dev,
 				       CNSS_REASON_DEFAULT);
+		ret = 0;
 		goto runtime_pm_put;
 	}
 
