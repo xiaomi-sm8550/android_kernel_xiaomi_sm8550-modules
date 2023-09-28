@@ -9554,8 +9554,7 @@ static int qseecom_reboot_worker(struct notifier_block *nb, unsigned long val, v
          */
 	list_for_each_entry(entry,
 			&qseecom.registered_listener_list_head, list) {
-		if (entry)
-			entry->abort = 1;
+		entry->abort = 1;
 	}
 
 	/* stop CA thread waiting for listener response */
