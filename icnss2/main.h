@@ -14,7 +14,6 @@
 #include <linux/power_supply.h>
 #if IS_ENABLED(CONFIG_MSM_QMP)
 #include <linux/mailbox/qmp.h>
-#include <linux/soc/qcom/qcom_aoss.h>
 #endif
 #ifdef CONFIG_CNSS_OUT_OF_TREE
 #include "icnss2.h"
@@ -524,6 +523,7 @@ struct icnss_priv {
 	enum icnss_rd_card_chain_cap rd_card_chain_cap;
 	enum icnss_phy_he_channel_width_cap phy_he_channel_width_cap;
 	enum icnss_phy_qam_cap phy_qam_cap;
+	bool rproc_fw_download;
 };
 
 struct icnss_reg_info {

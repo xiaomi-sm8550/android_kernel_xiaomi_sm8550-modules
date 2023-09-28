@@ -10,7 +10,7 @@ _default_module_enablement_list = [
 ]
 
 _cnss2_enabled_target = ["pineapple"]
-_icnss2_enabled_target = ["blair"]
+_icnss2_enabled_target = ["blair", "pineapple"]
 
 def _get_module_list(target, variant):
     tv = "{}_{}".format(target, variant)

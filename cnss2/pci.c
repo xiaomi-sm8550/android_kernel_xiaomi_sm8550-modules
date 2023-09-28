@@ -1567,7 +1567,7 @@ void cnss_pci_handle_linkdown(struct cnss_pci_data *pci_priv)
 	}
 
 	if (pci_dev->device == QCA6174_DEVICE_ID)
-		disable_irq(pci_dev->irq);
+		disable_irq_nosync(pci_dev->irq);
 
 	/* Notify bus related event. Now for all supported chips.
 	 * Here PCIe LINK_DOWN notification taken care.
