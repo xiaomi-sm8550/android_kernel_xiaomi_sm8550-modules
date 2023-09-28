@@ -84,6 +84,7 @@ struct btpower_platform_data {
 	struct file *reffilp_obs;
 	struct task_struct *reftask_obs;
 #endif
+	const char *tsens;
 };
 
 int btpower_register_slimdev(struct device *dev);
