@@ -47,7 +47,6 @@ cc_binary {
         "TLPAggregationTests.cpp",
     ],
 
-    clang: true,
     vendor: true,
     rtti: true,
 
