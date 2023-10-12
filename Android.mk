@@ -111,16 +111,6 @@ LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
 include $(DLKM_DIR)/Build_external_kernelmodule.mk
 ###################################################
 ###################################################
-include $(CLEAR_VARS)
-LOCAL_SRC_FILES           := $(SSG_SRC_FILES)
-LOCAL_MODULE              := qrng_dlkm.ko
-LOCAL_MODULE_KBUILD_NAME  := qrng_dlkm.ko
-LOCAL_MODULE_TAGS         := optional
-LOCAL_MODULE_DEBUG_ENABLE := true
-LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
-include $(DLKM_DIR)/Build_external_kernelmodule.mk
-###################################################
-###################################################
 ifneq (, $(filter true, $(TARGET_ENABLE_QSEECOM) $(TARGET_BOARD_AUTO)))
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES           := $(SSG_SRC_FILES)
@@ -132,6 +122,16 @@ LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
 include $(DLKM_DIR)/Build_external_kernelmodule.mk
 endif #TARGET_ENABLE_QSEECOM OR TARGET_BOARD_AUTO
 endif #TARGET_USES_GY
+###################################################
+###################################################
+include $(CLEAR_VARS)
+LOCAL_SRC_FILES           := $(SSG_SRC_FILES)
+LOCAL_MODULE              := qrng_dlkm.ko
+LOCAL_MODULE_KBUILD_NAME  := qrng_dlkm.ko
+LOCAL_MODULE_TAGS         := optional
+LOCAL_MODULE_DEBUG_ENABLE := true
+LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
+include $(DLKM_DIR)/Build_external_kernelmodule.mk
 ###################################################
 ###################################################
 endif #COMPILE_SECUREMSM_DLKM check
