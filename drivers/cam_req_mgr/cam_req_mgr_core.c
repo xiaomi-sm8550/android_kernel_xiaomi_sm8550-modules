@@ -78,6 +78,7 @@ void cam_req_mgr_core_link_reset(struct cam_req_mgr_core_link *link)
 	link->cont_empty_slots = 0;
 	link->is_shdr = false;
 	link->wait_for_dual_trigger = false;
+	link->debug_data.num_skip_frames = 0;
 	__cam_req_mgr_reset_apply_data(link);
 
 	for (i = 0; i < MAXIMUM_LINKS_PER_SESSION - 1; i++)
@@ -1430,12 +1431,14 @@ static int __cam_req_mgr_check_link_is_ready(struct cam_req_mgr_core_link *link,
 			apply_data[2].req_id,
 			apply_data[1].req_id,
 			apply_data[0].req_id);
+		link->debug_data.num_skip_frames = 0;
 	} else {
 		rc = -EAGAIN;
 		__cam_req_mgr_find_dev_name(link,
 			traverse_data.result_data.req_id,
 			traverse_data.result_data.pd,
 			traverse_data.result_data.masked_value);
+		link->debug_data.num_skip_frames++;
 	}
 
 	return rc;
@@ -3386,10 +3389,11 @@ int cam_req_mgr_process_add_req(void *priv, void *data)
 	trace_cam_req_mgr_add_req(link, idx, add_req, tbl, device);
 
 	if (slot->req_ready_map == tbl->dev_mask) {
-		CAM_DBG(CAM_REQ,
-			"link 0x%x idx %d req_id %lld pd %d SLOT READY",
-			link->link_hdl, idx, add_req->req_id, tbl->pd);
 		slot->state = CRM_REQ_STATE_READY;
+		slot->ready_state_timestamp = jiffies_to_msecs(jiffies);
+		CAM_DBG(CAM_REQ,
+			"link 0x%x idx %d req_id %lld pd %d SLOT READY timestamp %lld",
+			link->link_hdl, idx, add_req->req_id, tbl->pd, slot->ready_state_timestamp);
 	}
 
 	if (!link->is_shdr && !device->dev_info.trigger_on) {
@@ -3406,6 +3410,7 @@ int cam_req_mgr_process_add_req(void *priv, void *data)
 				slot->req_ready_map |= (1 << dev_l->dev_bit);
 				if (slot->req_ready_map == tbl->dev_mask) {
 					slot->state = CRM_REQ_STATE_READY;
+					slot->ready_state_timestamp = jiffies_to_msecs(jiffies);
 					CAM_DBG(CAM_REQ,
 						"SHDR link %x idx %d req_id %lld pd %d SLOT READY",
 						link->link_hdl, idx, add_req->req_id, tbl->pd);
@@ -3421,6 +3426,7 @@ int cam_req_mgr_process_add_req(void *priv, void *data)
 		tbl->dev_mask |= (1 << device->dev_bit);
 		if (slot->req_ready_map == tbl->dev_mask) {
 			slot->state = CRM_REQ_STATE_READY;
+			slot->ready_state_timestamp = jiffies_to_msecs(jiffies);
 			CAM_DBG(CAM_REQ,
 				"SHDR link 0x%x idx %d req_id %lld pd %d SLOT READY",
 				link->link_hdl, idx, add_req->req_id, tbl->pd);
@@ -5395,11 +5401,12 @@ end:
 int cam_req_mgr_dump_request(struct cam_dump_req_cmd *dump_req)
 {
 	int                                  rc = 0;
-	int                                  i;
+	int                                  i, idx;
 	struct cam_req_mgr_dump_info         info;
 	struct cam_req_mgr_core_link        *link = NULL;
 	struct cam_req_mgr_core_session     *session = NULL;
 	struct cam_req_mgr_connected_device *device = NULL;
+	struct cam_req_mgr_tbl_slot *slot = NULL;
 
 	if (!dump_req) {
 		CAM_ERR(CAM_CRM, "dump req is NULL");
@@ -5447,8 +5454,31 @@ int cam_req_mgr_dump_request(struct cam_dump_req_cmd *dump_req)
 		}
 	}
 	dump_req->offset = info.offset;
-	CAM_INFO(CAM_REQ, "req %llu, offset %zu",
-		dump_req->issue_req_id, dump_req->offset);
+	CAM_INFO(CAM_REQ, "req %llu, offset %zu num of skip frame %lld",
+		dump_req->issue_req_id, dump_req->offset, link->debug_data.num_skip_frames);
+	idx = __cam_req_mgr_find_slot_for_req(link->req.in_q, dump_req->issue_req_id);
+	if (idx < 0) {
+		CAM_ERR(CAM_CRM,
+			"Req_id %lld not found in in_q on link 0x%x",
+			dump_req->issue_req_id, link->link_hdl);
+		goto end;
+	}
+
+	for (i = 0; i < link->num_devs; i++) {
+		device = &link->l_dev[i];
+		if (device->dev_info.p_delay == 2) {
+			__cam_req_mgr_inc_idx(&idx, 1, device->pd_tbl->num_slots);
+			slot = &device->pd_tbl->slot[idx];
+			CAM_INFO(CAM_CRM, "pd %d req %lld state %d  timestamp %lld",
+				device->dev_info.p_delay, dump_req->issue_req_id + 1, slot->state,
+				slot->ready_state_timestamp);
+		} else {
+			slot = &device->pd_tbl->slot[idx];
+			CAM_INFO(CAM_CRM, "pd %d req %lld state %d  timestamp %lld",
+				device->dev_info.p_delay, dump_req->issue_req_id, slot->state,
+				slot->ready_state_timestamp);
+		}
+	}
 end:
 	mutex_unlock(&g_crm_core_dev->crm_lock);
 	return 0;
