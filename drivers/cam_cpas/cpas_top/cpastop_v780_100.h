@@ -1202,9 +1202,9 @@ static struct cam_cpas_subpart_info cam780_cpas100_subpart_info = {
 	.num_bits = 8,
 	.hw_bitmap_mask = {
 		{CAM_CPAS_CAM_FUSE, BIT(0)},
-		{CAM_CPAS_ISP_FUSE, BIT(0)},
 		{CAM_CPAS_ISP_FUSE, BIT(1)},
 		{CAM_CPAS_ISP_FUSE, BIT(2)},
+		{CAM_CPAS_ISP_FUSE, BIT(0)},
 		{CAM_CPAS_SFE_FUSE, BIT(0)},
 		{CAM_CPAS_SFE_FUSE, BIT(1)},
 		{CAM_CPAS_SFE_FUSE, BIT(2)},
