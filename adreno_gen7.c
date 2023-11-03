@@ -40,6 +40,7 @@ static const u32 gen7_pwrup_reglist[] = {
 	GEN7_RB_CONTEXT_SWITCH_GMEM_SAVE_RESTORE,
 	GEN7_UCHE_GBIF_GX_CONFIG,
 	GEN7_UCHE_CLIENT_PF,
+	GEN7_TPL1_DBG_ECO_CNTL1,
 };
 
 static const u32 gen7_0_0_pwrup_reglist[] = {
@@ -647,6 +648,10 @@ int gen7_start(struct adreno_device *adreno_dev)
 	if (adreno_is_preemption_enabled(adreno_dev))
 		kgsl_regwrite(device, GEN7_RB_CONTEXT_SWITCH_GMEM_SAVE_RESTORE,
 			0x1);
+
+	/* Enable TP flaghint and other performance settings */
+	if (adreno_is_gen7_2_x_family(adreno_dev))
+		kgsl_regwrite(device, GEN7_TPL1_DBG_ECO_CNTL1, 0xc0700);
 
 	/* Disable non-ubwc read reqs from passing write reqs */
 	kgsl_regrmw(device, GEN7_RB_CMP_DBG_ECO_CNTL, 0x800, 0x800);
