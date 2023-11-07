@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -137,6 +137,11 @@ static int ipa_get_generic_stats(unsigned long arg)
 	struct ipa_uc_holb_client_info *holb_client;
 	struct holb_discard_stats *holb_disc_stats_ptr;
 	struct holb_monitor_stats *holb_mon_stats_ptr;
+
+	if(ipa_lnx_agent_ctx.log_type_mask == 0) {
+		IPA_STATS_ERR("log_type_mask is not defined");
+		return -EPERM;
+	}
 
 	alloc_size = sizeof(struct ipa_lnx_generic_stats) +
 		(sizeof(struct holb_discard_stats) *
@@ -292,6 +297,11 @@ static int ipa_get_clock_stats(unsigned long arg)
 	int i;
 	int alloc_size;
 	struct pm_client_stats *pm_stats_ptr;
+
+	if(ipa_lnx_agent_ctx.log_type_mask == 0) {
+		IPA_STATS_ERR("log_type_mask is not defined");
+		return -EPERM;
+	}
 
 	alloc_size = sizeof(struct ipa_lnx_clock_stats) +
 		(sizeof(struct pm_client_stats) *
@@ -605,6 +615,11 @@ static int ipa_get_wlan_inst_stats(unsigned long arg)
 	struct wlan_instance_info *instance_ptr = NULL;
 	struct ipa_uc_dbg_ring_stats stats;
 
+	if(ipa_lnx_agent_ctx.log_type_mask == 0) {
+		IPA_STATS_ERR("log_type_mask is not defined");
+		return -EPERM;
+	}
+
 	alloc_size = sizeof(struct ipa_lnx_wlan_inst_stats) +
 			(ipa_lnx_agent_ctx.alloc_info.num_wlan_instances *
 			sizeof(struct wlan_instance_info));
@@ -784,6 +799,11 @@ static int ipa_get_eth_inst_stats(unsigned long arg)
 	struct ipa_lnx_gsi_rx_debug_stats *rx_instance_ptr_local = NULL;
 	struct eth_instance_info *instance_ptr = NULL;
 	struct ipa_uc_dbg_ring_stats stats;
+
+	if(ipa_lnx_agent_ctx.log_type_mask == 0) {
+		IPA_STATS_ERR("log_type_mask is not defined");
+		return -EPERM;
+	}
 
 	alloc_size = sizeof(struct ipa_lnx_eth_inst_stats) +
 			(ipa_lnx_agent_ctx.alloc_info.num_eth_instances *
@@ -1092,6 +1112,11 @@ static int ipa_get_usb_inst_stats(unsigned long arg)
 	struct usb_instance_info *instance_ptr = NULL;
 	struct ipa_uc_dbg_ring_stats stats;
 
+	if(ipa_lnx_agent_ctx.log_type_mask == 0) {
+		IPA_STATS_ERR("log_type_mask is not defined");
+		return -EPERM;
+	}
+
 	alloc_size = sizeof(struct ipa_lnx_usb_inst_stats) +
 			(ipa_lnx_agent_ctx.alloc_info.num_usb_instances *
 				sizeof(struct usb_instance_info));
@@ -1266,6 +1291,11 @@ static int ipa_get_mhip_inst_stats(unsigned long arg)
 	struct ipa_lnx_gsi_rx_debug_stats *rx_instance_ptr_local = NULL;
 	struct mhip_instance_info *instance_ptr = NULL;
 	struct ipa_uc_dbg_ring_stats stats;
+
+	if(ipa_lnx_agent_ctx.log_type_mask == 0) {
+		IPA_STATS_ERR("log_type_mask is not defined");
+		return -EPERM;
+	}
 
 	alloc_size = sizeof(struct ipa_lnx_mhip_inst_stats) +
 			(ipa_lnx_agent_ctx.alloc_info.num_mhip_instances *

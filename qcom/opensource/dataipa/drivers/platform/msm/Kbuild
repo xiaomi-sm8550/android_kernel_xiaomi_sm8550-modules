@@ -26,7 +26,7 @@ LINUXINCLUDE    += -include $(srctree)/../sm8550-modules/qcom/opensource/dataipa
 endif
 endif
 
-ifeq ($(CONFIG_ARCH_KALAMA), y)
+ifeq ($(filter $(CONFIG_ARCH_KALAMA) $(CONFIG_ARCH_CROW), y), y)
 DATAIPADRVTOP = $(srctree)/../sm8550-modules/qcom/opensource/dataipa/drivers/platform/msm
 LINUXINCLUDE    += -include $(srctree)/../sm8550-modules/qcom/opensource/dataipa/config/dataipa_vendor.h
 include $(srctree)/../sm8550-modules/qcom/opensource/dataipa/config/dataipa_GKI.conf
@@ -36,7 +36,7 @@ LINUXINCLUDE    += -include $(srctree)/../sm8550-modules/qcom/opensource/dataipa
 endif
 endif
 
-ifeq ($(filter $(CONFIG_ARCH_KHAJE) $(CONFIG_ARCH_MONACO), y), y)
+ifeq ($(filter $(CONFIG_ARCH_KHAJE) $(CONFIG_ARCH_MONACO) $(CONFIG_ARCH_TRINKET), y), y)
 DATAIPADRVTOP = $(srctree)/../sm8550-modules/qcom/opensource/dataipa/drivers/platform/msm
 LINUXINCLUDE    += -include $(srctree)/../sm8550-modules/qcom/opensource/dataipa/config/dataipa_vendor_ipav4.h
 include $(srctree)/../sm8550-modules/qcom/opensource/dataipa/config/dataipa_GKI_ipav4.conf
