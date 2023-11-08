@@ -903,8 +903,6 @@ static int cnss_fw_mem_ready_hdlr(struct cnss_plat_data *plat_priv)
 	if (plat_priv->device_id == QCN7605_DEVICE_ID)
 		plat_priv->ctrl_params.bdf_type = CNSS_BDF_BIN;
 
-	cnss_wlfw_ini_file_send_sync(plat_priv, WLFW_CONN_ROAM_INI_V01);
-
 	ret = cnss_wlfw_bdf_dnld_send_sync(plat_priv,
 					   plat_priv->ctrl_params.bdf_type);
 	if (ret)
@@ -3237,6 +3235,18 @@ skip_elf_dump:
 }
 
 #ifdef CONFIG_CNSS2_SSR_DRIVER_DUMP
+/**
+ * cnss_host_ramdump_dev_release() - callback function for device release
+ * @dev: device to be released
+ *
+ * Return: None
+ */
+static void cnss_host_ramdump_dev_release(struct device *dev)
+{
+	cnss_pr_dbg("free host ramdump device\n");
+	kfree(dev);
+}
+
 int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 			 struct cnss_ssr_driver_dump_entry *ssr_entry,
 			 size_t num_entries_loaded)
@@ -3377,6 +3387,7 @@ int cnss_do_host_ramdump(struct cnss_plat_data *plat_priv,
 		return -ENOMEM;
 	}
 
+	new_device->release = cnss_host_ramdump_dev_release;
 	device_initialize(new_device);
 	dev_set_name(new_device, "wlan_driver");
 	dev_ret = device_add(new_device);
@@ -3444,7 +3455,7 @@ skip_host_dump:
 	device_del(new_device);
 put_device:
 	put_device(new_device);
-	kfree(new_device);
+	cnss_pr_dbg("host ramdump result %d\n", ret);
 	return ret;
 }
 #endif
