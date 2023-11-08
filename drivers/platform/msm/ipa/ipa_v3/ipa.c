@@ -6299,7 +6299,7 @@ static int ipa3_setup_apps_pipes(void)
 	ipa3_ctx->clnt_hdl_data_in = 0;
 
 	if (ipa3_ctx->ipa_hw_type >= IPA_HW_v5_5 &&
-		!ipa3_ctx->ipa_config_is_apq_dma) {
+		ipa3_ctx->lan_coal_enable) {
 		/*
 		 * LAN_COAL IN (IPA->AP)
 		 */
@@ -8593,7 +8593,7 @@ static void ipa3_load_ipa_fw(struct work_struct *work)
 	if (ipa3_ctx->platform_type == IPA_PLAT_TYPE_APQ &&
 		ipa3_ctx->ipa3_hw_mode != IPA_HW_MODE_VIRTUAL &&
 		ipa3_ctx->ipa3_hw_mode != IPA_HW_MODE_EMULATION &&
-		!ipa3_ctx->ipa_config_is_apq_dma) {
+		ipa3_ctx->ipa_config_is_apq_uc_load) {
 
 		IPADBG("Loading IPA uC via PIL or MDT\n");
 
@@ -9289,6 +9289,7 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 	ipa3_ctx->tx_poll = resource_p->tx_poll;
 	ipa3_ctx->ipa_gpi_event_rp_ddr = resource_p->ipa_gpi_event_rp_ddr;
 	ipa3_ctx->rmnet_ctl_enable = resource_p->rmnet_ctl_enable;
+	ipa3_ctx->lan_coal_enable = resource_p->lan_coal_enable;
 	ipa3_ctx->rmnet_ll_enable = resource_p->rmnet_ll_enable;
 	ipa3_ctx->tx_wrapper_cache_max_size = get_tx_wrapper_cache_size(
 			resource_p->tx_wrapper_cache_max_size);
@@ -9298,6 +9299,7 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
                         resource_p->ipa_gen_rx_cmn_temp_pool_sz_factor);
 	ipa3_ctx->ipa_config_is_auto = resource_p->ipa_config_is_auto;
 	ipa3_ctx->ipa_config_is_apq_dma = resource_p->ipa_config_is_apq_dma;
+	ipa3_ctx->ipa_config_is_apq_uc_load = resource_p->ipa_config_is_apq_uc_load;
 	ipa3_ctx->ipa_mhi_proxy = resource_p->ipa_mhi_proxy;
 	ipa3_ctx->max_num_smmu_cb = resource_p->max_num_smmu_cb;
 	ipa3_ctx->hw_type_index = ipa3_get_hw_type_index();
@@ -10263,6 +10265,7 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 	ipa_drv_res->ipa_gpi_event_rp_ddr = false;
 	ipa_drv_res->ipa_config_is_auto = false;
 	ipa_drv_res->ipa_config_is_apq_dma = false;
+	ipa_drv_res->ipa_config_is_apq_uc_load = false;
 	ipa_drv_res->max_num_smmu_cb = IPA_SMMU_CB_MAX;
 	ipa_drv_res->ipa_endp_delay_wa_v2 = false;
 	ipa_drv_res->use_tput_est_ep = false;
@@ -10413,6 +10416,13 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 		"qcom,ipa-config-is-apq-dma");
 	IPADBG(": ipa-config-is-apq-dma = %s\n",
 		ipa_drv_res->ipa_config_is_apq_dma
+		? "True" : "False");
+
+	ipa_drv_res->ipa_config_is_apq_uc_load =
+		of_property_read_bool(pdev->dev.of_node,
+		"qcom,ipa-config-is-apq-uc-load");
+	IPADBG(": ipa-config-is-apq-uc-load = %s\n",
+		ipa_drv_res->ipa_config_is_apq_uc_load
 		? "True" : "False");
 
 	ipa_drv_res->ipa_wan_skb_page =
@@ -10578,6 +10588,14 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 			ipa_drv_res->rmnet_ll_enable
 			? "True" : "False");
 	}
+	ipa_drv_res->lan_coal_enable =
+		of_property_read_bool(pdev->dev.of_node,
+		"qcom,lan-coal-enable");
+	IPADBG(": Enable lan coal = %s\n",
+		ipa_drv_res->lan_coal_enable
+		? "True" : "False");
+
+
 
 	result = of_property_read_string(pdev->dev.of_node,
 			"qcom,use-gsi-ipa-fw", &ipa_drv_res->gsi_fw_file_name);

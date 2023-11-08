@@ -2271,6 +2271,7 @@ enum ipa_per_usb_enum_type_e {
  * @ipa_wdi2: using wdi-2.0
  * @ipa_config_is_auto: is this AUTO use case
  * @ipa_config_is_apq_dma: this is for APQ DMA use case
+ * @ipa_config_is_apq_uc_load: this is for APQ uC load use case
  * @ipa_fltrt_not_hashable: filter/route rules not hashable
  * @use_xbl_boot: use xbl loading for IPA FW
  * @use_64_bit_dma_mask: using 64bits dma mask
@@ -2408,9 +2409,11 @@ struct ipa3_context {
 	bool ipa_wdi2;
 	bool ipa_config_is_auto;
 	bool ipa_config_is_apq_dma;
+	bool ipa_config_is_apq_uc_load;
 	bool ipa_wdi2_over_gsi;
 	bool ipa_wdi3_over_gsi;
 	bool ipa_endp_delay_wa;
+	bool lan_coal_enable;
 	bool ipa_fltrt_not_hashable;
 	bool use_xbl_boot;
 	bool use_64_bit_dma_mask;
@@ -2624,6 +2627,7 @@ struct ipa3_plat_drv_res {
 	bool ipa_wdi2;
 	bool ipa_config_is_auto;
 	bool ipa_config_is_apq_dma;
+	bool ipa_config_is_apq_uc_load;
 	bool ipa_wdi2_over_gsi;
 	bool ipa_wdi3_over_gsi;
 	bool ipa_fltrt_not_hashable;
@@ -2661,6 +2665,7 @@ struct ipa3_plat_drv_res {
 	bool ipa_gpi_event_rp_ddr;
 	bool rmnet_ctl_enable;
 	bool rmnet_ll_enable;
+	bool lan_coal_enable;
 	bool ipa_use_uc_holb_monitor;
 	u32 ipa_holb_monitor_poll_period;
 	u32 ipa_holb_monitor_max_cnt_wlan;
