@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/devcoredump.h>
@@ -382,6 +383,9 @@ static int handle_session_error(struct msm_vidc_inst *inst,
 		break;
 	case HFI_ERROR_FATAL:
 		error = "fatal error";
+		break;
+	case HFI_ERROR_STREAM_UNSUPPORTED:
+		error = "stream unsupported";
 		break;
 	default:
 		error = "unknown";
@@ -994,8 +998,12 @@ static int handle_output_buffer(struct msm_vidc_inst *inst,
 	buf->flags = get_driver_buffer_flags(inst, buffer->flags);
 
 	/* fence signalling */
+	/* FW sending O/P with Fence Id will not be guranteed to be in order while stream off
+	 * State check is added to receive fence id irrespective of the order
+	 */
 	for (cnt = 0; cnt < inst->hfi_frame_info.fence_count; cnt++) {
-		if (inst->hfi_frame_info.fence_id[cnt] > inst->prev_fence_id) {
+		if (inst->hfi_frame_info.fence_id[cnt] > inst->prev_fence_id ||
+		    inst->state == MSM_VIDC_OUTPUT_STREAMING) {
 			if (buf->data_size)
 				msm_vidc_fence_signal(inst, inst->hfi_frame_info.fence_id[cnt]);
 			else
@@ -1694,6 +1702,7 @@ static int handle_property_fence_array(struct msm_vidc_inst *inst,
 			"%s: fence list payload size %d exceeds expected max size %d\n",
 			__func__, payload_size, sizeof(inst->hfi_frame_info.fence_id));
 		msm_vidc_change_state(inst, MSM_VIDC_ERROR, __func__);
+		return -EINVAL;
 	}
 
 	for (i = 0; i < fence_count; i++) {

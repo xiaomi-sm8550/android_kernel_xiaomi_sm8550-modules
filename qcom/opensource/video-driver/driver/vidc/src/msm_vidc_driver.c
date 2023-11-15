@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2022, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/iommu.h>
@@ -1874,7 +1875,7 @@ enum msm_vidc_allow msm_vidc_allow_streamoff(struct msm_vidc_inst *inst, u32 typ
 		else if (!inst->bufq[OUTPUT_META_PORT].vb2q->streaming)
 			allow = MSM_VIDC_IGNORE;
 	}
-	if (allow != MSM_VIDC_ALLOW)
+	if (allow != MSM_VIDC_ALLOW && allow != MSM_VIDC_IGNORE)
 		i_vpr_e(inst, "%s: type %d is %s in state %s\n",
 				__func__, type, allow_name(allow),
 				state_name(inst->state));
@@ -2749,16 +2750,32 @@ exit:
 	return rc;
 }
 
-int msm_vidc_update_input_rate(struct msm_vidc_inst *inst, u64 time_us)
+int msm_vidc_update_input_rate(struct msm_vidc_inst *inst, struct vb2_buffer *vb2, u64 time_us)
 {
 	struct msm_vidc_input_timer *input_timer;
 	struct msm_vidc_input_timer *prev_timer = NULL;
 	u64 counter = 0;
 	u64 input_timer_sum_us = 0;
+	u32 slice_size = 0;
 
 	if (!inst || !inst->capabilities) {
 		d_vpr_e("%s: invalid params\n", __func__);
 		return -EINVAL;
+	}
+
+	if (is_decode_session(inst) && is_slice_decode_enabled(inst)) {
+		slice_size = vb2->planes[0].bytesused - vb2->planes[0].data_offset;
+		if (vb2->timestamp == inst->slice_decode.prev_ts) {
+			inst->slice_decode.slice_count++;
+			inst->slice_decode.frame_size += slice_size;
+			return 0;
+		} else { // First Slice of a Frame
+			inst->slice_decode.frame_data_size = max(inst->slice_decode.frame_size,
+					(slice_size * inst->slice_decode.slice_count));
+			inst->slice_decode.prev_ts = vb2->timestamp;
+			inst->slice_decode.slice_count = 1;
+			inst->slice_decode.frame_size = slice_size;
+		}
 	}
 
 	input_timer = msm_memory_pool_alloc(inst, MSM_MEM_POOL_BUF_TIMER);
@@ -5582,6 +5599,7 @@ void msm_vidc_ssr_handler(struct work_struct *work)
 
 	core_lock(core, __func__);
 	if (core->state == MSM_VIDC_CORE_INIT) {
+		d_vpr_e("%s: ssr type %d\n", __func__, ssr->ssr_type);
 		/*
 		 * In current implementation, user-initiated SSR triggers
 		 * a fatal error from hardware. However, there is no way
@@ -6441,9 +6459,9 @@ int msm_vidc_check_core_mbps(struct msm_vidc_inst *inst)
 
 	if (is_encode_session(inst)) {
 		/* reject encoder if all encoders mbps is greater than MAX_MBPS */
-		if (enc_mbps > core->capabilities[MAX_MBPS].value) {
-			i_vpr_e(inst, "%s: Hardware overloaded. needed %u, max %u", __func__,
-				mbps, core->capabilities[MAX_MBPS].value);
+		if (enc_mbps > core->capabilities[MAX_ENC_MBPS].value) {
+			i_vpr_e(inst, "%s: Encoder Hardware overloaded. needed %u, max %u", __func__,
+				enc_mbps, core->capabilities[MAX_ENC_MBPS].value);
 			return -ENOMEM;
 		}
 		/*
@@ -7094,4 +7112,17 @@ int msm_vidc_update_input_meta_buffer_index(struct msm_vidc_inst *inst,
 		rc = -EINVAL;
 	}
 	return rc;
+}
+
+int msm_vidc_get_src_clk_scaling_ratio(struct msm_vidc_core *core)
+{
+	int scaling_ratio = 3;
+	if (!core || !core->platform) {
+		d_vpr_e("%s: invalid params\n", __func__);
+		return -EINVAL;
+	}
+	if (core->platform->data.vpu_ver == VPU_VERSION_IRIS2_1)
+		scaling_ratio = 1;
+
+	return scaling_ratio;
 }

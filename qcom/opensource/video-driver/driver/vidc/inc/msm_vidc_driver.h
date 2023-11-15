@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020-2021,, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _MSM_VIDC_DRIVER_H_
@@ -12,6 +13,7 @@
 #include "msm_vidc_internal.h"
 #include "msm_vidc_core.h"
 #include "msm_vidc_inst.h"
+#include "msm_vidc_platform.h"
 
 #define MSM_VIDC_SESSION_INACTIVE_THRESHOLD_MS 1000
 #define HEIC_GRID_DIMENSION 512
@@ -66,6 +68,11 @@ static inline bool is_input_meta_buffer(enum msm_vidc_buffer_type buffer_type)
 static inline bool is_output_meta_buffer(enum msm_vidc_buffer_type buffer_type)
 {
 	return buffer_type == MSM_VIDC_BUF_OUTPUT_META;
+}
+
+static inline bool is_slice_decode_enabled(struct msm_vidc_inst *inst)
+{
+	return !!(inst->capabilities->cap[SLICE_DECODE].value);
 }
 
 static inline bool is_early_notify_enabled(struct msm_vidc_inst *inst)
@@ -600,7 +607,7 @@ int signal_session_msg_receipt(struct msm_vidc_inst *inst,
 int msm_vidc_get_properties(struct msm_vidc_inst *inst);
 int msm_vidc_create_input_metadata_buffer(struct msm_vidc_inst *inst, int buf_fd);
 int msm_vidc_update_input_meta_buffer_index(struct msm_vidc_inst *inst, struct vb2_buffer *vb2);
-int msm_vidc_update_input_rate(struct msm_vidc_inst *inst, u64 time_us);
+int msm_vidc_update_input_rate(struct msm_vidc_inst *inst, struct vb2_buffer *vb2, u64 time_us);
 int msm_vidc_add_buffer_stats(struct msm_vidc_inst *inst,
 	struct msm_vidc_buffer *buf);
 int msm_vidc_remove_buffer_stats(struct msm_vidc_inst *inst,
@@ -610,6 +617,6 @@ int msm_vidc_get_input_rate(struct msm_vidc_inst *inst);
 int msm_vidc_get_frame_rate(struct msm_vidc_inst *inst);
 int msm_vidc_get_operating_rate(struct msm_vidc_inst *inst);
 int msm_vidc_alloc_and_queue_input_internal_buffers(struct msm_vidc_inst *inst);
-
+int msm_vidc_get_src_clk_scaling_ratio(struct msm_vidc_core *core);
 #endif // _MSM_VIDC_DRIVER_H_
 

@@ -317,6 +317,7 @@ enum msm_vidc_core_capability_type {
 	MAX_RT_MBPF,
 	MAX_MBPF,
 	MAX_MBPS,
+	MAX_ENC_MBPS,
 	MAX_IMAGE_MBPF,
 	MAX_MBPF_HQ,
 	MAX_MBPS_HQ,
@@ -958,6 +959,13 @@ struct msm_vidc_timestamps {
 struct msm_vidc_input_timer {
 	struct list_head       list;
 	u64                    time_us;
+};
+
+struct msm_vidc_slice_decode {
+	u64                    prev_ts;
+	u32                    slice_count;
+	u32                    frame_size;
+	u32                    frame_data_size;
 };
 
 enum msm_vidc_allow {

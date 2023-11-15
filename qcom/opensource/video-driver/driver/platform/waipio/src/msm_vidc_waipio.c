@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/of.h>
@@ -56,6 +56,7 @@ static struct msm_platform_core_capability core_data_waipio[] = {
 					 * which is greater than 4096x2176@120fps,
 					 * 8192x4320@48fps
 					 */
+	{MAX_ENC_MBPS, 7833600}, // same as max mbps
 	{MAX_IMAGE_MBPF, 1048576},  /* (16384x16384)/256 */
 	{MAX_MBPF_HQ, 8160}, /* ((1920x1088)/256) */
 	{MAX_MBPS_HQ, 489600}, /* ((1920x1088)/256)@60fps */
@@ -2174,6 +2175,7 @@ static const struct msm_vidc_platform_data waipio_data = {
 	.csc_data.vpe_csc_custom_matrix_coeff = vpe_csc_custom_matrix_coeff,
 	.csc_data.vpe_csc_custom_limit_coeff = vpe_csc_custom_limit_coeff,
 	.ubwc_config = ubwc_config_waipio,
+	.vpu_ver = VPU_VERSION_IRIS2,
 };
 
 static int msm_vidc_init_data(struct msm_vidc_core *core)
