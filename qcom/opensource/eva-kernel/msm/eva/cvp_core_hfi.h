@@ -269,6 +269,7 @@ struct iris_hfi_device {
 };
 
 irqreturn_t cvp_hfi_isr(int irq, void *dev);
+irqreturn_t iris_hfi_core_work_handler(int irq, void *data);
 void cvp_iris_hfi_delete_device(void *device);
 
 int cvp_iris_hfi_initialize(struct cvp_hfi_device *hdev, u32 device_id,

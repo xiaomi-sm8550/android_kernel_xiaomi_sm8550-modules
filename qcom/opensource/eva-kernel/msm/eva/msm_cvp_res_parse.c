@@ -14,6 +14,12 @@
 #include "cvp_core_hfi.h"
 #include "soc/qcom/secure_buffer.h"
 
+//This is to standardize for all kernel version lesser than 6.0
+// as topology_cluster_id is available from kernel version > 6.0
+#ifndef topology_cluster_id
+#define topology_cluster_id(cpu) topology_physical_package_id(cpu)
+#endif
+
 enum clock_properties {
 	CLOCK_PROP_HAS_SCALING = 1 << 0,
 	CLOCK_PROP_HAS_MEM_RETENTION    = 1 << 1,
@@ -780,7 +786,13 @@ int cvp_read_platform_resources_from_drv_data(
 
 	res->pm_qos.latency_us = find_key_value(platform_data,
 			"qcom,pm-qos-latency-us");
-	res->pm_qos.silver_count = 4;
+	res->pm_qos.silver_count = 0;
+	for(i = 0; i < MAX_SILVER_CORE_NUM; i++) {
+		if(topology_cluster_id(i) == 0)
+			res->pm_qos.silver_count++;
+		else
+			break;
+	}
 	for (i = 0; i < res->pm_qos.silver_count; i++)
 		res->pm_qos.silver_cores[i] = i;
 	res->pm_qos.off_vote_cnt = 0;
