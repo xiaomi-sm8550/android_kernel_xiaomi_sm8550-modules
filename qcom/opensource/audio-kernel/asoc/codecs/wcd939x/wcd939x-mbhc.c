@@ -1173,7 +1173,9 @@ static ssize_t usbcss_sysfs_store(struct kobject *kobj,
 
 	if (update_linearizer) {
 		get_linearizer_taps(pdata, &aud_tap, &gnd_tap);
+#if IS_ENABLED(CONFIG_QCOM_WCD_USBSS_I2C)
 		wcd_usbss_set_linearizer_sw_tap(aud_tap, gnd_tap);
+#endif
 		dev_err(wcd939x->dev, "%s: Updated linearizer thru sysfs\n",
 			__func__);
 	}
@@ -1281,11 +1283,13 @@ static void wcd939x_wcd_mbhc_calc_impedance(struct wcd_mbhc *mbhc, uint32_t *zl,
 	struct wcd939x_mbhc_zdet_param zdet_param = {4, 0, 6, 0x18, 0x60, 0x78};
 	struct wcd939x_mbhc_zdet_param *zdet_param_ptr = &zdet_param;
 	s16 d1[] = {0, 30, 30, 6};
+#if IS_ENABLED(CONFIG_QCOM_WCD_USBSS_I2C)
 	uint32_t cached_regs[4][2] = {{WCD_USBSS_EXT_LIN_EN, 0}, {WCD_USBSS_EXT_SW_CTRL_1, 0},
 				      {WCD_USBSS_MG1_BIAS, 0}, {WCD_USBSS_MG2_BIAS, 0}};
 	uint32_t l_3_6V_regs[4][2] = {{WCD_USBSS_EXT_LIN_EN, 0x00}, {WCD_USBSS_EXT_SW_CTRL_1, 0x00},
 				      {WCD_USBSS_MG1_BIAS, 0x0E}, {WCD_USBSS_MG2_BIAS, 0x0E}};
 	uint32_t diff_regs[2][2] = {{WCD_USBSS_EXT_LIN_EN, 0x00}, {WCD_USBSS_EXT_SW_CTRL_1, 0xE8}};
+#endif
 
 	WCD_MBHC_RSC_ASSERT_LOCKED(mbhc);
 
