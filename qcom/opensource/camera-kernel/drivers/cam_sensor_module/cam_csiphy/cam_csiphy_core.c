@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -495,6 +495,7 @@ static int cam_csiphy_update_secure_info(struct csiphy_device *csiphy_dev, int32
 
 	switch (cpas_version) {
 	case CAM_CPAS_TITAN_640_V200:
+	case CAM_CPAS_TITAN_770_V100:
 		bit_offset_bet_phys_in_cp_ctrl =
 			CAM_CSIPHY_MAX_DPHY_LANES + CAM_CSIPHY_MAX_CPHY_LANES + 1;
 		break;
@@ -813,10 +814,12 @@ static int __cam_csiphy_parse_lane_info_cmd_buf(
 		csiphy_dev->csiphy_info[index].settle_time,
 		csiphy_dev->csiphy_info[index].data_rate);
 
+	cam_mem_put_cpu_buf(cmd_desc->mem_handle);
 	return rc;
 
 reset_settings:
 	cam_csiphy_reset_phyconfig_param(csiphy_dev, index);
+	cam_mem_put_cpu_buf(cmd_desc->mem_handle);
 	return rc;
 }
 
@@ -1006,6 +1009,7 @@ int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 			break;
 	}
 
+	cam_mem_put_cpu_buf(cfg_dev->packet_handle);
 	return rc;
 }
 
@@ -1496,8 +1500,9 @@ void cam_csiphy_shutdown(struct csiphy_device *csiphy_dev)
 
 		cam_csiphy_reset(csiphy_dev);
 		cam_soc_util_disable_platform_resource(soc_info, true, true);
+		if (g_phy_data[soc_info->index].aon_cam_id == NOT_AON_CAM)
+			cam_cpas_stop(csiphy_dev->cpas_handle);
 
-		cam_cpas_stop(csiphy_dev->cpas_handle);
 		csiphy_dev->csiphy_state = CAM_CSIPHY_ACQUIRE;
 	}
 
@@ -1612,10 +1617,12 @@ static int __csiphy_cpas_configure_for_main_or_aon(
 		return 0;
 	}
 
-	rc = cam_csiphy_cpas_ops(cpas_handle, true);
-	if (rc) {
-		CAM_ERR(CAM_CSIPHY, "voting CPAS: %d failed", rc);
-		return rc;
+	if (get_access) {
+		rc = cam_csiphy_cpas_ops(cpas_handle, true);
+		if (rc) {
+			CAM_ERR(CAM_CSIPHY, "voting CPAS: %d failed", rc);
+			return rc;
+		}
 	}
 
 	cam_cpas_reg_read(cpas_handle, CAM_CPAS_REG_CPASTOP,
@@ -1643,7 +1650,13 @@ static int __csiphy_cpas_configure_for_main_or_aon(
 	if (rc)
 		CAM_ERR(CAM_CSIPHY, "CPAS AON sel register write failed");
 
-	cam_csiphy_cpas_ops(cpas_handle, false);
+	if (!get_access) {
+		rc = cam_csiphy_cpas_ops(cpas_handle, false);
+		if (rc) {
+			CAM_ERR(CAM_CSIPHY, "voting CPAS: %d failed", rc);
+			return rc;
+		}
+	}
 
 	return rc;
 }
@@ -2278,9 +2291,11 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 		if (rc < 0)
 			CAM_ERR(CAM_CSIPHY, "Failed in csiphy release");
 
-		if (cam_csiphy_cpas_ops(csiphy_dev->cpas_handle, false)) {
-			CAM_ERR(CAM_CSIPHY, "Failed in de-voting CPAS");
-			rc = -EFAULT;
+		if (!g_phy_data[soc_info->index].is_configured_for_main) {
+			if (cam_csiphy_cpas_ops(csiphy_dev->cpas_handle, false)) {
+				CAM_ERR(CAM_CSIPHY, "Failed in de-voting CPAS");
+				rc = -EFAULT;
+			}
 		}
 
 		csiphy_dev->csiphy_state = CAM_CSIPHY_ACQUIRE;
@@ -2519,10 +2534,12 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 			goto release_mutex;
 		}
 
-		rc = cam_csiphy_cpas_ops(csiphy_dev->cpas_handle, true);
-		if (rc) {
-			CAM_ERR(CAM_CSIPHY, "voting CPAS: %d", rc);
-			goto release_mutex;
+		if (!g_phy_data[soc_info->index].is_configured_for_main) {
+			if (cam_csiphy_cpas_ops(csiphy_dev->cpas_handle, true)) {
+				rc = -EFAULT;
+				CAM_ERR(CAM_CSIPHY, "voting CPAS: %d", rc);
+				goto release_mutex;
+			}
 		}
 
 		if (csiphy_dev->csiphy_info[offset].secure_mode == 1) {

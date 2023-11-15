@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/slab.h>
@@ -1271,6 +1271,7 @@ static int cam_custom_mgr_prepare_hw_update(void *hw_mgr_priv,
 	ctx->scratch_buffer_addr = 0x0;
 	prepare_hw_data->num_cfg = 0;
 	cam_custom_add_io_buffers(hw_mgr->img_iommu_hdl, prepare);
+	cam_mem_put_cpu_buf(cmd_desc->mem_handle);
 	return 0;
 }
 
@@ -1470,6 +1471,7 @@ int cam_custom_hw_mgr_init(struct device_node *of_node,
 	int rc = 0;
 	int i, j;
 	struct cam_custom_hw_mgr_ctx *ctx_pool;
+	uint32_t num_custom = 0;
 
 	memset(&g_custom_hw_mgr, 0, sizeof(g_custom_hw_mgr));
 	mutex_init(&g_custom_hw_mgr.ctx_mutex);
@@ -1547,6 +1549,11 @@ int cam_custom_hw_mgr_init(struct device_node *of_node,
 
 	if (iommu_hdl)
 		*iommu_hdl = g_custom_hw_mgr.img_iommu_hdl;
+
+	cam_custom_get_num_custom(&num_custom);
+	rc = cam_cpas_prepare_subpart_info(CAM_SYSFS_CUSTOM_HW_IDX, num_custom);
+	if (rc)
+		CAM_ERR(CAM_CUSTOM, "Failed to populate num_custom, rc: %d", rc);
 
 	CAM_DBG(CAM_CUSTOM, "HW manager initialized");
 	return 0;

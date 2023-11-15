@@ -13,7 +13,7 @@ LOCAL_PATH := $(call my-dir)
 # Path to DLKM make scripts
 DLKM_DIR := $(TOP)/device/qcom/common/dlkm
 # List of board platforms for which MMRM driver API should be enabled
-MMRM_BOARDS := taro parrot kalama
+MMRM_BOARDS := taro parrot kalama crow
 
 # Kbuild options
 KBUILD_OPTIONS := CAMERA_KERNEL_ROOT=$(shell pwd)/$(LOCAL_PATH)

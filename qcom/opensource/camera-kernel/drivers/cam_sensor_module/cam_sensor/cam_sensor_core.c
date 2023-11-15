@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -13,6 +13,9 @@
 #include "cam_common_util.h"
 #include "cam_packet_util.h"
 #include "cam_req_mgr_dev.h"
+
+#define CAM_SENSOR_PIPELINE_DELAY_MASK        0xFF
+#define CAM_SENSOR_MODESWITCH_DELAY_SHIFT     8
 
 extern struct completion *cam_sensor_get_i3c_completion(uint32_t index);
 
@@ -182,6 +185,9 @@ static int cam_sensor_handle_res_info(struct cam_sensor_res_info *res_info,
 		if (res_info->valid_param_mask & CAM_SENSOR_FEATURE_MASK)
 			s_ctrl->sensor_res[idx].feature_mask =
 				res_info->params[0];
+
+		if (res_info->valid_param_mask & CAM_SENSOR_NUM_BATCHED_FRAMES)
+			s_ctrl->num_batched_frames = res_info->params[1];
 	}
 
 	s_ctrl->is_res_info_updated = true;
@@ -552,8 +558,11 @@ static int32_t cam_sensor_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 		i2c_reg_settings->request_id =
 			csl_packet->header.request_id;
 	}
+	cam_mem_put_cpu_buf(config.packet_handle);
+	return rc;
 
 end:
+	cam_mem_put_cpu_buf(config.packet_handle);
 	return rc;
 }
 
@@ -635,8 +644,8 @@ int32_t cam_sensor_update_i2c_info(struct cam_cmd_i2c_info *i2c_info,
 		cci_client->retries = 3;
 		cci_client->id_map = 0;
 		cci_client->i2c_freq_mode = i2c_info->i2c_freq_mode;
-		CAM_DBG(CAM_SENSOR, " Master: %d sid: %d freq_mode: %d",
-			cci_client->cci_i2c_master, i2c_info->slave_addr,
+		CAM_DBG(CAM_SENSOR, "CCI: %d Master: %d slave_addr: 0x%x freq_mode: %d",
+			cci_client->cci_device, cci_client->cci_i2c_master, i2c_info->slave_addr,
 			i2c_info->i2c_freq_mode);
 	}
 
@@ -664,6 +673,7 @@ int32_t cam_sensor_update_slave_info(void *probe_info,
 			sensor_probe_info->data_mask;
 		s_ctrl->pipeline_delay =
 			sensor_probe_info->reserved;
+		s_ctrl->modeswitch_delay = 0;
 
 		s_ctrl->sensor_probe_addr_type = sensor_probe_info->addr_type;
 		s_ctrl->sensor_probe_data_type = sensor_probe_info->data_type;
@@ -676,8 +686,10 @@ int32_t cam_sensor_update_slave_info(void *probe_info,
 		s_ctrl->sensordata->slave_info.sensor_id_mask =
 			sensor_probe_info_v2->data_mask;
 		s_ctrl->pipeline_delay =
-			sensor_probe_info_v2->pipeline_delay;
-
+			(sensor_probe_info_v2->pipeline_delay &
+			CAM_SENSOR_PIPELINE_DELAY_MASK);
+		s_ctrl->modeswitch_delay = (sensor_probe_info_v2->pipeline_delay >>
+			CAM_SENSOR_MODESWITCH_DELAY_SHIFT);
 		s_ctrl->sensor_probe_addr_type =
 			sensor_probe_info_v2->addr_type;
 		s_ctrl->sensor_probe_data_type =
@@ -876,9 +888,14 @@ int32_t cam_handle_mem_ptr(uint64_t handle, uint32_t cmd,
 				"Failed to parse the command Buffer Header");
 			goto end;
 		}
+		cam_mem_put_cpu_buf(cmd_desc[i].mem_handle);
 	}
 
+	cam_mem_put_cpu_buf(handle);
+	return rc;
+
 end:
+	cam_mem_put_cpu_buf(handle);
 	return rc;
 }
 
@@ -1265,6 +1282,7 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 		s_ctrl->is_stopped_by_user = false;
 		s_ctrl->last_updated_req = 0;
 		s_ctrl->last_applied_req = 0;
+		s_ctrl->num_batched_frames = 0;
 		memset(s_ctrl->sensor_res, 0, sizeof(s_ctrl->sensor_res));
 		CAM_INFO(CAM_SENSOR,
 			"CAM_ACQUIRE_DEV Success for %s sensor_id:0x%x,sensor_slave_addr:0x%x",
@@ -1394,11 +1412,12 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 		CAM_CONVERT_TIMESTAMP_FORMAT(ts, hrs, min, sec, ms);
 
 		CAM_INFO(CAM_SENSOR,
-			"%llu:%llu:%llu.%llu CAM_START_DEV Success for %s sensor_id:0x%x,sensor_slave_addr:0x%x",
+			"%llu:%llu:%llu.%llu CAM_START_DEV Success for %s sensor_id:0x%x,sensor_slave_addr:0x%x num_batched_frames:%d",
 			hrs, min, sec, ms,
 			s_ctrl->sensor_name,
 			s_ctrl->sensordata->slave_info.sensor_id,
-			s_ctrl->sensordata->slave_info.sensor_slave_addr);
+			s_ctrl->sensordata->slave_info.sensor_slave_addr,
+			s_ctrl->num_batched_frames);
 	}
 		break;
 	case CAM_STOP_DEV: {
@@ -1559,11 +1578,20 @@ int cam_sensor_publish_dev_info(struct cam_req_mgr_device_info *info)
 
 	info->dev_id = CAM_REQ_MGR_DEVICE_SENSOR;
 	strlcpy(info->name, CAM_SENSOR_NAME, sizeof(info->name));
-	if (s_ctrl->pipeline_delay >= 1 && s_ctrl->pipeline_delay <= 3)
+	if (s_ctrl->num_batched_frames >= 2) {
+		info->p_delay = 1;
+		info->m_delay = s_ctrl->modeswitch_delay;
+	} else if (s_ctrl->pipeline_delay >= 1 && s_ctrl->pipeline_delay <= 3) {
 		info->p_delay = s_ctrl->pipeline_delay;
-	else
-		info->p_delay = 2;
+		info->m_delay = s_ctrl->modeswitch_delay;
+	} else {
+		info->p_delay = CAM_PIPELINE_DELAY_2;
+		info->m_delay = CAM_MODESWITCH_DELAY_2;
+	}
 	info->trigger = CAM_TRIGGER_POINT_SOF;
+
+	CAM_DBG(CAM_REQ, "num batched frames %d p_delay is %d",
+		s_ctrl->num_batched_frames, info->p_delay);
 
 	return rc;
 }
@@ -2042,7 +2070,7 @@ int32_t cam_sensor_flush_request(struct cam_req_mgr_flush_request *flush_req)
 		 * before EOF, so we need to stream off the sensor during flush
 		 * for VFPS usecase.
 		 */
-		if (s_ctrl->stream_off_after_eof && s_ctrl->is_stopped_by_user) {
+		if (s_ctrl->stream_off_after_eof) {
 			cam_sensor_stream_off(s_ctrl);
 			s_ctrl->is_stopped_by_user = false;
 		}

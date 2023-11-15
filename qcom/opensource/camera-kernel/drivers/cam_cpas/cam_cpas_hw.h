@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _CAM_CPAS_HW_H_
@@ -51,6 +51,9 @@
 #define CAM_RPMH_BCM_DDR_INDEX  3
 #define CAM_RPMH_BCM_MNOC_INDEX 4
 #define CAM_RPMH_BCM_INFO_MAX   5
+
+/* Number of camera (CAM_SS) instances */
+#define CAM_MAX_CAMERA_INSTANCES 1
 
 #define CAM_CPAS_MONITOR_MAX_ENTRIES   100
 #define CAM_CPAS_INC_MONITOR_HEAD(head, ret) \
@@ -124,6 +127,17 @@ struct cam_cpas_axi_bw_info {
 		struct cam_cpas_bw_vote hlos_vote;
 		struct cam_cpas_drv_vote drv_vote;
 	};
+};
+
+/**
+ * struct cam_cpas_kobj_map: wrapper structure for base kobject
+ *                               and cam cpas private soc info
+ * @base_kobj: kernel object for camera sysfs
+ * @cpas_hw: pointer to cam_hw_info structure
+ */
+struct cam_cpas_kobj_map {
+	struct kobject base_kobj;
+	struct cam_hw_info *cpas_hw;
 };
 
 /**

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _CAM_ISP_HW_MGR_INTF_H_
@@ -16,21 +16,22 @@
 #include "cam_cpas_api.h"
 
 /* MAX IFE instance */
-#define CAM_IFE_HW_NUM_MAX       8
-#define CAM_SFE_HW_NUM_MAX       3
-#define CAM_IFE_RDI_NUM_MAX      4
-#define CAM_SFE_RDI_NUM_MAX      5
-#define CAM_SFE_FE_RDI_NUM_MAX   3
-#define CAM_ISP_BW_CONFIG_V1     1
-#define CAM_ISP_BW_CONFIG_V2     2
-#define CAM_ISP_BW_CONFIG_V3     2
-#define CAM_TFE_HW_NUM_MAX       3
-#define CAM_TFE_RDI_NUM_MAX      3
-#define CAM_IFE_SCRATCH_NUM_MAX  2
+#define CAM_IFE_HW_NUM_MAX               8
+#define CAM_SFE_HW_NUM_MAX               3
+#define CAM_IFE_RDI_NUM_MAX              4
+#define CAM_SFE_RDI_NUM_MAX              5
+#define CAM_SFE_FE_RDI_NUM_MAX           3
+#define CAM_ISP_BW_CONFIG_V1             1
+#define CAM_ISP_BW_CONFIG_V2             2
+#define CAM_ISP_BW_CONFIG_V3             2
+#define CAM_TFE_HW_NUM_MAX               4
+#define CAM_TFE_RDI_NUM_MAX              3
+#define CAM_IFE_SCRATCH_NUM_MAX          2
+#define CAM_TFE_BW_LIMITER_CONFIG_V1     1
 
 
 /* maximum context numbers for TFE */
-#define CAM_TFE_CTX_MAX      4
+#define CAM_TFE_CTX_MAX      6
 
 /* maximum context numbers for IFE */
 #define CAM_IFE_CTX_MAX      8
@@ -45,6 +46,9 @@
 #define CAM_IFE_CTX_APPLY_DEFAULT_CFG  BIT(3)
 #define CAM_IFE_CTX_SFE_EN             BIT(4)
 #define CAM_IFE_CTX_AEB_EN             BIT(5)
+#define CAM_IFE_CTX_DYNAMIC_SWITCH_EN  BIT(6)
+#define CAM_IFE_CTX_SHDR_EN            BIT(7)
+#define CAM_IFE_CTX_SHDR_IS_MASTER     BIT(8)
 
 /*
  * Maximum configuration entry size  - This is based on the
@@ -247,6 +251,7 @@ struct cam_isp_bw_clk_config_info {
  * @packet:                CSL packet from user mode driver
  * @mup_val:               MUP value if configured
  * @num_exp:               Num of exposures
+ * @wm_bitmask:            Bitmask of acquired out resource
  * @mup_en:                Flag if dynamic sensor switch is enabled
  *
  */
@@ -266,6 +271,7 @@ struct cam_isp_prepare_hw_update_data {
 	struct cam_kmd_buf_info               kmd_cmd_buff_info;
 	uint32_t                              mup_val;
 	uint32_t                              num_exp;
+	uint64_t                              wm_bitmask;
 	bool                                  mup_en;
 };
 
