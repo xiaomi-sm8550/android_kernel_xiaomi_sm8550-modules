@@ -321,7 +321,7 @@ static ssize_t swrm_debug_peek_write(struct file *file, const char __user *ubuf,
 
 	lbuf[count] = '\0';
 	rc = get_parameters(lbuf, param, 1);
-	if ((param[0] <= SWRM_MAX_REGISTER) && (rc == 0))
+	if ((param[0] <= SWRM_MAX_REGISTER) && (rc == 0) && (param[0] % 4 == 0))
 		swrm->read_data = swr_master_read(swrm, param[0]);
 	else
 		rc = -EINVAL;
@@ -360,7 +360,7 @@ static ssize_t swrm_debug_write(struct file *file,
 	rc = get_parameters(lbuf, param, 2);
 	if ((param[0] <= SWRM_MAX_REGISTER) &&
 		(param[1] <= 0xFFFFFFFF) &&
-		(rc == 0))
+		(rc == 0) && (param[0] % 4 == 0))
 		swr_master_write(swrm, param[0], param[1]);
 	else
 		rc = -EINVAL;
@@ -794,15 +794,40 @@ static int swrm_pcm_port_config(struct swr_mstr_ctrl *swrm, u8 port_num,
 		return -EINVAL;
 	}
 
-	if (stream_type == SWR_PDM)
-		return 0;
+	switch (stream_type) {
+		case SWR_PCM:
+		case SWR_PDM_32:
+			if (swrm->version != SWRM_VERSION_1_7) {
+				reg_addr = ((dir) ? SWRM_DIN_DP_PCM_PORT_CTRL(port_num) : \
+						SWRM_DOUT_DP_PCM_PORT_CTRL(port_num));
+				reg_val = enable ? 0x3 : 0x0;
+				swr_master_write(swrm, reg_addr, enable);
+			} else if (stream_type == SWR_PCM) {
+				reg_addr = ((dir) ? SWRM_DIN_DP_PCM_PORT_CTRL(port_num) : \
+						SWRM_DOUT_DP_PCM_PORT_CTRL(port_num));
+				swr_master_write(swrm, reg_addr, enable);
+			}
+		break;
+		case SWR_PDM:
+		default:
+			return 0;
+	}
+	if (swrm->version == SWRM_VERSION_1_7) {
+		reg_val = SWRM_COMP_FEATURE_CFG_DEFAULT_VAL_V1P7;
 
-	reg_addr = ((dir) ? SWRM_DIN_DP_PCM_PORT_CTRL(port_num) : \
-			SWRM_DOUT_DP_PCM_PORT_CTRL(port_num));
-	reg_val = enable ? 0x3 : 0x0;
-	swr_master_write(swrm, reg_addr, reg_val);
-	dev_dbg(swrm->dev, "%s : pcm port %s, reg_val = %d, for addr %x\n",
-			__func__, enable ? "Enabled" : "disabled", reg_val, reg_addr);
+		if (enable) {
+			if (swrm->pcm_enable_count == 0) {
+				reg_val |= SWRM_COMP_FEATURE_CFG_PCM_EN_MASK;
+				swr_master_write(swrm, SWRM_COMP_FEATURE_CFG, reg_val);
+			}
+			swrm->pcm_enable_count++;
+		} else {
+			if (swrm->pcm_enable_count > 0)
+				swrm->pcm_enable_count--;
+			if (swrm->pcm_enable_count == 0)
+				swr_master_write(swrm, SWRM_COMP_FEATURE_CFG, reg_val);
+		}
+	}
 	return 0;
 }
 
@@ -1700,6 +1725,8 @@ static int swrm_slvdev_datapath_control(struct swr_master *master, bool enable)
 		}
 		clear_bit(DISABLE_PENDING, &swrm->port_req_pending);
 		swrm_cleanup_disabled_port_reqs(master);
+		/* reset enable_count to 0 in SSR if master is already down */
+		swrm->pcm_enable_count = 0;
 		if (!swrm_is_port_en(master)) {
 			dev_dbg(&master->dev, "%s: pm_runtime auto suspend triggered\n",
 				__func__);
@@ -2287,6 +2314,7 @@ handle_irq:
 				swrm->clk_stop_wakeup = false;
 			}
 			break;
+#ifdef CONFIG_SWRM_VER_2P0
 		case SWRM_INTERRUPT_STATUS_CMD_IGNORED_AND_EXEC_CONTINUED:
 			value = swr_master_read(swrm, SWRM_CMD_FIFO_STATUS(swrm->ee_val));
 			dev_err_ratelimited(swrm->dev,
@@ -2295,6 +2323,7 @@ handle_irq:
 			/* Wait 3.5ms to clear */
 			usleep_range(3500, 3505);
 			break;
+#endif
 		default:
 			dev_err_ratelimited(swrm->dev,
 					"%s: SWR unknown interrupt value: %d\n",
@@ -2626,6 +2655,14 @@ static int swrm_master_init(struct swr_mstr_ctrl *swrm)
 	value[len++] = 0x01;
 #endif
 
+#ifdef CONFIG_SWRM_VER_1P7
+	reg[len] = SWRM_MCP_BUS_CTRL;
+	if (swrm->version < SWRM_VERSION_1_7)
+		value[len++] = 0x2;
+	else
+		value[len++] = 0x2 << swrm->ee_val;
+#endif
+
 	/* Set IRQ to PULSE */
 	reg[len] = SWRM_COMP_CFG;
 	value[len++] = 0x02;
@@ -2840,7 +2877,7 @@ static int swrm_probe(struct platform_device *pdev)
 		dev_err(swrm->dev, "missing port mapping\n");
 		goto err_pdata_fail;
 	}
-
+	swrm->pcm_enable_count = 0;
 	map_length = map_size / (3 * sizeof(u32));
 	if (num_ports > SWR_MSTR_PORT_LEN) {
 		dev_err(&pdev->dev, "%s:invalid number of swr ports\n",
@@ -3044,10 +3081,12 @@ static int swrm_probe(struct platform_device *pdev)
 				& SWRM_COMP_PARAMS_WR_FIFO_DEPTH) >> 10);
 
 	swrm_hw_ver = swr_master_read(swrm, SWRM_COMP_HW_VERSION);
-	if (swrm->version != swrm_hw_ver)
+	if (swrm->version != swrm_hw_ver) {
 		dev_info(&pdev->dev,
 			 "%s: version specified in dtsi: 0x%x not match with HW read version 0x%x\n",
 			 __func__, swrm->version, swrm_hw_ver);
+		swrm->version = swrm_hw_ver;
+	}
 
 	swrm->num_auto_enum = ((swr_master_read(swrm, SWRM_COMP_PARAMS)
                                 & SWRM_COMP_PARAMS_AUTO_ENUM_SLAVES) >> 20);
@@ -3207,7 +3246,7 @@ static int swrm_runtime_resume(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct swr_mstr_ctrl *swrm = platform_get_drvdata(pdev);
-	int ret = 0;
+	int ret = 0, val = 0;
 	bool swrm_clk_req_err = false;
 	bool hw_core_err = false, aud_core_err = false;
 	struct swr_master *mstr = &swrm->master;
@@ -3315,10 +3354,16 @@ static int swrm_runtime_resume(struct device *dev)
 			}
 			/*wake up from clock stop*/
 #ifdef CONFIG_SWRM_VER_2P0
+			val = 0x01;
 			swr_master_write(swrm,
-				SWRM_CLK_CTRL(swrm->ee_val), 0x01);
+				SWRM_CLK_CTRL(swrm->ee_val), val);
 #else
-			swr_master_write(swrm, SWRM_MCP_BUS_CTRL, 0x2);
+			if (swrm->version < SWRM_VERSION_1_7)
+				val = 0x2;
+			else
+				val = 0x2 << swrm->ee_val;
+
+			swr_master_write(swrm, SWRM_MCP_BUS_CTRL, val);
 #endif
 			/* clear and enable bus clash interrupt */
 			swr_master_write(swrm,
@@ -4011,7 +4056,7 @@ static int swrm_suspend(struct device *dev)
 			dev_dbg(swrm->dev, "%s: suspend failed state %d, wlock %d\n",
 				 __func__, swrm->pm_state,
 				 swrm->wlock_holders);
-			return -EBUSY;
+			return 0;
 		} else {
 			dev_dbg(swrm->dev,
 				"%s: done, state %d, wlock %d\n",

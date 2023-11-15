@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -145,6 +145,13 @@ static const struct wsa_reg_mask_val reg_init_2S[] = {
 	{REG_FIELD_VALUE(DAC_VCM_CTRL_REG7, DAC_VCM_SHIFT_FINAL_OVERRIDE, 0x01)},
 };
 
+static const struct wsa_reg_mask_val reg_init_uvlo[] = {
+    {WSA884X_UVLO_PROG, 0xFF, 0x77},
+    {WSA884X_PA_FSM_TIMER0, 0xFF, 0xC0},
+    {WSA884X_UVLO_DEGLITCH_CTL, 0xFF, 0x1D},
+    {WSA884X_UVLO_PROG1, 0xFF, 0x40},
+};
+
 static int wsa884x_handle_post_irq(void *data);
 static int wsa884x_get_temperature(struct snd_soc_component *component,
 				   int *temp);
@@ -223,8 +230,9 @@ static int wsa884x_handle_post_irq(void *data)
 	if (!wsa884x->pa_mute) {
 		do {
 			wsa884x->pa_mute = 0;
-			snd_soc_component_update_bits(component,
-				REG_FIELD_VALUE(PA_FSM_EN, GLOBAL_PA_EN, 0x01));
+			if (test_bit(SPKR_STATUS, &wsa884x->status_mask))
+				snd_soc_component_update_bits(component,
+					REG_FIELD_VALUE(PA_FSM_EN, GLOBAL_PA_EN, 0x01));
 			usleep_range(1000, 1100);
 
 			regmap_read(wsa884x->regmap, WSA884X_INTR_STATUS0, &sts1);
@@ -1543,6 +1551,10 @@ static void wsa884x_codec_init(struct snd_soc_component *component)
 						reg_init_2S[i].mask, reg_init_2S[i].val);
 	}
 
+	for (i = 0; i < ARRAY_SIZE(reg_init_uvlo); i++)
+		snd_soc_component_update_bits(component, reg_init_uvlo[i].reg,
+					reg_init_uvlo[i].mask, reg_init_uvlo[i].val);
+
 	wsa_noise_gate_write(component, wsa884x->noise_gate_mode);
 
 }
@@ -1836,14 +1848,10 @@ static int wsa884x_event_notify(struct notifier_block *nb,
 		return -EINVAL;
 
 	switch (event) {
-	case BOLERO_SLV_EVT_PA_OFF_PRE_SSR:
-		if (test_bit(SPKR_STATUS, &wsa884x->status_mask))
-			snd_soc_component_update_bits(wsa884x->component,
-				REG_FIELD_VALUE(PA_FSM_EN, GLOBAL_PA_EN, 0x00));
-		wsa884x_swr_down(wsa884x);
-		break;
-
 	case BOLERO_SLV_EVT_SSR_UP:
+		wsa884x_swr_down(wsa884x);
+		usleep_range(500, 510);
+
 		wsa884x_swr_up(wsa884x);
 		/* Add delay to allow enumerate */
 		usleep_range(20000, 20010);
