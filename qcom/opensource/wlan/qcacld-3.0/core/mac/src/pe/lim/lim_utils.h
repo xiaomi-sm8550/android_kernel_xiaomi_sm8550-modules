@@ -201,8 +201,6 @@ uint8_t lim_get_max_tx_power(struct mac_context *mac,
  * @session: PE Session Entry
  * @is_pwr_constraint_absolute: If local power constraint is an absolute
  * value or an offset value.
- * @ap_pwr_type: Ap power type for 6G
- * @ctry_code_match: check for country IE and sta programmed ctry match
  *
  * This function is used to get the maximum possible tx power from the list
  * of tx powers mentioned in @attr.
@@ -211,9 +209,7 @@ uint8_t lim_get_max_tx_power(struct mac_context *mac,
  */
 void lim_calculate_tpc(struct mac_context *mac,
 		       struct pe_session *session,
-		       bool is_pwr_constraint_absolute,
-		       uint8_t ap_pwr_type,
-		       bool ctry_code_match);
+		       bool is_pwr_constraint_absolute);
 
 /* AID pool management functions */
 
@@ -2394,13 +2390,15 @@ QDF_STATUS lim_util_get_type_subtype(void *pkt, uint8_t *type,
 /**
  * lim_get_min_session_txrate() - Get the minimum rate supported in the session
  * @session: Pointer to PE session
+ * @pre_auth_freq: Pointer to pre_auth_freq
  *
  * This API will find the minimum rate supported by the given PE session and
  * return the enum rateid corresponding to the rate.
  *
  * Return: enum rateid
  */
-enum rateid lim_get_min_session_txrate(struct pe_session *session);
+enum rateid lim_get_min_session_txrate(struct pe_session *session,
+				       qdf_freq_t *pre_auth_freq);
 
 /**
  * lim_send_dfs_chan_sw_ie_update() - updates the channel switch IE in beacon
@@ -3101,8 +3099,8 @@ void lim_update_nss(struct mac_context *mac_ctx, tpDphHashNode sta_ds,
 bool lim_update_channel_width(struct mac_context *mac_ctx,
 			      tpDphHashNode sta_ptr,
 			      struct pe_session *session,
-			      uint8_t ch_width,
-			      uint8_t *new_ch_width);
+			      enum phy_ch_width ch_width,
+			      enum phy_ch_width *new_ch_width);
 
 /**
  * lim_get_vht_ch_width() - Function to get the VHT
@@ -3223,4 +3221,30 @@ lim_is_power_change_required_for_sta(struct mac_context *mac_ctx,
  */
 void
 lim_update_tx_pwr_on_ctry_change_cb(uint8_t vdev_id);
+
+/*
+ * lim_is_chan_connected_for_mode() - Check if frequency is connected
+ *                                    for given opmode.
+ * @psoc: Pointer to psoc object
+ * @opmode: Vdev opmode
+ * @freq: Frequency
+ *
+ * Return: Return true if frequency is connected for given opmode.
+ */
+bool
+lim_is_chan_connected_for_mode(struct wlan_objmgr_psoc *psoc,
+			       enum QDF_OPMODE opmode,
+			       qdf_freq_t freq);
+
+/**
+ * lim_convert_vht_chwdith_to_phy_chwidth() - Convert VHT operation
+ * ch width into phy ch width
+ *
+ * @ch_width: VHT op channel width
+ * @is_40: is 40 MHz
+ *
+ * Return: phy chwidth
+ */
+enum phy_ch_width
+lim_convert_vht_chwdith_to_phy_chwidth(uint8_t ch_width, bool is_40);
 #endif /* __LIM_UTILS_H */

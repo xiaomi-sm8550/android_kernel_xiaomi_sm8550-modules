@@ -2225,9 +2225,11 @@ void lim_switch_primary_secondary_channel(struct mac_context *mac,
 	mac->lim.gpchangeChannelData = NULL;
 
 	/* Store the new primary and secondary channel in session entries if different */
-	if (pe_session->curr_op_freq != new_channel_freq) {
-		pe_warn("freq: %d --> freq: %d", pe_session->curr_op_freq,
-			new_channel_freq);
+	if (pe_session->curr_op_freq != new_channel_freq ||
+	    pe_session->ch_width != ch_width) {
+		pe_warn("freq: %d[%d] --> freq: %d[%d]",
+			pe_session->curr_op_freq, pe_session->ch_width,
+			new_channel_freq, ch_width);
 		pe_session->curr_op_freq = new_channel_freq;
 	}
 	if (pe_session->htSecondaryChannelOffset !=
@@ -4910,13 +4912,19 @@ bool lim_check_vht_op_mode_change(struct mac_context *mac,
 				  uint8_t chanWidth, uint8_t *peerMac)
 {
 	QDF_STATUS status;
-	bool update_allow = false;
+	bool update_allow;
 	struct ch_params ch_params;
 	struct csa_offload_params *csa_param;
+	enum QDF_OPMODE mode = wlan_vdev_mlme_get_opmode(pe_session->vdev);
 
-	status = lim_get_update_bw_allow(pe_session, chanWidth, &update_allow);
-	if (QDF_IS_STATUS_ERROR(status))
-		return false;
+	if (mode == QDF_STA_MODE) {
+		status = lim_get_update_bw_allow(pe_session, chanWidth,
+						 &update_allow);
+		if (QDF_IS_STATUS_ERROR(status))
+			return false;
+	} else {
+		update_allow = true;
+	}
 
 	if (update_allow) {
 		tUpdateVHTOpMode tempParam;
@@ -4931,6 +4939,10 @@ bool lim_check_vht_op_mode_change(struct mac_context *mac,
 		return true;
 	}
 
+	if (!wlan_cm_is_vdev_connected(pe_session->vdev))
+		return false;
+
+	/* use vdev start to update STA mode */
 	qdf_mem_zero(&ch_params, sizeof(ch_params));
 	ch_params.ch_width = chanWidth;
 	wlan_reg_set_channel_params_for_pwrmode(mac->pdev,
@@ -8224,6 +8236,8 @@ void lim_set_mlo_caps(struct mac_context *mac, struct pe_session *session,
 		mlo_ie_info->eml_capab_present = dot11_cap.eml_capab_present;
 		mlo_ie_info->mld_capab_and_op_present = dot11_cap.mld_capab_and_op_present;
 		mlo_ie_info->mld_id_present = dot11_cap.mld_id_present;
+		mlo_ie_info->ext_mld_capab_and_op_present =
+				dot11_cap.ext_mld_capab_and_op_present;
 		mlo_ie_info->reserved_1 = dot11_cap.reserved_1;
 		mlo_ie_info->common_info_length = dot11_cap.common_info_length;
 		qdf_mem_copy(&mlo_ie_info->mld_mac_addr,
@@ -8936,6 +8950,10 @@ void lim_set_eht_caps(struct mac_context *mac, struct pe_session *session,
 		eht_cap->eht_trs_support = dot11_cap.eht_trs_support;
 		eht_cap->txop_return_support_txop_share_m2 =
 			dot11_cap.txop_return_support_txop_share_m2;
+		eht_cap->two_bqrs_support =
+			dot11_cap.two_bqrs_support;
+		eht_cap->eht_link_adaptation_support =
+			dot11_cap.eht_link_adaptation_support;
 		eht_cap->support_320mhz_6ghz = dot11_cap.support_320mhz_6ghz;
 		eht_cap->ru_242tone_wt_20mhz = dot11_cap.ru_242tone_wt_20mhz;
 		eht_cap->ndp_4x_eht_ltf_3dot2_us_gi =
@@ -9001,6 +9019,12 @@ void lim_set_eht_caps(struct mac_context *mac, struct pe_session *session,
 			dot11_cap.rx_1k_qam_in_wider_bw_dl_ofdma;
 		eht_cap->rx_4k_qam_in_wider_bw_dl_ofdma =
 			dot11_cap.rx_4k_qam_in_wider_bw_dl_ofdma;
+		eht_cap->limited_cap_support_20mhz =
+			dot11_cap.limited_cap_support_20mhz;
+		eht_cap->triggered_mu_bf_full_bw_fb_and_dl_mumimo =
+			dot11_cap.triggered_mu_bf_full_bw_fb_and_dl_mumimo;
+		eht_cap->mru_support_20mhz =
+			dot11_cap.mru_support_20mhz;
 
 		if ((is_band_2g && !dot11_he_cap.chan_width_0) ||
 			(!is_band_2g && !dot11_he_cap.chan_width_1 &&
@@ -9524,37 +9548,69 @@ QDF_STATUS lim_util_get_type_subtype(void *pkt, uint8_t *type,
 	return QDF_STATUS_SUCCESS;
 }
 
-enum rateid lim_get_min_session_txrate(struct pe_session *session)
+static void lim_get_min_rate(uint8_t *min_rate, tSirMacRateSet *rateset)
 {
-	enum rateid rid = RATEID_DEFAULT;
-	uint8_t min_rate = SIR_MAC_RATE_54, curr_rate, i;
-	tSirMacRateSet *rateset = &session->rateSet;
-	bool enable_he_mcs0_for_6ghz_mgmt = false;
-	qdf_freq_t op_freq;
-
-	if (!session)
-		return rid;
-	else {
-		op_freq = wlan_get_operation_chan_freq(session->vdev);
-		/*
-		 * For 6GHz freq and if enable_he_mcs0_for_mgmt_6ghz INI is
-		 * enabled then FW will use rate of MCS0 for 11AX and configured
-		 * via WMI_MGMT_TX_SEND_CMDID
-		 */
-		wlan_mlme_get_mgmt_6ghz_rate_support(
-				session->mac_ctx->psoc,
-				&enable_he_mcs0_for_6ghz_mgmt);
-		if (op_freq && wlan_reg_is_6ghz_chan_freq(op_freq) &&
-		    enable_he_mcs0_for_6ghz_mgmt)
-			return rid;
-	}
+	uint8_t curr_rate, i;
 
 	for (i = 0; i < rateset->numRates; i++) {
 		/* Ignore MSB - set to indicate basic rate */
 		curr_rate = rateset->rate[i] & 0x7F;
-		min_rate =  (curr_rate < min_rate) ? curr_rate : min_rate;
+		*min_rate = (curr_rate < *min_rate) ? curr_rate :
+			    *min_rate;
 	}
-	pe_debug("supported min_rate: %0x(%d)", min_rate, min_rate);
+
+	pe_debug("supported min_rate: %0x(%d)", *min_rate, *min_rate);
+}
+
+static bool lim_is_enable_he_mcs0_for_6ghz_mgmt(struct pe_session *session,
+						qdf_freq_t freq)
+{
+	bool enable_he_mcs0_for_6ghz_mgmt = false;
+
+	if (!wlan_reg_is_6ghz_chan_freq(freq))
+		return enable_he_mcs0_for_6ghz_mgmt;
+
+	/*
+	 * For 6GHz freq and if enable_he_mcs0_for_mgmt_6ghz INI is
+	 * enabled then FW will use rate of MCS0 for 11AX and configured
+	 * via WMI_MGMT_TX_SEND_CMDID
+	 */
+	wlan_mlme_get_mgmt_6ghz_rate_support(
+			session->mac_ctx->psoc,
+			&enable_he_mcs0_for_6ghz_mgmt);
+
+	return enable_he_mcs0_for_6ghz_mgmt;
+}
+
+enum rateid lim_get_min_session_txrate(struct pe_session *session,
+				       qdf_freq_t *pre_auth_freq)
+{
+	enum rateid rid = RATEID_DEFAULT;
+	uint8_t min_rate = SIR_MAC_RATE_54;
+	tSirMacRateSet *rateset;
+	qdf_freq_t op_freq;
+
+	if (!session)
+		return rid;
+
+	rateset = &session->rateSet;
+
+	if (pre_auth_freq) {
+		pe_debug("updated rateset to pre auth freq %d",
+			 *pre_auth_freq);
+		if (*pre_auth_freq &&
+		    !lim_is_enable_he_mcs0_for_6ghz_mgmt(session,
+							*pre_auth_freq))
+				lim_get_basic_rates(rateset, *pre_auth_freq);
+		else
+			return rid;
+	}
+
+	op_freq = wlan_get_operation_chan_freq(session->vdev);
+	if (lim_is_enable_he_mcs0_for_6ghz_mgmt(session, op_freq))
+		return rid;
+
+	lim_get_min_rate(&min_rate, rateset);
 
 	if (session->is_oui_auth_assoc_6mbps_2ghz_enable)
 		min_rate = SIR_MAC_RATE_6;
@@ -9624,22 +9680,8 @@ void lim_send_sme_mgmt_frame_ind(struct mac_context *mac_ctx, uint8_t frame_type
 		!vdev_id) {
 		pe_debug("Broadcast action frame");
 		vdev_id = SME_SESSION_ID_BROADCAST;
-		goto fill_frame;
 	}
 
-	if (frame_type != SIR_MAC_MGMT_ACTION)
-		goto fill_frame;
-
-	vdev = wlan_objmgr_get_vdev_by_id_from_psoc(mac_ctx->psoc, vdev_id,
-						    WLAN_LEGACY_MAC_ID);
-
-	if (!vdev)
-		goto fill_frame;
-
-	wlan_mlo_update_action_frame_to_user(vdev, frame, frame_len);
-	wlan_objmgr_vdev_release_ref(vdev, WLAN_LEGACY_MAC_ID);
-
-fill_frame:
 	sme_mgmt_frame->frame_len = frame_len;
 	sme_mgmt_frame->sessionId = vdev_id;
 	sme_mgmt_frame->frameType = frame_type;
@@ -9650,6 +9692,23 @@ fill_frame:
 	qdf_mem_zero(sme_mgmt_frame->frameBuf, frame_len);
 	qdf_mem_copy(sme_mgmt_frame->frameBuf, frame, frame_len);
 
+	if (vdev_id != SME_SESSION_ID_BROADCAST &&
+	    frame_type == SIR_MAC_MGMT_ACTION) {
+		vdev = wlan_objmgr_get_vdev_by_id_from_psoc(mac_ctx->psoc,
+							    vdev_id,
+							    WLAN_LEGACY_MAC_ID);
+		if (!vdev) {
+			pe_debug("Invalid VDEV %d", vdev_id);
+			goto send_frame;
+		}
+
+		wlan_mlo_update_action_frame_to_user(vdev,
+						     sme_mgmt_frame->frameBuf,
+						     sme_mgmt_frame->frame_len);
+		wlan_objmgr_vdev_release_ref(vdev, WLAN_LEGACY_MAC_ID);
+	}
+
+send_frame:
 	if (mac_ctx->mgmt_frame_ind_cb)
 		mac_ctx->mgmt_frame_ind_cb(sme_mgmt_frame);
 	else
@@ -10985,10 +11044,12 @@ void lim_update_nss(struct mac_context *mac_ctx, tpDphHashNode sta_ds,
 bool lim_update_channel_width(struct mac_context *mac_ctx,
 			      tpDphHashNode sta_ptr,
 			      struct pe_session *session,
-			      uint8_t ch_width, uint8_t *new_ch_width)
+			      enum phy_ch_width ch_width,
+			      enum phy_ch_width *new_ch_width)
 {
-	uint8_t cb_mode, oper_mode;
-	uint32_t fw_vht_ch_wd;
+	uint8_t cb_mode;
+	enum phy_ch_width oper_mode;
+	enum phy_ch_width fw_vht_ch_wd;
 
 	if (wlan_reg_is_24ghz_ch_freq(session->curr_op_freq))
 		cb_mode = mac_ctx->roam.configParam.channelBondingMode24GHz;
@@ -10998,61 +11059,58 @@ bool lim_update_channel_width(struct mac_context *mac_ctx,
 	 * Do not update the channel bonding mode if channel bonding
 	 * mode is disabled in INI.
 	 */
-	if (cb_mode == WNI_CFG_CHANNEL_BONDING_MODE_DISABLE) {
-		pe_debug("channel bonding disabled");
+	if (cb_mode == WNI_CFG_CHANNEL_BONDING_MODE_DISABLE)
 		return false;
-	}
 
 	if (sta_ptr->htSupportedChannelWidthSet) {
 		if (sta_ptr->vhtSupportedChannelWidthSet >
 		    WNI_CFG_VHT_CHANNEL_WIDTH_80MHZ)
-			oper_mode = eHT_CHANNEL_WIDTH_160MHZ;
+			oper_mode = CH_WIDTH_160MHZ;
 		else
 			oper_mode = sta_ptr->vhtSupportedChannelWidthSet + 1;
 	} else {
-		oper_mode = eHT_CHANNEL_WIDTH_20MHZ;
+		oper_mode = CH_WIDTH_20MHZ;
 	}
 
-	if (((oper_mode == eHT_CHANNEL_WIDTH_80MHZ) &&
-	     (ch_width > eHT_CHANNEL_WIDTH_80MHZ)) ||
-	     (oper_mode == ch_width))
+	fw_vht_ch_wd = wlan_mlme_get_max_bw();
+
+	if (ch_width > fw_vht_ch_wd) {
+		pe_debug_rl(QDF_MAC_ADDR_FMT ": Downgrade new bw: %d to max %d",
+			    QDF_MAC_ADDR_REF(sta_ptr->staAddr),
+			    ch_width, fw_vht_ch_wd);
+		ch_width = fw_vht_ch_wd;
+	}
+	if (oper_mode == ch_width)
 		return false;
 
-	fw_vht_ch_wd = wma_get_vht_ch_width();
+	pe_debug(QDF_MAC_ADDR_FMT ": Current : %d, New: %d max %d ",
+		 QDF_MAC_ADDR_REF(sta_ptr->staAddr), oper_mode,
+		 ch_width, fw_vht_ch_wd);
 
-	pe_debug("ChannelWidth - Current : %d, New: %d mac : " QDF_MAC_ADDR_FMT,
-		 oper_mode, ch_width, QDF_MAC_ADDR_REF(sta_ptr->staAddr));
-
-	if (ch_width >= eHT_CHANNEL_WIDTH_160MHZ &&
-	    (fw_vht_ch_wd >= eHT_CHANNEL_WIDTH_160MHZ)) {
+	if (ch_width >= CH_WIDTH_160MHZ) {
 		sta_ptr->vhtSupportedChannelWidthSet =
 				WNI_CFG_VHT_CHANNEL_WIDTH_160MHZ;
-		sta_ptr->htSupportedChannelWidthSet =
-				eHT_CHANNEL_WIDTH_40MHZ;
-		*new_ch_width = eHT_CHANNEL_WIDTH_160MHZ;
-	} else if (ch_width >= eHT_CHANNEL_WIDTH_80MHZ) {
+		ch_width = CH_WIDTH_160MHZ;
+	} else if (ch_width == CH_WIDTH_80MHZ) {
 		sta_ptr->vhtSupportedChannelWidthSet =
 				WNI_CFG_VHT_CHANNEL_WIDTH_80MHZ;
-		sta_ptr->htSupportedChannelWidthSet =
-				eHT_CHANNEL_WIDTH_40MHZ;
-		*new_ch_width = eHT_CHANNEL_WIDTH_80MHZ;
-	} else if (ch_width == eHT_CHANNEL_WIDTH_40MHZ) {
+	} else if (ch_width == CH_WIDTH_40MHZ) {
 		sta_ptr->vhtSupportedChannelWidthSet =
 				WNI_CFG_VHT_CHANNEL_WIDTH_20_40MHZ;
-		sta_ptr->htSupportedChannelWidthSet =
-				eHT_CHANNEL_WIDTH_40MHZ;
-		*new_ch_width = eHT_CHANNEL_WIDTH_40MHZ;
-	} else if (ch_width == eHT_CHANNEL_WIDTH_20MHZ) {
+	} else if (ch_width == CH_WIDTH_20MHZ) {
 		sta_ptr->vhtSupportedChannelWidthSet =
 				WNI_CFG_VHT_CHANNEL_WIDTH_20_40MHZ;
-		sta_ptr->htSupportedChannelWidthSet =
-				eHT_CHANNEL_WIDTH_20MHZ;
-		*new_ch_width = eHT_CHANNEL_WIDTH_20MHZ;
+	} else {
+		return false;
 	}
+	if (ch_width >= CH_WIDTH_40MHZ)
+		sta_ptr->htSupportedChannelWidthSet = CH_WIDTH_40MHZ;
+	else
+		sta_ptr->htSupportedChannelWidthSet = CH_WIDTH_20MHZ;
+	*new_ch_width = ch_width;
 
-	lim_check_vht_op_mode_change(mac_ctx, session, *new_ch_width,
-				     sta_ptr->staAddr);
-	return true;
+	return lim_check_vht_op_mode_change(mac_ctx, session, *new_ch_width,
+					    sta_ptr->staAddr);
 }
 
 uint8_t lim_get_vht_ch_width(tDot11fIEVHTCaps *vht_cap,
@@ -11089,7 +11147,6 @@ uint8_t lim_get_vht_ch_width(tDot11fIEVHTCaps *vht_cap,
 		else if (offset > 16)
 			ch_width = WNI_CFG_VHT_CHANNEL_WIDTH_80_PLUS_80MHZ;
 	}
-	pe_debug("The VHT Operation channel width is %d", ch_width);
 	return ch_width;
 }
 
@@ -11122,7 +11179,7 @@ lim_set_tpc_power(struct mac_context *mac_ctx, struct pe_session *session)
 	    session->opmode == QDF_P2P_GO_MODE)
 		mlme_obj->reg_tpc_obj.num_pwr_levels = 0;
 
-	lim_calculate_tpc(mac_ctx, session, false, 0, false);
+	lim_calculate_tpc(mac_ctx, session, false);
 
 	tx_ops->set_tpc_power(mac_ctx->psoc, session->vdev_id,
 			      &mlme_obj->reg_tpc_obj);
@@ -11265,7 +11322,7 @@ lim_is_power_change_required_for_sta(struct mac_context *mac_ctx,
 
 	wlan_reg_get_cur_6g_ap_pwr_type(mac_ctx->pdev, &ap_power_type_6g);
 
-	if (sta_session->ap_power_type_6g == REG_INDOOR_AP &&
+	if (sta_session->best_6g_power_type == REG_INDOOR_AP &&
 	    channel_state & CHANNEL_STATE_ENABLE &&
 	    ap_power_type_6g == REG_VERY_LOW_POWER_AP) {
 		pe_debug("Change the power type of STA from LPI to VLP");
@@ -11368,4 +11425,63 @@ lim_update_tx_pwr_on_ctry_change_cb(uint8_t vdev_id)
 	}
 
 	lim_set_tpc_power(mac_ctx, session);
+}
+
+bool lim_is_chan_connected_for_mode(struct wlan_objmgr_psoc *psoc,
+				    enum QDF_OPMODE device_mode,
+				    qdf_freq_t chan_freq)
+{
+	struct wlan_channel *des_chan;
+	struct wlan_objmgr_vdev *vdev;
+	uint8_t vdev_id;
+
+	for (vdev_id = 0; vdev_id < WLAN_UMAC_PSOC_MAX_VDEVS; vdev_id++) {
+		vdev =
+		wlan_objmgr_get_vdev_by_id_from_psoc(psoc, vdev_id,
+						     WLAN_LEGACY_MAC_ID);
+		if (!vdev)
+			continue;
+
+		if (vdev->vdev_mlme.vdev_opmode != device_mode)
+			goto next;
+
+		if (!wlan_cm_is_vdev_connected(vdev))
+			goto next;
+
+		des_chan = vdev->vdev_mlme.des_chan;
+		if (!des_chan)
+			goto next;
+
+		if (des_chan->ch_freq != chan_freq)
+			goto next;
+
+		wlan_objmgr_vdev_release_ref(vdev, WLAN_LEGACY_MAC_ID);
+		return true;
+next:
+		wlan_objmgr_vdev_release_ref(vdev, WLAN_LEGACY_MAC_ID);
+	}
+
+	return false;
+}
+
+enum phy_ch_width
+lim_convert_vht_chwdith_to_phy_chwidth(uint8_t ch_width, bool is_40)
+{
+	switch (ch_width) {
+	case WNI_CFG_VHT_CHANNEL_WIDTH_80_PLUS_80MHZ:
+		return CH_WIDTH_80P80MHZ;
+	case WNI_CFG_VHT_CHANNEL_WIDTH_160MHZ:
+		return CH_WIDTH_160MHZ;
+	case WNI_CFG_VHT_CHANNEL_WIDTH_80MHZ:
+		return CH_WIDTH_80MHZ;
+	case WNI_CFG_VHT_CHANNEL_WIDTH_20_40MHZ:
+		if (is_40)
+			return CH_WIDTH_40MHZ;
+		else
+			return CH_WIDTH_20MHZ;
+	default:
+		pe_debug("Unknown VHT ch width %d", ch_width);
+			break;
+	}
+	return CH_WIDTH_20MHZ;
 }

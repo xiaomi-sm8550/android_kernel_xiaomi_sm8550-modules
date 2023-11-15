@@ -1396,7 +1396,7 @@ static void cm_set_peer_mld_info(struct cm_peer_create_req *req,
 				 struct qdf_mac_addr *mld_mac,
 				 bool is_assoc_peer)
 {
-	if (req) {
+	if (req && mld_mac) {
 		qdf_copy_macaddr(&req->mld_mac, mld_mac);
 		req->is_assoc_peer = is_assoc_peer;
 	}
@@ -1418,7 +1418,6 @@ cm_send_bss_peer_create_req(struct wlan_objmgr_vdev *vdev,
 	struct scheduler_msg msg;
 	QDF_STATUS status;
 	struct cm_peer_create_req *req;
-	bool eht_capab;
 
 	if (!vdev || !peer_mac)
 		return QDF_STATUS_E_FAILURE;
@@ -1429,9 +1428,7 @@ cm_send_bss_peer_create_req(struct wlan_objmgr_vdev *vdev,
 	if (!req)
 		return QDF_STATUS_E_NOMEM;
 
-	wlan_psoc_mlme_get_11be_capab(wlan_vdev_get_psoc(vdev), &eht_capab);
-	if (eht_capab)
-		cm_set_peer_mld_info(req, mld_mac, is_assoc_peer);
+	cm_set_peer_mld_info(req, mld_mac, is_assoc_peer);
 
 	req->vdev_id = wlan_vdev_get_id(vdev);
 	qdf_copy_macaddr(&req->peer_mac, peer_mac);
@@ -1501,9 +1498,9 @@ static void cm_process_connect_complete(struct wlan_objmgr_psoc *psoc,
 	    QDF_HAS_PARAM(ucast_cipher, WLAN_CRYPTO_CIPHER_WEP_104) ||
 	    QDF_HAS_PARAM(ucast_cipher, WLAN_CRYPTO_CIPHER_WEP))) {
 		cm_csr_set_ss_none(vdev_id);
-		if (wlan_vdev_mlme_is_mlo_link_vdev(vdev))
+		if (wlan_vdev_mlme_is_mlo_vdev(vdev))
 			mlo_enable_rso(pdev, vdev, rsp);
-		else if (!wlan_vdev_mlme_is_mlo_vdev(vdev))
+		else
 			cm_roam_start_init_on_connect(pdev, vdev_id);
 	} else {
 		if (rsp->is_wps_connection)
@@ -1527,14 +1524,19 @@ cm_update_tid_mapping(struct wlan_objmgr_vdev *vdev)
 	if (!vdev || !vdev->mlo_dev_ctx)
 		return QDF_STATUS_E_NULL_VALUE;
 
-	if (!mlo_check_if_all_links_up(vdev))
+	if (!wlan_vdev_mlme_is_mlo_link_vdev(vdev) ||
+	    !mlo_check_if_all_links_up(vdev))
 		return QDF_STATUS_E_FAILURE;
 
-	t2lm_ctx = &vdev->mlo_dev_ctx->t2lm_ctx;
+	t2lm_ctx = &vdev->mlo_dev_ctx->sta_ctx->copied_t2lm_ie_assoc_rsp;
+	if (!t2lm_ctx) {
+		mlme_err("T2LM ctx is NULL");
+		return QDF_STATUS_E_NULL_VALUE;
+	}
+
 	status = wlan_process_bcn_prbrsp_t2lm_ie(vdev, t2lm_ctx, t2lm_ctx->tsf);
 	if (QDF_IS_STATUS_ERROR(status)) {
 		mlme_err("T2LM IE beacon process failed");
-		return status;
 	}
 
 	return status;
@@ -1647,7 +1649,7 @@ cm_connect_complete_ind(struct wlan_objmgr_vdev *vdev,
 					     vdev);
 		wlan_p2p_status_connect(vdev);
 		cm_update_tid_mapping(vdev);
-		cm_update_associated_ch_width(vdev, true);
+		cm_update_associated_ch_info(vdev, true);
 	}
 
 	mlo_roam_connect_complete(vdev);
