@@ -86,6 +86,7 @@ enum cnss_driver_status {
 	CNSS_FW_DOWN,
 	CNSS_HANG_EVENT,
 	CNSS_BUS_EVENT,
+	CNSS_SYS_REBOOT,
 };
 
 enum cnss_host_dump_type {
@@ -104,9 +105,14 @@ enum cnss_host_dump_type {
 	CNSS_HOST_WMI_COMMAND_LOG_IDX,
 	CNSS_HOST_WMI_EVENT_LOG_IDX,
 	CNSS_HOST_WMI_RX_EVENT_IDX,
-	CNSS_HOST_HIF_CE_DESC_HISTORY,
 	CNSS_HOST_HIF_CE_DESC_HISTORY_BUFF,
 	CNSS_HOST_HANG_EVENT_DATA,
+	CNSS_HOST_CE_DESC_HIST,
+	CNSS_HOST_CE_COUNT_MAX,
+	CNSS_HOST_CE_HISTORY_MAX,
+	CNSS_HOST_ONLY_FOR_CRIT_CE,
+	CNSS_HOST_HIF_EVENT_HISTORY,
+	CNSS_HOST_HIF_EVENT_HIST_MAX,
 	CNSS_HOST_DUMP_TYPE_MAX,
 };
 
@@ -247,6 +253,7 @@ enum cnss_recovery_reason {
 
 enum cnss_fw_caps {
 	CNSS_FW_CAP_DIRECT_LINK_SUPPORT,
+	CNSS_FW_CAP_AUX_UC_SUPPORT,
 };
 
 enum cnss_remote_mem_type {
@@ -345,7 +352,7 @@ extern int cnss_get_pci_slot(struct device *dev);
 extern int cnss_pci_get_reg_dump(struct device *dev, uint8_t *buffer,
 				 uint32_t len);
 extern struct kobject *cnss_get_wifi_kobj(struct device *dev);
-extern int cnss_send_buffer_to_afcmem(struct device *dev, char *afcdb,
+extern int cnss_send_buffer_to_afcmem(struct device *dev, const uint8_t *afcdb,
 				      uint32_t len, uint8_t slotid);
 extern int cnss_reset_afcmem(struct device *dev, uint8_t slotid);
 extern bool cnss_get_fw_cap(struct device *dev, enum cnss_fw_caps fw_cap);
@@ -357,4 +364,7 @@ extern void cnss_thermal_cdev_unregister(struct device *dev, int tcdev_id);
 extern int cnss_get_curr_therm_cdev_state(struct device *dev,
 					  unsigned long *thermal_state,
 					  int tcdev_id);
+extern int cnss_update_time_sync_period(struct device *dev,
+					 uint32_t time_sync_period);
+extern int cnss_reset_time_sync_period(struct device *dev);
 #endif /* _NET_CNSS2_H */

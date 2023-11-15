@@ -23,6 +23,9 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/time64.h>
+#if IS_ENABLED(CONFIG_MSM_QMP)
+#include <linux/mailbox/qmp.h>
+#endif
 #ifdef CONFIG_CNSS_OUT_OF_TREE
 #include "cnss2.h"
 #else
@@ -265,6 +268,7 @@ enum cnss_mem_type {
 	CNSS_MEM_M3,
 	CNSS_MEM_CAL_V01,
 	CNSS_MEM_DPD_V01,
+	CNSS_MEM_AUX,
 };
 
 enum cnss_fw_dump_type {
@@ -410,6 +414,18 @@ struct cnss_cal_info {
 	enum cnss_cal_status cal_status;
 };
 
+/**
+ * enum cnss_time_sync_period_vote - to get per vote time sync period
+ * @TIME_SYNC_VOTE_WLAN: WLAN Driver vote
+ * @TIME_SYNC_VOTE_CNSS: sys config vote
+ * @TIME_SYNC_VOTE_MAX
+ */
+enum cnss_time_sync_period_vote {
+	TIME_SYNC_VOTE_WLAN,
+	TIME_SYNC_VOTE_CNSS,
+	TIME_SYNC_VOTE_MAX,
+};
+
 struct cnss_control_params {
 	unsigned long quirks;
 	unsigned int mhi_timeout;
@@ -417,6 +433,7 @@ struct cnss_control_params {
 	unsigned int qmi_timeout;
 	unsigned int bdf_type;
 	unsigned int time_sync_period;
+	unsigned int time_sync_period_vote[TIME_SYNC_VOTE_MAX];
 };
 
 struct cnss_tcs_info {
@@ -530,7 +547,9 @@ struct cnss_plat_data {
 	u32 fw_mem_seg_len;
 	struct cnss_fw_mem fw_mem[QMI_WLFW_MAX_NUM_MEM_SEG_V01];
 	struct cnss_fw_mem m3_mem;
+	struct cnss_fw_mem tme_lite_mem;
 	struct cnss_fw_mem *cal_mem;
+	struct cnss_fw_mem aux_mem;
 	u64 cal_time;
 	bool cbc_file_download;
 	u32 cal_file_size;
@@ -547,6 +566,7 @@ struct cnss_plat_data {
 	struct mutex dev_lock; /* mutex for register access through debugfs */
 	struct mutex driver_ops_lock; /* mutex for external driver ops */
 	struct cnss_wlan_driver *driver_ops;
+	u32 supported_link_speed;
 	u32 device_freq_hz;
 	u32 diag_reg_read_addr;
 	u32 diag_reg_read_mem_type;
@@ -579,6 +599,7 @@ struct cnss_plat_data {
 	u8 set_wlaon_pwr_ctrl;
 	struct cnss_tcs_info tcs_info;
 	bool fw_pcie_gen_switch;
+	bool fw_aux_uc_support;
 	u64 fw_caps;
 	u8 pcie_gen_speed;
 	struct iommu_domain *audio_iommu_domain;
@@ -588,6 +609,10 @@ struct cnss_plat_data {
 	u8 charger_mode;
 	struct mbox_client mbox_client_data;
 	struct mbox_chan *mbox_chan;
+#if IS_ENABLED(CONFIG_MSM_QMP)
+	struct qmp *qmp;
+#endif
+	bool use_direct_qmp;
 	const char *vreg_ol_cpr, *vreg_ipa;
 	const char **pdc_init_table, **vreg_pdc_map, **pmu_vreg_map;
 	int pdc_init_table_len, vreg_pdc_map_len, pmu_vreg_map_len;
@@ -699,7 +724,8 @@ int cnss_enable_int_pow_amp_vreg(struct cnss_plat_data *plat_priv);
 int cnss_get_tcs_info(struct cnss_plat_data *plat_priv);
 unsigned int cnss_get_timeout(struct cnss_plat_data *plat_priv,
 			      enum cnss_timeout_type);
-int cnss_aop_mbox_init(struct cnss_plat_data *plat_priv);
+int cnss_aop_interface_init(struct cnss_plat_data *plat_priv);
+void cnss_aop_interface_deinit(struct cnss_plat_data *plat_priv);
 int cnss_aop_pdc_reconfig(struct cnss_plat_data *plat_priv);
 int cnss_aop_send_msg(struct cnss_plat_data *plat_priv, char *msg);
 void cnss_power_misc_params_init(struct cnss_plat_data *plat_priv);
@@ -717,4 +743,7 @@ int cnss_get_feature_list(struct cnss_plat_data *plat_priv,
 int cnss_get_input_gpio_value(struct cnss_plat_data *plat_priv, int gpio_num);
 bool cnss_check_driver_loading_allowed(void);
 int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv);
+void cnss_recovery_handler(struct cnss_plat_data *plat_priv);
+size_t cnss_get_platform_name(struct cnss_plat_data *plat_priv,
+			      char *buf, const size_t buf_len);
 #endif /* _CNSS_MAIN_H */

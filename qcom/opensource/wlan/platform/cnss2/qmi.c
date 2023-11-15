@@ -33,10 +33,15 @@
 #define INI_FILE_NAME_LEN		100
 
 #define QDSS_TRACE_CONFIG_FILE		"qdss_trace_config"
+/*
+ * Download QDSS config file based on build type. Add build type string to
+ * file name. Download "qdss_trace_config_debug_v<n>.cfg" for debug build
+ * and "qdss_trace_config_perf_v<n>.cfg" for perf build.
+ */
 #ifdef CONFIG_CNSS2_DEBUG
-#define QDSS_DEBUG_FILE_STR		"debug_"
+#define QDSS_FILE_BUILD_STR		"debug_"
 #else
-#define QDSS_DEBUG_FILE_STR		""
+#define QDSS_FILE_BUILD_STR		"perf_"
 #endif
 #define HW_V1_NUMBER			"v1"
 #define HW_V2_NUMBER			"v2"
@@ -322,6 +327,14 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 		req->nm_modem |= SLEEP_CLOCK_SELECT_INTERNAL_BIT;
 	}
 
+	if (plat_priv->supported_link_speed) {
+		req->pcie_link_info_valid = 1;
+		req->pcie_link_info.pci_link_speed =
+					plat_priv->supported_link_speed;
+		cnss_pr_dbg("Supported link speed in Host Cap %d\n",
+			    plat_priv->supported_link_speed);
+	}
+
 	if (cnss_bus_is_smmu_s1_enabled(plat_priv) &&
 	    !cnss_bus_get_iova(plat_priv, &iova_start, &iova_size) &&
 	    !cnss_bus_get_iova_ipa(plat_priv, &iova_ipa_start,
@@ -345,6 +358,11 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 		cnss_pr_dbg("Sending feature list 0x%llx\n",
 			    req->feature_list);
 	}
+
+	if (cnss_get_platform_name(plat_priv, req->platform_name,
+				   QMI_WLFW_MAX_PLATFORM_NAME_LEN_V01))
+		req->platform_name_valid = 1;
+
 	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 			   wlfw_host_cap_resp_msg_v01_ei, resp);
 	if (ret < 0) {
@@ -590,6 +608,10 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 	if (resp->fw_caps_valid) {
 		plat_priv->fw_pcie_gen_switch =
 			!!(resp->fw_caps & QMI_WLFW_HOST_PCIE_GEN_SWITCH_V01);
+		plat_priv->fw_aux_uc_support =
+			!!(resp->fw_caps & QMI_WLFW_AUX_UC_SUPPORT_V01);
+		cnss_pr_dbg("FW aux uc support capability: %d\n",
+			    plat_priv->fw_aux_uc_support);
 		plat_priv->fw_caps = resp->fw_caps;
 	}
 
@@ -757,6 +779,9 @@ int cnss_wlfw_ini_file_send_sync(struct cnss_plat_data *plat_priv,
 	unsigned int remaining;
 	bool backup_supported = false;
 
+	cnss_pr_dbg("Sending QMI_WLFW_INI_FILE_DOWNLOAD_REQ_V01 message for ini_type: %d, state: 0x%lx\n",
+		    file_type, plat_priv->driver_state);
+
 	req = kzalloc(sizeof(*req), GFP_KERNEL);
 	if (!req)
 		return -ENOMEM;
@@ -780,19 +805,27 @@ int cnss_wlfw_ini_file_send_sync(struct cnss_plat_data *plat_priv,
 	}
 
 	snprintf(filename, sizeof(filename), "%s%s", tmp_filename, INI_EXT);
+
+	cnss_pr_dbg("Invoke firmware_request_nowarn for %s\n", filename);
 	/* Fetch the file */
 	ret = firmware_request_nowarn(&fw, filename, &plat_priv->plat_dev->dev);
 	if (ret) {
+		cnss_pr_dbg("Failed to read %s, ret: %d\n", filename, ret);
 		if (!backup_supported)
 			goto err_req_fw;
 
 		snprintf(filename, sizeof(filename),
 			 "%s-%s%s", tmp_filename, "backup", INI_EXT);
 
+		cnss_pr_dbg("Invoke firmware_request_nowarn for %s\n",
+			    filename);
 		ret = firmware_request_nowarn(&fw, filename,
 					      &plat_priv->plat_dev->dev);
-		if (ret)
+		if (ret) {
+			cnss_pr_dbg("Failed to read %s, ret: %d\n", filename,
+				    ret);
 			goto err_req_fw;
+		}
 	}
 
 	temp = fw->data;
@@ -904,6 +937,7 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 	if (ret)
 		goto err_req_fw;
 
+	cnss_pr_dbg("Invoke firmware_request_nowarn for %s\n", filename);
 	if (bdf_type == CNSS_BDF_REGDB)
 		ret = cnss_request_firmware_direct(plat_priv, &fw_entry,
 						   filename);
@@ -1013,6 +1047,87 @@ err_req_fw:
 	return ret;
 }
 
+int cnss_wlfw_tme_patch_dnld_send_sync(struct cnss_plat_data *plat_priv,
+				       enum wlfw_tme_lite_file_type_v01 file)
+{
+	struct wlfw_tme_lite_info_req_msg_v01 *req;
+	struct wlfw_tme_lite_info_resp_msg_v01 *resp;
+	struct qmi_txn txn;
+	struct cnss_fw_mem *tme_lite_mem = &plat_priv->tme_lite_mem;
+	int ret = 0;
+
+	cnss_pr_dbg("Sending TME patch information message, state: 0x%lx\n",
+		    plat_priv->driver_state);
+
+	if (plat_priv->device_id != PEACH_DEVICE_ID)
+		return 0;
+
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
+
+	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
+	if (!resp) {
+		kfree(req);
+		return -ENOMEM;
+	}
+
+	if (!tme_lite_mem->pa || !tme_lite_mem->size) {
+		cnss_pr_err("Memory for TME patch is not available\n");
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	cnss_pr_dbg("TME-L patch memory, va: 0x%pK, pa: %pa, size: 0x%zx\n",
+		    tme_lite_mem->va, &tme_lite_mem->pa, tme_lite_mem->size);
+
+	req->tme_file = file;
+	req->addr = plat_priv->tme_lite_mem.pa;
+	req->size = plat_priv->tme_lite_mem.size;
+
+	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
+			   wlfw_tme_lite_info_resp_msg_v01_ei, resp);
+	if (ret < 0) {
+		cnss_pr_err("Failed to initialize txn for TME patch information request, err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	ret = qmi_send_request(&plat_priv->qmi_wlfw, NULL, &txn,
+			       QMI_WLFW_TME_LITE_INFO_REQ_V01,
+			       WLFW_TME_LITE_INFO_REQ_MSG_V01_MAX_MSG_LEN,
+			       wlfw_tme_lite_info_req_msg_v01_ei, req);
+	if (ret < 0) {
+		qmi_txn_cancel(&txn);
+		cnss_pr_err("Failed to send TME patch information request, err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
+	if (ret < 0) {
+		cnss_pr_err("Failed to wait for response of TME patch information request, err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
+		cnss_pr_err("TME patch information request failed, result: %d, err: %d\n",
+			    resp->resp.result, resp->resp.error);
+		ret = -resp->resp.result;
+		goto out;
+	}
+
+	kfree(req);
+	kfree(resp);
+	return 0;
+
+out:
+	kfree(req);
+	kfree(resp);
+	return ret;
+}
+
 int cnss_wlfw_m3_dnld_send_sync(struct cnss_plat_data *plat_priv)
 {
 	struct wlfw_m3_info_req_msg_v01 *req;
@@ -1074,6 +1189,83 @@ int cnss_wlfw_m3_dnld_send_sync(struct cnss_plat_data *plat_priv)
 
 	if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
 		cnss_pr_err("M3 information request failed, result: %d, err: %d\n",
+			    resp->resp.result, resp->resp.error);
+		ret = -resp->resp.result;
+		goto out;
+	}
+
+	kfree(req);
+	kfree(resp);
+	return 0;
+
+out:
+	CNSS_QMI_ASSERT();
+	kfree(req);
+	kfree(resp);
+	return ret;
+}
+
+int cnss_wlfw_aux_dnld_send_sync(struct cnss_plat_data *plat_priv)
+{
+	struct wlfw_aux_uc_info_req_msg_v01 *req;
+	struct wlfw_aux_uc_info_resp_msg_v01 *resp;
+	struct qmi_txn txn;
+	struct cnss_fw_mem *aux_mem = &plat_priv->aux_mem;
+	int ret = 0;
+
+	cnss_pr_dbg("Sending QMI_WLFW_AUX_UC_INFO_REQ_V01 message, state: 0x%lx\n",
+		    plat_priv->driver_state);
+
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
+
+	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
+	if (!resp) {
+		kfree(req);
+		return -ENOMEM;
+	}
+
+	if (!aux_mem->pa || !aux_mem->size) {
+		cnss_pr_err("Memory for AUX is not available\n");
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	cnss_pr_dbg("AUX memory, va: 0x%pK, pa: %pa, size: 0x%zx\n",
+		    aux_mem->va, &aux_mem->pa, aux_mem->size);
+
+	req->addr = plat_priv->aux_mem.pa;
+	req->size = plat_priv->aux_mem.size;
+
+	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
+			   wlfw_aux_uc_info_resp_msg_v01_ei, resp);
+	if (ret < 0) {
+		cnss_pr_err("Failed to initialize txn for QMI_WLFW_AUX_UC_INFO_REQ_V01 request, err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	ret = qmi_send_request(&plat_priv->qmi_wlfw, NULL, &txn,
+			       QMI_WLFW_AUX_UC_INFO_REQ_V01,
+			       WLFW_AUX_UC_INFO_REQ_MSG_V01_MAX_MSG_LEN,
+			       wlfw_aux_uc_info_req_msg_v01_ei, req);
+	if (ret < 0) {
+		qmi_txn_cancel(&txn);
+		cnss_pr_err("Failed to send QMI_WLFW_AUX_UC_INFO_REQ_V01 request, err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
+	if (ret < 0) {
+		cnss_pr_err("Failed to wait for response of QMI_WLFW_AUX_UC_INFO_REQ_V01 request, err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
+		cnss_pr_err("QMI_WLFW_AUX_UC_INFO_REQ_V01 request failed, result: %d, err: %d\n",
 			    resp->resp.result, resp->resp.error);
 		ret = -resp->resp.result;
 		goto out;
@@ -1269,22 +1461,21 @@ end:
 }
 
 void cnss_get_qdss_cfg_filename(struct cnss_plat_data *plat_priv,
-				char *filename, u32 filename_len)
+				char *filename, u32 filename_len,
+				bool fallback_file)
 {
 	char filename_tmp[MAX_FIRMWARE_NAME_LEN];
-	char *debug_str = QDSS_DEBUG_FILE_STR;
+	char *build_str = QDSS_FILE_BUILD_STR;
 
-	if (plat_priv->device_id == KIWI_DEVICE_ID ||
-	    plat_priv->device_id == MANGO_DEVICE_ID ||
-	    plat_priv->device_id == PEACH_DEVICE_ID)
-		debug_str = "";
+	if (fallback_file)
+		build_str = "";
 
 	if (plat_priv->device_version.major_version == FW_V2_NUMBER)
 		snprintf(filename_tmp, filename_len, QDSS_TRACE_CONFIG_FILE
-			 "_%s%s.cfg", debug_str, HW_V2_NUMBER);
+			 "_%s%s.cfg", build_str, HW_V2_NUMBER);
 	else
 		snprintf(filename_tmp, filename_len, QDSS_TRACE_CONFIG_FILE
-			 "_%s%s.cfg", debug_str, HW_V1_NUMBER);
+			 "_%s%s.cfg", build_str, HW_V1_NUMBER);
 
 	cnss_bus_add_fw_prefix_name(plat_priv, filename, filename_tmp);
 }
@@ -1313,13 +1504,28 @@ int cnss_wlfw_qdss_dnld_send_sync(struct cnss_plat_data *plat_priv)
 		return -ENOMEM;
 	}
 
-	cnss_get_qdss_cfg_filename(plat_priv, qdss_cfg_filename, sizeof(qdss_cfg_filename));
+	cnss_get_qdss_cfg_filename(plat_priv, qdss_cfg_filename,
+				   sizeof(qdss_cfg_filename), false);
+
+	cnss_pr_dbg("Invoke firmware_request_nowarn for %s\n",
+		    qdss_cfg_filename);
 	ret = cnss_request_firmware_direct(plat_priv, &fw_entry,
 					   qdss_cfg_filename);
 	if (ret) {
-		cnss_pr_dbg("Unable to load %s\n",
+		cnss_pr_dbg("Unable to load %s ret %d, try default file\n",
+			    qdss_cfg_filename, ret);
+		cnss_get_qdss_cfg_filename(plat_priv, qdss_cfg_filename,
+					   sizeof(qdss_cfg_filename),
+					   true);
+		cnss_pr_dbg("Invoke firmware_request_nowarn for %s\n",
 			    qdss_cfg_filename);
-		goto err_req_fw;
+		ret = cnss_request_firmware_direct(plat_priv, &fw_entry,
+						   qdss_cfg_filename);
+		if (ret) {
+			cnss_pr_err("Unable to load %s ret %d\n",
+				    qdss_cfg_filename, ret);
+			goto err_req_fw;
+		}
 	}
 
 	temp = fw_entry->data;
@@ -2837,9 +3043,9 @@ static void cnss_wlfw_fw_mem_file_save_ind_cb(struct qmi_handle *qmi_wlfw,
 		cnss_pr_err("Spurious indication\n");
 		return;
 	}
-	cnss_pr_dbg("QMI fw_mem_file_save: source: %d  mem_seg: %d type: %u len: %u\n",
-		    ind_msg->source, ind_msg->mem_seg_valid,
-		    ind_msg->mem_seg[0].type, ind_msg->mem_seg_len);
+	cnss_pr_dbg_buf("QMI fw_mem_file_save: source: %d  mem_seg: %d type: %u len: %u\n",
+			ind_msg->source, ind_msg->mem_seg_valid,
+			ind_msg->mem_seg[0].type, ind_msg->mem_seg_len);
 
 	event_data = kzalloc(sizeof(*event_data), GFP_KERNEL);
 	if (!event_data)
@@ -2861,9 +3067,9 @@ static void cnss_wlfw_fw_mem_file_save_ind_cb(struct qmi_handle *qmi_wlfw,
 				cnss_pr_err("FW Mem file save ind cannot have multiple mem types\n");
 				goto free_event_data;
 			}
-			cnss_pr_dbg("seg-%d: addr 0x%llx size 0x%x\n",
-				    i, ind_msg->mem_seg[i].addr,
-				    ind_msg->mem_seg[i].size);
+			cnss_pr_dbg_buf("seg-%d: addr 0x%llx size 0x%x\n",
+					i, ind_msg->mem_seg[i].addr,
+					ind_msg->mem_seg[i].size);
 		}
 	}
 
