@@ -27,6 +27,7 @@
 #include <linux/firmware.h>
 #include <linux/qcom_scm.h>
 #include <linux/freezer.h>
+#include <linux/ratelimit.h>
 #include <asm/cacheflush.h>
 #include <soc/qcom/qseecomi.h>
 #include <linux/qtee_shmbridge.h>
@@ -63,6 +64,18 @@
 #define SMCINVOKE_MEM_PERM_RW			6
 #define SMCINVOKE_SCM_EBUSY_WAIT_MS		30
 #define SMCINVOKE_SCM_EBUSY_MAX_RETRY		200
+#define TZCB_ERR_RATELIMIT_INTERVAL		(1*HZ)
+#define TZCB_ERR_RATELIMIT_BURST		1
+
+//print tzcb err per sec
+#define tzcb_err_ratelimited(fmt, ...) 	do {		\
+	static DEFINE_RATELIMIT_STATE(_rs, 		\
+			TZCB_ERR_RATELIMIT_INTERVAL,	\
+			TZCB_ERR_RATELIMIT_BURST);	\
+	if (__ratelimit(&_rs))				\
+		pr_err(fmt, ##__VA_ARGS__);		\
+} while(0)
+
 
 
 /* TZ defined values - Start */
@@ -196,7 +209,7 @@ static const struct file_operations g_smcinvoke_fops = {
 static dev_t smcinvoke_device_no;
 static struct cdev smcinvoke_cdev;
 static struct class *driver_class;
-static struct device *class_dev;
+struct device *class_dev;
 static struct platform_device *smcinvoke_pdev;
 
 struct smcinvoke_buf_hdr {
@@ -337,7 +350,7 @@ static int prepare_send_scm_msg(const uint8_t *in_buf, phys_addr_t in_paddr,
 		struct smcinvoke_cmd_req *req,
 		union smcinvoke_arg *args_buf,
 		bool *tz_acked, uint32_t context_type,
-		struct qtee_shm *in_shm, struct qtee_shm *out_shm);
+		struct qtee_shm *in_shm, struct qtee_shm *out_shm, bool retry);
 
 static void process_piggyback_data(void *buf, size_t buf_size);
 
@@ -475,7 +488,7 @@ static void smcinvoke_shmbridge_post_process(void)
 			do {
 				ret = qtee_shmbridge_deregister(handle);
 				if (unlikely(ret)) {
-					pr_err("SHM failed: ret:%d ptr:0x%x h:%#llx\n",
+					pr_err_ratelimited("SHM failed: ret:%d ptr:0x%x h:%#llx\n",
 							ret,
 							dmabuf_to_free,
 							handle);
@@ -509,10 +522,10 @@ static int smcinvoke_release_tz_object(struct qtee_shm *in_shm, struct qtee_shm 
 	ret = prepare_send_scm_msg(in_buf, in_shm->paddr,
 			SMCINVOKE_TZ_MIN_BUF_SIZE, out_buf, out_shm->paddr,
 			SMCINVOKE_TZ_MIN_BUF_SIZE, &req, NULL,
-			&release_handles, context_type, in_shm, out_shm);
+			&release_handles, context_type, in_shm, out_shm, false);
 	process_piggyback_data(out_buf, SMCINVOKE_TZ_MIN_BUF_SIZE);
 	if (ret) {
-		pr_err("Failed to release object(0x%x), ret:%d\n",
+		pr_err_ratelimited("Failed to release object(0x%x), ret:%d\n",
 				hdr.tzhandle, ret);
 	} else {
 		pr_debug("Released object(0x%x) successfully.\n",
@@ -593,7 +606,7 @@ static void smcinvoke_start_adci_thread(void)
 	do {
 		ret = IClientEnv_adciAccept(adci_rootEnv);
 		if (ret == OBJECT_ERROR_BUSY) {
-			pr_err("Secure side is busy,will retry after 5 ms, retry_count = %d",retry_count);
+			pr_err_ratelimited("Secure side is busy,will retry after 5 ms, retry_count = %d\n",retry_count);
 			msleep(SMCINVOKE_INTERFACE_BUSY_WAIT_MS);
 		}
 	} while ((ret == OBJECT_ERROR_BUSY) && (retry_count++ < SMCINVOKE_INTERFACE_MAX_RETRY));
@@ -623,7 +636,7 @@ static void __wakeup_postprocess_kthread(struct smcinvoke_worker_thread *smcinvo
 static int smcinvoke_postprocess_kthread_func(void *data)
 {
 	struct smcinvoke_worker_thread *smcinvoke_wrk_trd = data;
-	const char *tag;
+	static const char *const tag[] = {"shmbridge","object","adci","invalid"};
 
 	if (!smcinvoke_wrk_trd) {
 		pr_err("Bad input.\n");
@@ -638,21 +651,18 @@ static int smcinvoke_postprocess_kthread_func(void *data)
 			== POST_KT_WAKEUP));
 		switch (smcinvoke_wrk_trd->type) {
 		case SHMB_WORKER_THREAD:
-			tag = "shmbridge";
 			pr_debug("kthread to %s postprocess is called %d\n",
-			tag, atomic_read(&smcinvoke_wrk_trd->postprocess_kthread_state));
+			tag[SHMB_WORKER_THREAD], atomic_read(&smcinvoke_wrk_trd->postprocess_kthread_state));
 			smcinvoke_shmbridge_post_process();
 			break;
 		case OBJECT_WORKER_THREAD:
-			tag = "object";
 			pr_debug("kthread to %s postprocess is called %d\n",
-			tag, atomic_read(&smcinvoke_wrk_trd->postprocess_kthread_state));
+			tag[OBJECT_WORKER_THREAD], atomic_read(&smcinvoke_wrk_trd->postprocess_kthread_state));
 			smcinvoke_object_post_process();
 			break;
 		case ADCI_WORKER_THREAD:
-			tag = "adci";
 			pr_debug("kthread to %s postprocess is called %d\n",
-			tag, atomic_read(&smcinvoke_wrk_trd->postprocess_kthread_state));
+			tag[ADCI_WORKER_THREAD], atomic_read(&smcinvoke_wrk_trd->postprocess_kthread_state));
 			smcinvoke_start_adci_thread();
 			break;
 		default:
@@ -672,7 +682,7 @@ static int smcinvoke_postprocess_kthread_func(void *data)
 		atomic_set(&smcinvoke_wrk_trd->postprocess_kthread_state,
 			POST_KT_SLEEP);
 	}
-	pr_warn("kthread to %s postprocess stopped\n", tag);
+	pr_warn("kthread(worker_thread) processed, worker_thread type is %d \n", smcinvoke_wrk_trd->type);
 
 	return 0;
 }
@@ -714,7 +724,7 @@ static void smcinvoke_destroy_kthreads(void)
 		do {
 			ret = IClientEnv_adciShutdown(adci_rootEnv);
 			if (ret == OBJECT_ERROR_BUSY) {
-				pr_err("Secure side is busy,will retry after 5 ms, retry_count = %d",retry_count);
+				pr_err_ratelimited("Secure side is busy,will retry after 5 ms, retry_count = %d\n",retry_count);
 				msleep(SMCINVOKE_INTERFACE_BUSY_WAIT_MS);
 			}
 		} while ((ret == OBJECT_ERROR_BUSY) && (retry_count++ < SMCINVOKE_INTERFACE_MAX_RETRY));
@@ -1560,13 +1570,13 @@ static void process_tzcb_req(void *buf, size_t buf_len, struct file **arr_filp)
 		}
 		if (ret == 0) {
 			if (srvr_info->is_server_suspended == 0) {
-			pr_err("CBobj timed out waiting on cbtxn :%d,cb-tzhandle:%d, retry:%d, op:%d counts :%d\n",
-					cb_txn->txn_id,cb_req->hdr.tzhandle, cbobj_retries,
-					cb_req->hdr.op, cb_req->hdr.counts);
-			pr_err("CBobj %d timedout pid %x,tid %x, srvr state=%d, srvr id:%u\n",
-					cb_req->hdr.tzhandle, current->pid,
-					current->tgid, srvr_info->state,
-					srvr_info->server_id);
+				tzcb_err_ratelimited("CBobj timed out waiting on cbtxn :%d,cb-tzhandle:%d, retry:%d, op:%d counts :%d\n",
+						cb_txn->txn_id,cb_req->hdr.tzhandle, cbobj_retries,
+						cb_req->hdr.op, cb_req->hdr.counts);
+				tzcb_err_ratelimited("CBobj %d timedout pid %x,tid %x, srvr state=%d, srvr id:%u\n",
+						cb_req->hdr.tzhandle, current->pid,
+						current->tgid, srvr_info->state,
+						srvr_info->server_id);
 			}
 		} else {
 			/* wait_event returned due to a signal */
@@ -1721,7 +1731,8 @@ static int prepare_send_scm_msg(const uint8_t *in_buf, phys_addr_t in_paddr,
 		struct smcinvoke_cmd_req *req,
 		union smcinvoke_arg *args_buf,
 		bool *tz_acked, uint32_t context_type,
-		struct qtee_shm *in_shm, struct qtee_shm *out_shm)
+		struct qtee_shm *in_shm, struct qtee_shm *out_shm,
+		bool retry)
 {
 	int ret = 0, cmd, retry_count = 0;
 	u64 response_type;
@@ -1742,11 +1753,11 @@ static int prepare_send_scm_msg(const uint8_t *in_buf, phys_addr_t in_paddr,
 					&response_type, &data, in_shm, out_shm);
 
 			if (ret == -EBUSY) {
-				pr_err("Secure side is busy,will retry after 30 ms, retry_count = %d",retry_count);
+				pr_err_ratelimited("Secure side is busy,will retry after 30 ms, retry_count = %d\n",retry_count);
 				msleep(SMCINVOKE_SCM_EBUSY_WAIT_MS);
 			}
 
-		} while ((ret == -EBUSY) &&
+		} while (retry && (ret == -EBUSY) &&
 				(retry_count++ < SMCINVOKE_SCM_EBUSY_MAX_RETRY));
 
 		if (!ret && !is_inbound_req(response_type)) {
@@ -2273,7 +2284,7 @@ start_waiting_for_requests:
 			mutex_lock(&g_smcinvoke_lock);
 
 			if(freezing(current)) {
-				pr_err("Server id :%d interrupted probaby due to suspend, pid:%d",
+				pr_err_ratelimited("Server id :%d interrupted probaby due to suspend, pid:%d\n",
 					server_info->server_id, current->pid);
 				/*
 				 * Each accept thread is identified by bits ranging from
@@ -2287,7 +2298,7 @@ start_waiting_for_requests:
 						SET_BIT(server_info->is_server_suspended,
 							(current->pid)%DEFAULT_CB_OBJ_THREAD_CNT);
 			} else {
-				pr_err("Setting pid:%d, server id : %d state to defunct",
+				pr_err_ratelimited("Setting pid:%d, server id : %d state to defunct\n",
 						current->pid, server_info->server_id);
 						server_info->state = SMCINVOKE_SERVER_STATE_DEFUNCT;
 			}
@@ -2449,7 +2460,7 @@ static long process_invoke_req(struct file *filp, unsigned int cmd,
 	ret = prepare_send_scm_msg(in_msg, in_shm.paddr, inmsg_size,
 			out_msg, out_shm.paddr, outmsg_size,
 			&req, args_buf, &tz_acked, context_type,
-			&in_shm, &out_shm);
+			&in_shm, &out_shm, true);
 
 	/*
 	 * If scm_call is success, TZ owns responsibility to release
@@ -2586,114 +2597,6 @@ int process_invoke_request_from_kernel_client(int fd,
 	trace_process_invoke_request_from_kernel_client(fd, filp, file_count(filp));
 	return ret;
 }
-
-char *firmware_request_from_smcinvoke(const char *appname, size_t *fw_size, struct qtee_shm *shm)
-{
-
-	int rc = 0;
-	const struct firmware *fw_entry = NULL, *fw_entry00 = NULL, *fw_entrylast = NULL;
-	char fw_name[MAX_APP_NAME_SIZE] = "\0";
-	int num_images = 0, phi = 0;
-	unsigned char app_arch = 0;
-	u8 *img_data_ptr = NULL;
-	size_t bufferOffset = 0, phdr_table_offset = 0;
-	size_t *offset = NULL;
-	Elf32_Phdr phdr32;
-	Elf64_Phdr phdr64;
-	struct elf32_hdr *ehdr = NULL;
-	struct elf64_hdr *ehdr64 = NULL;
-
-
-	/* load b00*/
-	snprintf(fw_name, sizeof(fw_name), "%s.b00", appname);
-	rc = firmware_request_nowarn(&fw_entry00, fw_name, class_dev);
-	if (rc) {
-		pr_err("Load %s failed, ret:%d\n", fw_name, rc);
-		return NULL;
-	}
-
-	app_arch = *(unsigned char *)(fw_entry00->data + EI_CLASS);
-
-	/*Get the offsets for split images header*/
-	if (app_arch == ELFCLASS32) {
-
-		ehdr = (struct elf32_hdr *)fw_entry00->data;
-		num_images = ehdr->e_phnum;
-		offset = kcalloc(num_images, sizeof(size_t), GFP_KERNEL);
-		if (offset == NULL)
-			goto release_fw_entry00;
-		phdr_table_offset = (size_t) ehdr->e_phoff;
-		for (phi = 1; phi < num_images; ++phi) {
-			bufferOffset = phdr_table_offset + phi * sizeof(Elf32_Phdr);
-			phdr32 = *(Elf32_Phdr *)(fw_entry00->data + bufferOffset);
-			offset[phi] = (size_t)phdr32.p_offset;
-		}
-
-	} else if (app_arch == ELFCLASS64) {
-
-		ehdr64 = (struct elf64_hdr *)fw_entry00->data;
-		num_images = ehdr64->e_phnum;
-		offset = kcalloc(num_images, sizeof(size_t), GFP_KERNEL);
-		if (offset == NULL)
-			goto release_fw_entry00;
-		phdr_table_offset = (size_t) ehdr64->e_phoff;
-		for (phi = 1; phi < num_images; ++phi) {
-			bufferOffset = phdr_table_offset + phi * sizeof(Elf64_Phdr);
-			phdr64 = *(Elf64_Phdr *)(fw_entry00->data + bufferOffset);
-			offset[phi] = (size_t)phdr64.p_offset;
-		}
-
-	} else {
-
-		pr_err("QSEE %s app, arch %u is not supported\n", appname, app_arch);
-		goto release_fw_entry00;
-	}
-
-	/*Find the size of last split bin image*/
-	snprintf(fw_name, ARRAY_SIZE(fw_name), "%s.b%02d", appname, num_images-1);
-	rc = firmware_request_nowarn(&fw_entrylast, fw_name, class_dev);
-	if (rc) {
-		pr_err("Failed to locate blob %s\n", fw_name);
-		goto release_fw_entry00;
-	}
-
-	/*Total size of image will be the offset of last image + the size of last split image*/
-	*fw_size = fw_entrylast->size + offset[num_images-1];
-
-	/*Allocate memory for the buffer that will hold the split image*/
-	rc = qtee_shmbridge_allocate_shm((*fw_size), shm);
-	if (rc) {
-		pr_err("smbridge alloc failed for size: %zu\n", *fw_size);
-		goto release_fw_entrylast;
-	}
-	img_data_ptr = shm->vaddr;
-	/*
-	 * Copy contents of split bins to the buffer
-	 */
-	memcpy(img_data_ptr, fw_entry00->data, fw_entry00->size);
-	for (phi = 1; phi < num_images-1; phi++) {
-		snprintf(fw_name, ARRAY_SIZE(fw_name), "%s.b%02d", appname, phi);
-		rc = firmware_request_nowarn(&fw_entry, fw_name, class_dev);
-		if (rc) {
-			pr_err("Failed to locate blob %s\n", fw_name);
-			qtee_shmbridge_free_shm(shm);
-			img_data_ptr = NULL;
-			goto release_fw_entrylast;
-		}
-		memcpy(img_data_ptr + offset[phi], fw_entry->data, fw_entry->size);
-		release_firmware(fw_entry);
-		fw_entry = NULL;
-	}
-	memcpy(img_data_ptr + offset[phi], fw_entrylast->data, fw_entrylast->size);
-
-release_fw_entrylast:
-	release_firmware(fw_entrylast);
-release_fw_entry00:
-	release_firmware(fw_entry00);
-	kfree(offset);
-	return img_data_ptr;
-}
-EXPORT_SYMBOL(firmware_request_from_smcinvoke);
 
 static int smcinvoke_open(struct inode *nodp, struct file *filp)
 {
