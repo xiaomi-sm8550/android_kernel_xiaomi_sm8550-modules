@@ -167,7 +167,8 @@ static void btfm_slim_dai_shutdown(void *dai, int id)
 }
 
 static int btfm_slim_dai_hw_params(void *dai, uint32_t bps,
-				   uint32_t direction) {
+				   uint32_t direction,
+				   uint8_t num_channels) {
 	struct hwep_data *hwep_info = (struct hwep_data *)dai;
 	struct btfmslim *btfmslim = dev_get_drvdata(hwep_info->dev);
 
@@ -195,7 +196,8 @@ void btfm_get_sampling_rate(uint32_t *sampling_rate)
 
 	if (usecase_codec == LC3_VOICE ||
 	    usecase_codec == APTX_AD_SPEECH ||
-	    usecase_codec == LC3 || usecase_codec == APTX_AD_QLEA) {
+	    usecase_codec == LC3 || usecase_codec == APTX_AD_QLEA ||
+	    usecase_codec == APTX_AD_R4) {
 		*sampling_rate = 96000;
 	}
 

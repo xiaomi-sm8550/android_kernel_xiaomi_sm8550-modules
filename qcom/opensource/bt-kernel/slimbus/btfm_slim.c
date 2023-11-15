@@ -36,6 +36,8 @@ struct btfmslim *btfm_slim_drv_data;
 
 static int btfm_num_ports_open;
 
+static bool is_registered = false;
+
 int btfm_slim_write(struct btfmslim *btfmslim,
 		uint16_t reg, uint8_t reg_val, uint8_t pgd)
 {
@@ -440,6 +442,25 @@ int btfm_slim_hw_init(struct btfmslim *btfmslim)
 		slim_ifd->e_addr.dev_index = 0x0;
 		slim_ifd->e_addr.instance = 0x0;
 		slim_ifd->laddr = 0x0;
+	}  else if (chipset_ver == QCA_HASTINGS_SOC_ID_0200 ) {
+                BTFMSLIM_INFO("chipset is Hastings, overwriting EA");
+                slim->is_laddr_valid = false;
+                slim->e_addr.manf_id = SLIM_MANF_ID_QCOM;
+                slim->e_addr.prod_code = 0x220;
+                slim->e_addr.dev_index = 0x01;
+                slim->e_addr.instance = 0x0;
+               /* we are doing this to indicate that this is not a child node
+                *  (doesn't have call back functions). Needed only for querying
+                *  logical address.
+                */
+                slim_ifd->dev.driver = NULL;
+                slim_ifd->ctrl = btfmslim->slim_pgd->ctrl; //slimbus controller structure.
+                slim_ifd->is_laddr_valid = false;
+                slim_ifd->e_addr.manf_id = SLIM_MANF_ID_QCOM;
+                slim_ifd->e_addr.prod_code = 0x220;
+                slim_ifd->e_addr.dev_index = 0x0;
+                slim_ifd->e_addr.instance = 0x0;
+                slim_ifd->laddr = 0x0;
 	}
 		BTFMSLIM_INFO(
 			"PGD Enum Addr: manu id:%.02x prod code:%.02x dev idx:%.02x instance:%.02x",
@@ -574,13 +595,20 @@ static int btfm_slim_status(struct slim_device *sdev,
 	btfm_slim = dev_get_drvdata(dev);
 
 #if IS_ENABLED(CONFIG_BTFM_SLIM)
-	ret = btfm_slim_register_codec(btfm_slim);
+	if (!is_registered) {
+		ret = btfm_slim_register_codec(btfm_slim);
+	}
 #else
-	btfm_slim_get_hwep_details(sdev, btfm_slim);
-	ret = btfm_slim_register_hw_ep(btfm_slim);
+	if (!is_registered) {
+		btfm_slim_get_hwep_details(sdev, btfm_slim);
+		ret = btfm_slim_register_hw_ep(btfm_slim);
+	}
 #endif
-	if (ret)
+	if (!ret)
+		is_registered = true;
+	else
 		BTFMSLIM_ERR("error, registering slimbus codec failed");
+
 	return ret;
 }
 
