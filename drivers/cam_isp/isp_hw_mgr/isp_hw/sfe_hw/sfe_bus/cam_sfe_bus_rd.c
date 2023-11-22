@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/ratelimit.h>
@@ -417,7 +417,7 @@ static void cam_sfe_bus_rd_get_constraint_error(struct cam_sfe_bus_rd_priv *bus_
 	struct cam_isp_resource_node *sfe_bus_rd = NULL;
 	struct cam_sfe_bus_rd_data   *sfe_bus_rd_data = NULL;
 	struct cam_sfe_bus_rd_rm_resource_data *rm_rsrc_data = NULL;
-	uint32_t bus_rd_resc_type, cons_err;
+	uint32_t bus_rd_resc_type, cons_err, width_in_bytes = 0;
 	uint8_t *rm_name;
 	int i, j;
 
@@ -456,8 +456,18 @@ static void cam_sfe_bus_rd_get_constraint_error(struct cam_sfe_bus_rd_priv *bus_
 			CAM_ERR(CAM_SFE,
 				"Constraint Violation bitflag: 0x%x bus rd resc type: 0x%x",
 				cons_err, bus_rd_resc_type);
+
 			cam_sfe_bus_rd_print_constraint_error(bus_priv,
 				cons_err, rm_name);
+			cam_sfe_bus_rd_pxls_to_bytes(rm_rsrc_data->width,
+				rm_rsrc_data->unpacker_cfg, &width_in_bytes);
+			CAM_INFO(CAM_SFE, "SFE:%d RM:%d width:0x%x [in bytes: 0x%x] height:0x%x",
+				rm_rsrc_data->common_data->core_index, rm_rsrc_data->index,
+				rm_rsrc_data->width, width_in_bytes, rm_rsrc_data->height);
+			CAM_INFO(CAM_SFE, "SFE:%d RM:%d Stride:0x%x unpacker_cfg:%d hbi_count:%d",
+				rm_rsrc_data->common_data->core_index, rm_rsrc_data->index,
+				rm_rsrc_data->stride, rm_rsrc_data->unpacker_cfg,
+				rm_rsrc_data->hbi_count);
 		}
 	}
 }
@@ -548,7 +558,7 @@ static int cam_sfe_bus_start_rm(struct cam_isp_resource_node *rm_res)
 	uint32_t width_in_bytes = 0;
 	struct cam_sfe_bus_rd_rm_resource_data  *rm_data;
 	struct cam_sfe_bus_rd_common_data       *common_data;
-	const uint32_t enable_cons_violation = 11 << 2;
+	const uint32_t enable_cons_violation = CAM_SFE_BUS_RD_EN_CONS_ERR_CHECK;
 	uint32_t core_cfg_mask;
 
 	rm_data = rm_res->res_priv;
