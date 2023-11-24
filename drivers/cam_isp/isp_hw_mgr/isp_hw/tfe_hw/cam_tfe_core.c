@@ -366,8 +366,7 @@ static void cam_tfe_log_error_irq_status(
 	struct cam_tfe_hw_core_info          *core_info,
 	struct cam_tfe_top_priv              *top_priv,
 	struct cam_tfe_irq_evt_payload       *evt_payload,
-	struct cam_isp_hw_error_event_info   *err_evt_info,
-	int8_t                               *report_err)
+	struct cam_isp_hw_error_event_info   *err_evt_info)
 {
 	struct cam_tfe_hw_info               *hw_info;
 	void __iomem                         *mem_base;
@@ -379,7 +378,6 @@ static void cam_tfe_log_error_irq_status(
 	struct timespec64 ts;
 	uint32_t  i, val_0, val_1, val_2, val_3;
 
-	*report_err = 1;
 	ktime_get_boottime_ts64(&ts);
 	hw_info = core_info->tfe_hw_info;
 	mem_base = top_priv->common_data.soc_info->reg_map[0].mem_base;
@@ -471,23 +469,6 @@ static void cam_tfe_log_error_irq_status(
 
 		if (evt_payload->irq_reg_val[0] & common_reg->ppp_overflow_bit)
 			CAM_INFO(CAM_ISP, "TFE %d PDAF_OVERFLOW", core_info->core_index);
-
-		if (evt_payload->irq_reg_val[0] & common_reg->out_of_sync_frame_drop_bit) {
-			CAM_INFO(CAM_ISP,
-				"TFE %d SENSOR_SWITCH_OUT_OF_SYNC_FRAME_DROP mup: last %d curr %d",
-				core_info->core_index, top_priv->last_mup_val,
-				((cam_io_r(mem_base + common_reg->reg_update_cmd) >>
-				common_reg->mup_shift_val) & 1));
-			*report_err = 0;
-			atomic_inc(&top_priv->switch_out_of_sync_cnt);
-			if (atomic_read(&top_priv->switch_out_of_sync_cnt) >=
-				CAM_TFE_MAX_OUT_OF_SYNC_ERR_COUNT) {
-				*report_err = 1;
-				err_evt_info->err_type = CAM_TFE_IRQ_STATUS_OUT_OF_SYNC;
-				CAM_ERR(CAM_ISP, "TFE %d out of sync frame count: %d",
-					core_info->core_index, top_priv->switch_out_of_sync_cnt);
-			}
-		}
 	}
 
 	/* Check the violation errors */
@@ -539,6 +520,36 @@ static void cam_tfe_log_error_irq_status(
 	cam_cpas_log_votes(false);
 }
 
+static void cam_tfe_check_out_of_sync(
+	struct cam_tfe_hw_core_info          *core_info,
+	struct cam_tfe_top_priv              *top_priv,
+	struct cam_tfe_irq_evt_payload       *evt_payload,
+	struct cam_isp_hw_error_event_info   *err_evt_info,
+	uint32_t                             *report_err)
+{
+	struct cam_tfe_top_reg_offset_common *common_reg;
+	void __iomem                         *mem_base;
+
+	mem_base = top_priv->common_data.soc_info->reg_map[0].mem_base;
+	common_reg = top_priv->common_data.common_reg;
+
+	if (evt_payload->irq_reg_val[0] & common_reg->out_of_sync_frame_drop_bit) {
+		CAM_INFO(CAM_ISP,
+			"TFE %d SENSOR_SWITCH_OUT_OF_SYNC_FRAME_DROP mup: last %d curr %d",
+			core_info->core_index, top_priv->last_mup_val,
+			((cam_io_r(mem_base + common_reg->reg_update_cmd) >>
+			common_reg->mup_shift_val) & 1));
+		atomic_inc(&top_priv->switch_out_of_sync_cnt);
+		if (atomic_read(&top_priv->switch_out_of_sync_cnt) >=
+			CAM_TFE_MAX_OUT_OF_SYNC_ERR_COUNT) {
+			*report_err = 1;
+			err_evt_info->err_type = CAM_TFE_IRQ_STATUS_OUT_OF_SYNC;
+			CAM_ERR(CAM_ISP, "TFE %d out of sync frame count: %d",
+				core_info->core_index, top_priv->switch_out_of_sync_cnt);
+		}
+	}
+}
+
 static int cam_tfe_error_irq_bottom_half(
 	struct cam_tfe_hw_core_info          *core_info,
 	struct cam_tfe_top_priv              *top_priv,
@@ -550,7 +561,6 @@ static int cam_tfe_error_irq_bottom_half(
 	struct cam_isp_hw_event_info         evt_info;
 	struct cam_tfe_hw_info              *hw_info;
 	uint32_t   error_detected = 0;
-	int8_t report_err = 1;
 
 	hw_info = core_info->tfe_hw_info;
 	evt_info.hw_idx = core_info->core_index;
@@ -560,6 +570,11 @@ static int cam_tfe_error_irq_bottom_half(
 	if (evt_payload->irq_reg_val[0] & hw_info->error_irq_mask[0]) {
 		err_evt_info.err_type = CAM_TFE_IRQ_STATUS_OVERFLOW;
 		error_detected = 1;
+	}
+
+	if (evt_payload->irq_reg_val[0] & hw_info->non_fatal_error_irq_mask[0]) {
+		cam_tfe_check_out_of_sync(core_info, top_priv, evt_payload,
+				&err_evt_info, &error_detected);
 	}
 
 	if ((evt_payload->bus_irq_val[0] & hw_info->bus_error_irq_mask[0]) ||
@@ -576,15 +591,13 @@ static int cam_tfe_error_irq_bottom_half(
 			evt_payload->ts.mono_time.tv_nsec;
 
 		cam_tfe_log_error_irq_status(core_info, top_priv,
-			evt_payload, &err_evt_info, &report_err);
-		if (report_err) {
-			if (event_cb)
-				event_cb(event_cb_priv, CAM_ISP_HW_EVENT_ERROR,
-					(void *)&evt_info);
-			else
-				CAM_ERR(CAM_ISP, "TFE:%d invalid eventcb:",
-					core_info->core_index);
-		}
+			evt_payload, &err_evt_info);
+		if (event_cb)
+			event_cb(event_cb_priv, CAM_ISP_HW_EVENT_ERROR,
+				(void *)&evt_info);
+		else
+			CAM_ERR(CAM_ISP, "TFE:%d invalid eventcb:",
+				core_info->core_index);
 	}
 
 	return 0;
@@ -2518,10 +2531,13 @@ static int cam_tfe_camif_resource_start(
 	camif_res->res_state = CAM_ISP_RESOURCE_STATE_STREAMING;
 
 	/* Reg Update */
-	cam_io_w_mb(rsrc_data->reg_data->reg_update_cmd_data,
+	cam_io_w_mb(rsrc_data->reg_data->reg_update_cmd_data |
+		(top_priv->last_mup_val << common_reg->mup_shift_val),
 		rsrc_data->mem_base + rsrc_data->camif_reg->reg_update_cmd);
-	CAM_DBG(CAM_ISP, "hw id:%d RUP val:%d", camif_res->hw_intf->hw_idx,
-		rsrc_data->reg_data->reg_update_cmd_data);
+	CAM_DBG(CAM_ISP, "hw id:%d RUP val:%d MUP val: %d",
+		camif_res->hw_intf->hw_idx,
+		rsrc_data->reg_data->reg_update_cmd_data,
+		top_priv->last_mup_val);
 
 	/* Disable sof irq debug flag */
 	rsrc_data->enable_sof_irq_debug = false;
@@ -2659,8 +2675,9 @@ int cam_tfe_top_start(struct cam_tfe_hw_core_info *core_info,
 			rsrc_rdi_data->rdi_reg->rdi_epoch_irq);
 
 		/* Reg Update */
-		cam_io_w_mb(rsrc_rdi_data->reg_data->reg_update_cmd_data,
-			rsrc_rdi_data->mem_base +
+		val = cam_io_r_mb(rsrc_rdi_data->mem_base + rsrc_rdi_data->rdi_reg->reg_update_cmd);
+		val |= rsrc_rdi_data->reg_data->reg_update_cmd_data;
+		cam_io_w_mb(val, rsrc_rdi_data->mem_base +
 			rsrc_rdi_data->rdi_reg->reg_update_cmd);
 		in_res->res_state = CAM_ISP_RESOURCE_STATE_STREAMING;
 
@@ -2689,6 +2706,9 @@ int cam_tfe_top_start(struct cam_tfe_hw_core_info *core_info,
 	if (core_info->irq_err_config_cnt == 1)  {
 		cam_tfe_irq_config(core_info,
 			core_info->tfe_hw_info->error_irq_mask,
+			CAM_TFE_TOP_IRQ_REG_NUM, true);
+		cam_tfe_irq_config(core_info,
+			core_info->tfe_hw_info->non_fatal_error_irq_mask,
 			CAM_TFE_TOP_IRQ_REG_NUM, true);
 		top_priv->error_ts.tv_sec = 0;
 		top_priv->error_ts.tv_nsec = 0;
@@ -2795,10 +2815,14 @@ int cam_tfe_top_stop(struct cam_tfe_hw_core_info *core_info,
 
 	atomic_set(&top_priv->switch_out_of_sync_cnt, 0);
 	core_info->irq_err_config_cnt--;
-	if (!core_info->irq_err_config_cnt)
+	if (!core_info->irq_err_config_cnt) {
 		cam_tfe_irq_config(core_info,
 			core_info->tfe_hw_info->error_irq_mask,
 			CAM_TFE_TOP_IRQ_REG_NUM, false);
+		cam_tfe_irq_config(core_info,
+			core_info->tfe_hw_info->non_fatal_error_irq_mask,
+			CAM_TFE_TOP_IRQ_REG_NUM, false);
+	}
 
 	return rc;
 }
