@@ -190,8 +190,10 @@ void kgsl_cancel_event(struct kgsl_device *device,
 
 	list_for_each_entry_safe(event, tmp, &group->events, node) {
 		if (timestamp == event->timestamp && func == event->func &&
-			event->priv == priv)
+			event->priv == priv) {
 			signal_event(device, event, KGSL_EVENT_CANCELLED);
+			break;
+		}
 	}
 
 	spin_unlock(&group->lock);
