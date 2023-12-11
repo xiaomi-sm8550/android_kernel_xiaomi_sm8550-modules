@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2017, 2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -30,7 +31,12 @@ void *audio_pdr_service_register(int domain_id, void (*cb)(int, char *, void *))
 
 	audio_pdr_services[domain_id].pdr_handle = pdr_handle_alloc(cb, NULL);
 
-	return pdr_add_lookup(audio_pdr_services[domain_id].pdr_handle,
+	if (domain_id == AUDIO_PDR_DOMAIN_ADSP)
+		return pdr_add_service_lookup(audio_pdr_services[domain_id].pdr_handle,
+				audio_pdr_services[domain_id].service_name,
+				audio_pdr_services[domain_id].service_path);
+	else
+		return pdr_add_lookup(audio_pdr_services[domain_id].pdr_handle,
 			      audio_pdr_services[domain_id].service_name,
 			      audio_pdr_services[domain_id].service_path);
 }
