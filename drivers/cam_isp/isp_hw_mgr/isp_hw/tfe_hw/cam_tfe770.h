@@ -1448,9 +1448,14 @@ struct cam_tfe_hw_info cam_tfe770 = {
 		0x00000000,
 	},
 	.error_irq_mask = {
-		0x003F1F00,
+		0x001F1F00,
 		0x00000000,
 		0x000002FF,
+	},
+	.non_fatal_error_irq_mask = {
+		0x00200000,
+		0x00000000,
+		0x00000000,
 	},
 	.bus_reg_irq_mask = {
 		0x00000002,
