@@ -20,6 +20,11 @@
 #include <linux/of_reserved_mem.h>
 #include <linux/pci.h>
 #include <linux/sched_clock.h>
+#include <linux/version.h>
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0))
+#include <linux/sched/clock.h>
+#endif
+
 
 #include "main.h"
 
@@ -164,6 +169,7 @@ struct cnss_pci_data {
 	struct mhi_controller *mhi_ctrl;
 	unsigned long mhi_state;
 	u32 remap_window;
+	struct completion wake_event_complete;
 	struct timer_list dev_rddm_timer;
 	struct timer_list boot_debug_timer;
 	struct delayed_work time_sync_work;
