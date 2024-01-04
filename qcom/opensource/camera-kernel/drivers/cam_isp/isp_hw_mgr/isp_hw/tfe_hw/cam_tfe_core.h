@@ -320,6 +320,7 @@ struct cam_tfe_hw_info {
 
 	uint32_t    reset_irq_mask[CAM_TFE_TOP_IRQ_REG_NUM];
 	uint32_t    error_irq_mask[CAM_TFE_TOP_IRQ_REG_NUM];
+	uint32_t    non_fatal_error_irq_mask[CAM_TFE_TOP_IRQ_REG_NUM];
 	uint32_t    bus_reg_irq_mask[CAM_TFE_BUS_MAX_IRQ_REGISTERS];
 	uint32_t    bus_error_irq_mask[CAM_TFE_BUS_MAX_IRQ_REGISTERS];
 

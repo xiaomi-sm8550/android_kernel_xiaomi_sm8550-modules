@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _CAM_SFE_BUS_RD_H_
@@ -11,6 +11,7 @@
 
 #define CAM_SFE_BUS_RD_MAX_CLIENTS        3
 #define CAM_SFE_BUS_RD_CONS_ERR_MAX       32
+#define CAM_SFE_BUS_RD_EN_CONS_ERR_CHECK  0xC
 
 /* IRQ status bits */
 #define CAM_SFE_BUS_RD_IRQ_CONS_VIOLATION BIT(0)

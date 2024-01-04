@@ -40,6 +40,9 @@
 #define CAM_TFE_SAFE_ENABLE 1
 #define SMMU_SE_TFE 0
 
+#define CAM_TFE_HW_MGR_STATE_INACTIVE  0
+#define CAM_TFE_HW_MGR_STATE_ACTIVE    1
+
 static struct cam_tfe_hw_mgr g_tfe_hw_mgr;
 static uint32_t g_num_tfe_available, g_num_tfe_functional;
 static uint32_t g_num_tfe_lite_available, g_num_tfe_lite_functional;
@@ -3243,6 +3246,7 @@ static int cam_tfe_mgr_stop_hw_in_overflow(void *stop_hw_args)
 	if (i == ctx->num_base)
 		master_base_idx = ctx->base[0].idx;
 
+	ctx->ctx_state = CAM_TFE_HW_MGR_STATE_INACTIVE;
 
 	/* stop the master CSID path first */
 	cam_tfe_mgr_csid_stop_hw(ctx, &ctx->res_list_tfe_csid,
@@ -3370,6 +3374,8 @@ static int cam_tfe_mgr_stop_hw(void *hw_mgr_priv, void *stop_hw_args)
 	 */
 	if (i == ctx->num_base)
 		master_base_idx = ctx->base[0].idx;
+
+	ctx->ctx_state = CAM_TFE_HW_MGR_STATE_INACTIVE;
 
 	/*Change slave mode*/
 	if (csid_halt_type == CAM_TFE_CSID_HALT_IMMEDIATELY)
@@ -3531,6 +3537,8 @@ static int cam_tfe_mgr_restart_hw(void *start_hw_args)
 			goto err;
 		}
 	}
+
+	ctx->ctx_state = CAM_TFE_HW_MGR_STATE_ACTIVE;
 
 	CAM_DBG(CAM_ISP, "Exit...(success)");
 	return 0;
@@ -3735,6 +3743,7 @@ start_only:
 		}
 	}
 
+	ctx->ctx_state = CAM_TFE_HW_MGR_STATE_ACTIVE;
 	ctx->last_dump_flush_req_id = U64_MAX;
 	ctx->last_dump_err_req_id = U64_MAX;
 	return 0;
@@ -4173,6 +4182,7 @@ static int cam_isp_tfe_blob_update_out_resource_config(
 		prepare->hw_update_entries[num_ent].handle = kmd_buf_info->handle;
 		prepare->hw_update_entries[num_ent].len = total_used_bytes;
 		prepare->hw_update_entries[num_ent].offset = kmd_buf_info->offset;
+		prepare->hw_update_entries[num_ent].flags = CAM_ISP_IOCFG_BL;
 		num_ent++;
 		kmd_buf_info->used_bytes += total_used_bytes;
 		kmd_buf_info->offset     += total_used_bytes;
@@ -4266,6 +4276,7 @@ static int cam_isp_tfe_blob_hfr_update(
 		prepare->hw_update_entries[num_ent].handle =
 			kmd_buf_info->handle;
 		prepare->hw_update_entries[num_ent].len = total_used_bytes;
+		prepare->hw_update_entries[num_ent].flags = CAM_ISP_IQ_BL;
 		prepare->hw_update_entries[num_ent].offset =
 			kmd_buf_info->offset;
 		num_ent++;
@@ -4528,6 +4539,7 @@ static int cam_isp_tfe_blob_bw_limit_update(
 		prepare->hw_update_entries[num_ent].handle =
 			kmd_buf_info->handle;
 		prepare->hw_update_entries[num_ent].len = total_used_bytes;
+		prepare->hw_update_entries[num_ent].flags = CAM_ISP_IOCFG_BL;
 		prepare->hw_update_entries[num_ent].offset =
 			kmd_buf_info->offset;
 		num_ent++;
@@ -5684,7 +5696,8 @@ static void cam_tfe_mgr_dump_pf_data(
 
 	pf_cmd_args = hw_cmd_args->u.pf_cmd_args;
 	rc = cam_packet_util_get_packet_addr(&packet,
-		pf_cmd_args->pf_req_info->packet_handle, pf_cmd_args->pf_req_info->packet_offset);
+		pf_cmd_args->pf_req_info->packet_handle,
+		pf_cmd_args->pf_req_info->packet_offset);
 	if (rc)
 		return;
 	ctx_found = &pf_cmd_args->pf_args->pf_context_info.ctx_found;
@@ -5713,6 +5726,7 @@ static void cam_tfe_mgr_dump_pf_data(
 		CAM_INFO(CAM_ISP,
 			"PID:%d  is not matching with any TFE HW PIDs ctx id:%d",
 			pf_cmd_args->pf_args->pf_smmu_info->pid,  ctx->ctx_index);
+		cam_packet_util_put_packet_addr(pf_cmd_args->pf_req_info->packet_handle);
 		return;
 	}
 
@@ -5727,6 +5741,7 @@ static void cam_tfe_mgr_dump_pf_data(
 		CAM_INFO(CAM_ISP,
 			"This context does not cause pf:pid:%d hw id:%d ctx_id:%d",
 			pf_cmd_args->pf_args->pf_smmu_info->pid, hw_id, ctx->ctx_index);
+		cam_packet_util_put_packet_addr(pf_cmd_args->pf_req_info->packet_handle);
 		return;
 	}
 
@@ -5734,7 +5749,6 @@ static void cam_tfe_mgr_dump_pf_data(
 		hw_mgr_res = &ctx->res_list_tfe_out[i];
 		if (!hw_mgr_res->hw_res[0])
 			continue;
-
 		break;
 	}
 
@@ -5742,6 +5756,7 @@ static void cam_tfe_mgr_dump_pf_data(
 		CAM_ERR(CAM_ISP,
 			"NO valid outport resources ctx id:%d req id:%lld",
 			ctx->ctx_index, packet->header.request_id);
+		cam_packet_util_put_packet_addr(pf_cmd_args->pf_req_info->packet_handle);
 		return;
 	}
 
@@ -5756,11 +5771,11 @@ static void cam_tfe_mgr_dump_pf_data(
 		hw_mgr_res->hw_res[0]->hw_intf->hw_priv,
 		cmd_update.cmd_type, &cmd_update,
 		sizeof(struct cam_isp_hw_get_cmd_update));
-
 	if (rc) {
 		CAM_ERR(CAM_ISP,
 			"getting mid port resource id failed ctx id:%d req id:%lld",
 			ctx->ctx_index, packet->header.request_id);
+		cam_packet_util_put_packet_addr(pf_cmd_args->pf_req_info->packet_handle);
 		return;
 	}
 	CAM_ERR(CAM_ISP,
@@ -6577,6 +6592,12 @@ static int cam_tfe_hw_mgr_handle_hw_err(
 		tfe_hw_mgr_ctx = (struct cam_tfe_hw_mgr_ctx *)ctx;
 	else {
 		CAM_ERR(CAM_ISP, "tfe hw mgr ctx NULL");
+		return rc;
+	}
+
+	if (!tfe_hw_mgr_ctx->ctx_state) {
+		CAM_INFO(CAM_ISP, "TFE Hw mgr ctx is not in active state ctx %d",
+			tfe_hw_mgr_ctx->ctx_index);
 		return rc;
 	}
 
