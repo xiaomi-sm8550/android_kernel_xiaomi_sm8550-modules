@@ -340,6 +340,12 @@ static int dsi_ctrl_debugfs_init(struct dsi_ctrl *dsi_ctrl, struct dentry *paren
 {
 	char dbg_name[DSI_DEBUG_NAME_LEN];
 
+	if (!dsi_ctrl || !parent) {
+		DSI_CTRL_ERR(dsi_ctrl, "Invalid params\n");
+		return -EINVAL;
+	}
+
+
 	snprintf(dbg_name, DSI_DEBUG_NAME_LEN, "dsi%d_ctrl",
 						dsi_ctrl->cell_index);
 	sde_dbg_reg_register_base(dbg_name, dsi_ctrl->hw.base,

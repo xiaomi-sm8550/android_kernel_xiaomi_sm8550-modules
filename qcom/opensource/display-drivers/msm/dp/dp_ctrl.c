@@ -560,6 +560,7 @@ static int dp_ctrl_link_train(struct dp_ctrl_private *ctrl)
 	int ret = 0;
 	u8 const encoding = 0x1, downspread = 0x00;
 	struct drm_dp_link link_info = {0};
+	int dptrain_maxretry = 5;
 
 	ctrl->link->phy_params.p_level = 0;
 	ctrl->link->phy_params.v_level = 0;
@@ -599,14 +600,27 @@ static int dp_ctrl_link_train(struct dp_ctrl_private *ctrl)
 	/* print success info as this is a result of user initiated action */
 	DP_INFO("link training #1 successful\n");
 
-	ret = dp_ctrl_link_training_2(ctrl);
-	if (ret) {
-		DP_ERR("link training #2 failed\n");
-		goto end;
-	}
+	if(ctrl->parser->retry_training_enable){
+		while (dptrain_maxretry--){
+			ret = dp_ctrl_link_training_2(ctrl);
+			if (ret) {
+				DP_ERR("dptrain_maxretry = %d ,link training #2 failed, waite 1s retry\n", dptrain_maxretry);
+				msleep(1000);
+			} else {
+				DP_INFO("dptrain_maxretry = %d, link training #2 successful\n", dptrain_maxretry);
+				break;
+			}
+		}
+	} else {
+        	ret = dp_ctrl_link_training_2(ctrl);
+		if (ret) {
+			DP_ERR("link training #2 failed\n");
+			goto end;
+		}
 
-	/* print success info as this is a result of user initiated action */
-	DP_INFO("link training #2 successful\n");
+		/* print success info as this is a result of user initiated action */
+		DP_INFO("link training #2 successful\n");
+	}
 
 end:
 	dp_ctrl_state_ctrl(ctrl, 0);

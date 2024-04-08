@@ -719,6 +719,17 @@ static void dp_parser_dsc(struct dp_parser *parser)
 			parser->dsc_continuous_pps);
 }
 
+static void dp_parser_training(struct dp_parser *parser)
+{
+	struct device *dev = &parser->pdev->dev;
+
+	parser->retry_training_enable = of_property_read_bool(dev->of_node,
+			"mi,retry_training_enable");
+
+	DP_DEBUG("training parsing successful. training:%d\n",
+			parser->retry_training_enable);
+}
+
 static void dp_parser_qos(struct dp_parser *parser)
 {
 	struct device *dev = &parser->pdev->dev;
@@ -815,6 +826,7 @@ static int dp_parser_parse(struct dp_parser *parser)
 	dp_parser_fec(parser);
 	dp_parser_widebus(parser);
 	dp_parser_qos(parser);
+	dp_parser_training(parser);
 err:
 	return rc;
 }
