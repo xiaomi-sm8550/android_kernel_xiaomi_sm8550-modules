@@ -66,4 +66,40 @@ void cam_actuator_shutdown(struct cam_actuator_ctrl_t *a_ctrl);
 
 struct completion *cam_actuator_get_i3c_completion(uint32_t index);
 
+/**
+ * @a_ctrl: Actuator ctrl structure
+ *
+ * This API init parklens info of a_ctrl
+ */
+int32_t init_parklens_info(struct cam_actuator_ctrl_t *a_ctrl);
+
+/**
+ * @a_ctrl: Actuator ctrl structure
+ *
+ * This API deinit parklens info of a_ctrl
+ */
+int32_t deinit_parklens_info(struct cam_actuator_ctrl_t *a_ctrl);
+
+/**
+ * @a_ctrl: Actuator ctrl structure
+ *
+ * This API query whether parklens power down or not
+ */
+bool is_parklens_power_down(struct cam_actuator_ctrl_t *a_ctrl);
+
+/**
+ * @a_ctrl: Actuator ctrl structure
+ *
+ * This API trigger a thread to do parklens
+ */
+int32_t parklens_thread_trigger(struct cam_actuator_ctrl_t *a_ctrl);
+
+/**
+ * @a_ctrl: Actuator ctrl structure
+ *
+ * This API stop parklens thread
+ */
+int32_t parklens_thread_stop(struct cam_actuator_ctrl_t *a_ctrl,
+	enum parklens_opcodes opcode);
+
 #endif /* _CAM_ACTUATOR_CORE_H_ */

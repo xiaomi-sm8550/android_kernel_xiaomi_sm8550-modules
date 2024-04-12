@@ -1525,7 +1525,7 @@ int cam_flash_pmic_pkt_parser(struct cam_flash_ctrl *fctrl, void *arg)
 			"reject request %lld, last request to flush %d",
 			csl_packet->header.request_id, fctrl->last_flush_req);
 		cam_mem_put_cpu_buf(config.packet_handle);
-		rc = -EINVAL;
+		rc = -EBADR;
 		return rc;
 	}
 

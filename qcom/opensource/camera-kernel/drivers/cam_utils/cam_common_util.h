@@ -355,4 +355,21 @@ int cam_common_register_err_inject_cb(
 	cam_common_err_inject_cb err_inject_cb,
 	enum cam_common_err_inject_hw_id hw_id);
 
+/**
+ * cam_retry_kzalloc()
+ *
+ * @brief                  retry kzalloc
+ *
+ * @func:                  the name of the function that called this function.
+ * @line:                  line of code.
+ * @s:                     how many bytes of memory are required.
+ * @flags:                 the type of memory to allocate (see kmalloc).
+ *
+ */
+void *cam_retry_kzalloc(
+	const char *func,
+	int line,
+	size_t s,
+	gfp_t gfp);
+
 #endif /* _CAM_COMMON_UTIL_H_ */

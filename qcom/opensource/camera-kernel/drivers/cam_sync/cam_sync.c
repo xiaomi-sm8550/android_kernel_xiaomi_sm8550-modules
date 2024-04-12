@@ -1907,7 +1907,7 @@ static int cam_sync_component_bind(struct device *dev,
 	int idx;
 	struct platform_device *pdev = to_platform_device(dev);
 
-	sync_dev = kzalloc(sizeof(*sync_dev), GFP_KERNEL);
+	sync_dev = cam_retry_kzalloc(__func__, __LINE__, sizeof(*sync_dev), GFP_KERNEL | __GFP_RETRY_MAYFAIL);
 	if (!sync_dev)
 		return -ENOMEM;
 

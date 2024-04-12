@@ -70,6 +70,7 @@ LINUXINCLUDE +=                                 \
 	-I$(CAMERA_KERNEL_ROOT)/
 # Optional include directories
 ccflags-$(CONFIG_MSM_GLOBAL_SYNX) += -I$(KERNEL_ROOT)/drivers/media/platform/msm/synx
+ccflags-$(CONFIG_MI_HARDWARE_ID) += -I$(KERNEL_ROOT)/drivers/misc/hwid
 
 # After creating lists, add content of 'ccflags-m' variable to 'ccflags-y' one.
 ccflags-y += ${ccflags-m}
@@ -214,6 +215,8 @@ camera-$(CONFIG_SPECTRA_SENSOR) += \
 	drivers/cam_sensor_module/cam_actuator/cam_actuator_dev.o \
 	drivers/cam_sensor_module/cam_actuator/cam_actuator_core.o \
 	drivers/cam_sensor_module/cam_actuator/cam_actuator_soc.o \
+	drivers/cam_sensor_module/cam_cci/cam_cci_debug_util.o \
+	drivers/cam_sensor_module/cam_actuator/cam_actuator_parklens_thread.o \
 	drivers/cam_sensor_module/cam_cci/cam_cci_dev.o \
 	drivers/cam_sensor_module/cam_cci/cam_cci_core.o \
 	drivers/cam_sensor_module/cam_cci/cam_cci_soc.o \
@@ -296,3 +299,7 @@ camera-y += drivers/camera_main.o
 
 obj-m += camera.o
 BOARD_VENDOR_KERNEL_MODULES += $(KERNEL_MODULES_OUT)/camera.ko
+
+cameralog-y := drivers/cam_log/cam_log.o
+obj-m+= cameralog.o
+BOARD_VENDOR_KERNEL_MODULES +=  $(KERNEL_MODULES_OUT)/cameralog.ko

@@ -25,6 +25,9 @@
 #include "cam_ife_hw_mgr.h"
 #include "cam_subdev.h"
 
+static uint frame_interval_para;
+module_param(frame_interval_para,uint,0644);
+
 static const char isp_dev_name[] = "cam-isp";
 
 static struct cam_isp_ctx_debug isp_ctx_debug;
@@ -1393,6 +1396,12 @@ static void __cam_isp_ctx_send_sof_timestamp(
 	}
 
 	ctx_isp->reported_frame_id = ctx_isp->frame_id;
+
+	if(frame_interval_para >1){
+		cam_isp_detect_framerate(ctx_isp,frame_interval_para);
+	}else if(frame_interval_para == 1){
+		CAM_DBG(MI_PERF,"ERROR,the frame interval num must greater than 1");
+	}
 
 	if ((ctx_isp->v4l2_event_sub_ids & (1 << V4L_EVENT_CAM_REQ_MGR_SOF_UNIFIED_TS))
 		&& !ctx_isp->use_frame_header_ts) {
@@ -6340,6 +6349,10 @@ static int __cam_isp_ctx_config_dev_in_top_state(
 		goto free_req;
 	}
 
+	if (frame_interval_para > 1) {
+		cam_isp_get_frame_batchsize(ctx,packet);
+	}
+
 	hw_update_data = cfg.priv;
 	req_isp->num_cfg = cfg.num_hw_update_entries;
 	req_isp->num_fence_map_out = cfg.num_out_map_entries;
@@ -8506,4 +8519,72 @@ int cam_isp_context_deinit(struct cam_isp_context *ctx)
 	memset(ctx, 0, sizeof(*ctx));
 
 	return 0;
+}
+
+void cam_isp_detect_framerate(struct cam_isp_context *ctx,uint interval)
+{
+	uint32_t timespan;
+	uint64_t frame_rate;
+
+	if((ctx->base->exlink != ctx->base->link_hdl)||(ctx->frame_id ==1)){
+		ctx->base->exlink        = ctx->base->link_hdl;
+		ctx->base->dbg_timestamp = ctx->sof_timestamp_val;
+		ctx->base->dbg_frame     = ctx->frame_id;
+	}else{
+		switch (ctx->frame_id%interval){
+		case 0: {
+			timespan   = (ctx->sof_timestamp_val - ctx->base->dbg_timestamp)/1000000;
+			frame_rate = ctx->base->batchsize*(1000000*(ctx->frame_id - ctx->base->dbg_frame))/timespan;
+			CAM_DBG(MI_PERF,
+					"link hdl 0x%x frame nuumber %d ,Time Span(ms): %d Frame Rate(fps): %d.%03d ctx %d ",
+					ctx->base->link_hdl,ctx->frame_id,timespan,frame_rate/1000,frame_rate%1000,ctx->base->ctx_id);
+			break;
+        }
+		case 1: {
+			ctx->base->dbg_timestamp = ctx->sof_timestamp_val;
+			ctx->base->dbg_frame     = ctx->frame_id;
+			break;
+		}
+		default:
+			break;
+		}
+	}
+}
+
+void cam_isp_get_frame_batchsize(struct cam_context *ctx,struct cam_packet *cpkt)
+{
+	int rc = 0;
+	struct cam_cmd_buf_desc              *cmd_desc = NULL;
+	struct cam_isp_resource_hfr_config   *hfr_config;
+	uintptr_t                            cpu_addr  = 0;
+	size_t                               buf_size;
+	uint32_t                             *blob_ptr;
+	uint32_t      blob_type,blob_size,blob_block_size,len_read;
+
+	cmd_desc = (struct cam_cmd_buf_desc *)((uint8_t *)cpkt->payload + cpkt->cmd_buf_offset);
+
+	if (cmd_desc[2].meta_data == CAM_ISP_PACKET_META_GENERIC_BLOB_COMMON){
+		rc = cam_mem_get_cpu_buf(cmd_desc[2].mem_handle,&cpu_addr,&buf_size);
+		blob_ptr = (uint32_t *)(((uint8_t *)cpu_addr)+cmd_desc[2].offset);
+
+		len_read = 0;
+		while(len_read < cmd_desc[2].length){
+			blob_type =
+						((*blob_ptr)& CAM_GENERIC_BLOB_CMDBUFFER_TYPE_MASK)>>
+						CAM_GENERIC_BLOB_CMDBUFFER_TYPE_SHIFT;
+			blob_size = ((*blob_ptr)& CAM_GENERIC_BLOB_CMDBUFFER_SIZE_MASK)>>
+						CAM_GENERIC_BLOB_CMDBUFFER_SIZE_SHIFT;
+			blob_block_size = sizeof(uint32_t) +
+							(((blob_size + sizeof(uint32_t)-1)/
+							sizeof(uint32_t))*
+							sizeof(uint32_t));
+			len_read += blob_block_size;
+			if(blob_type == CAM_ISP_GENERIC_BLOB_TYPE_HFR_CONFIG){
+				hfr_config = (struct cam_isp_resource_hfr_config *)(uint8_t *)(blob_ptr + 1);
+				ctx->batchsize = hfr_config->port_hfr_config[10].subsample_period + 1;
+				break;
+			}
+			blob_ptr += (blob_block_size/sizeof(uint32_t));
+		}
+	}
 }

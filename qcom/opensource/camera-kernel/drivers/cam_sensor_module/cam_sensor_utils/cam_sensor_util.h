@@ -102,4 +102,6 @@ static inline int cam_sensor_util_aon_registration(uint32_t phy_idx, uint8_t aon
 	return cam_csiphy_util_update_aon_registration(phy_idx, aon_camera_id);
 }
 
+int get_camera_pinctrl_state(struct msm_pinctrl_info *sensor_pctrl);
+
 #endif /* _CAM_SENSOR_UTIL_H_ */

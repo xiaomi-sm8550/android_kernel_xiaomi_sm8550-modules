@@ -489,6 +489,15 @@ static int cam_sensor_component_bind(struct device *dev,
 	g_i3c_sensor_data[soc_info->index].s_ctrl = s_ctrl;
 	init_completion(&g_i3c_sensor_data[soc_info->index].probe_complete);
 
+	rc = cam_cci_dev_create_debugfs_entry(s_ctrl->sensor_name,
+		s_ctrl->soc_info.index, CAM_SENSOR_NAME,
+		&s_ctrl->io_master_info, s_ctrl->cci_i2c_master,
+		&s_ctrl->cci_debug);
+	if (rc) {
+		CAM_WARN(CAM_SENSOR, "debugfs creation failed");
+		rc = 0;
+	}
+
 	return rc;
 
 free_frame_skip:
@@ -526,6 +535,7 @@ static void cam_sensor_component_unbind(struct device *dev,
 	cam_sensor_shutdown(s_ctrl);
 	mutex_unlock(&(s_ctrl->cam_sensor_mutex));
 	cam_unregister_subdev(&(s_ctrl->v4l2_dev_str));
+	cam_cci_dev_remove_debugfs_entry((void *)s_ctrl->cci_debug);
 	soc_info = &s_ctrl->soc_info;
 	for (i = 0; i < soc_info->num_clk; i++)
 		devm_clk_put(soc_info->dev, soc_info->clk[i]);

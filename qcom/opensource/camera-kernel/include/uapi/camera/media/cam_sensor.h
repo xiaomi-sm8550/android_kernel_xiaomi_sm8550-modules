@@ -65,7 +65,8 @@ enum cam_actuator_packet_opcodes {
 	CAM_ACTUATOR_PACKET_OPCODE_INIT,
 	CAM_ACTUATOR_PACKET_AUTO_MOVE_LENS,
 	CAM_ACTUATOR_PACKET_MANUAL_MOVE_LENS,
-	CAM_ACTUATOR_PACKET_OPCODE_READ
+	CAM_ACTUATOR_PACKET_OPCODE_READ,
+	CAM_ACTUATOR_PACKET_OPCODE_PARKLENS
 };
 
 enum cam_eeprom_packet_opcodes {
@@ -361,6 +362,9 @@ struct cam_ois_opcode {
 	__u32 coeff;
 	__u32 pheripheral;
 	__u32 memory;
+	__u8 fw_addr_type;
+	__u8 is_addr_increase;
+	__u8 customized_ois_flag;
 } __attribute__((packed));
 
 /**

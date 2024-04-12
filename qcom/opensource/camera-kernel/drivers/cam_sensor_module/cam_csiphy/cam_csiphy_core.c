@@ -1526,6 +1526,7 @@ void cam_csiphy_shutdown(struct csiphy_device *csiphy_dev)
 		}
 	}
 
+	cam_cpas_stop(csiphy_dev->cpas_handle);
 	csiphy_dev->ref_count = 0;
 	csiphy_dev->acquire_count = 0;
 	csiphy_dev->start_dev_count = 0;

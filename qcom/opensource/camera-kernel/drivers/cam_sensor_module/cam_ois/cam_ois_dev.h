@@ -97,6 +97,7 @@ struct cam_ois_intf_params {
  * @is_ois_calib    :   flag for Calibration data
  * @opcode          :   ois opcode
  * @device_name     :   Device name
+ * @cci_debug       :   OIS debugfs info and entry
  *
  */
 struct cam_ois_ctrl_t {
@@ -111,6 +112,7 @@ struct cam_ois_ctrl_t {
 	bool is_i3c_device;
 	struct cam_ois_intf_params bridge_intf;
 	struct i2c_settings_array i2c_fwinit_data;
+	struct i2c_settings_array i2c_postinit_data;
 	struct i2c_settings_array i2c_init_data;
 	struct i2c_settings_array i2c_calib_data;
 	struct i2c_settings_array i2c_mode_data;
@@ -121,6 +123,7 @@ struct cam_ois_ctrl_t {
 	uint8_t ois_fw_flag;
 	uint8_t is_ois_calib;
 	struct cam_ois_opcode opcode;
+	void *cci_debug;
 };
 
 /**

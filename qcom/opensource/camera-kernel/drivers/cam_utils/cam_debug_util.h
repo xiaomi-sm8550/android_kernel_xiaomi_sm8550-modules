@@ -57,6 +57,9 @@ enum cam_debug_module_id {
 	CAM_PRESIL_CORE,         /* bit 32 */
 	CAM_TPG,                 /* bit 33 */
 	CAM_DMA_FENCE,           /* bit 34 */
+	MI_PARKLENS = 61,        /* bit 61 */
+	MI_DEBUG = 62,           /* bit 62 */
+	MI_PERF  = 63,           /* bit 63 */
 	CAM_DBG_MOD_MAX
 };
 
@@ -69,6 +72,19 @@ enum cam_debug_log_level {
 	CAM_TYPE_DBG,
 	CAM_TYPE_MAX,
 };
+
+/*
+ *  cam_debug_hw_trigger()
+ *
+ * @brief     :  Debug for hw question.set up this as a hw trigger
+ *               cam_hw_trigger_override[0]= (offset) + value(in schematic diagram)
+ *
+ * @module_id :  Respective Module ID which is calling this function
+ * @status    :  The state value used to determine whether to trigger
+ *
+ * @return    :  If there is no error, it will return 0
+ */
+int cam_debug_hw_trigger(unsigned int module_id, bool status);
 
 /*
  * enum cam_debug_priority - Priority of debug log (0 = Lowest)
@@ -115,6 +131,9 @@ static const char *cam_debug_mod_name[CAM_DBG_MOD_MAX] = {
 	[CAM_PRESIL_CORE] = "CAM-CORE-PRESIL",
 	[CAM_TPG]         = "CAM-TPG",
 	[CAM_DMA_FENCE]   = "CAM_DMA_FENCE",
+	[MI_PARKLENS]     = "MI-CAM-PARKLENS",
+	[MI_DEBUG]        = "MI-CAM-DEBUG",
+	[MI_PERF]         = "MI-CAM-PERF",
 };
 
 #define ___CAM_DBG_MOD_NAME(module_id)                                      \
@@ -153,7 +172,10 @@ __builtin_choose_expr(((module_id) == CAM_CRE), "CAM-CRE",                  \
 __builtin_choose_expr(((module_id) == CAM_PRESIL_CORE), "CAM-CORE-PRESIL",  \
 __builtin_choose_expr(((module_id) == CAM_TPG), "CAM-TPG",                  \
 __builtin_choose_expr(((module_id) == CAM_DMA_FENCE), "CAM-DMA-FENCE",      \
-"CAMERA")))))))))))))))))))))))))))))))))))
+__builtin_choose_expr(((module_id) == MI_PARKLENS), "MI-CAM-PARKLENS",      \
+__builtin_choose_expr(((module_id) == MI_DEBUG), "MI-DEBUG",                \
+__builtin_choose_expr(((module_id) == MI_PERF), "MI-PERF",                  \
+"CAMERA"))))))))))))))))))))))))))))))))))))))
 
 #define CAM_DBG_MOD_NAME(module_id) \
 ((module_id < CAM_DBG_MOD_MAX) ? cam_debug_mod_name[module_id] : "CAMERA")
@@ -311,6 +333,21 @@ __CAM_LOG(CAM_PRINT_TRACE, CAM_TYPE_TRACE, __module, fmt, ##args)
  */
 void cam_print_to_buffer(char *buf, const size_t buf_size, size_t *len, unsigned int tag,
 	unsigned long long module_id, const char *fmt, ...);
+
+/*
+ * CAM_DEBUG_HW_TRIGGER
+ * @brief    :  This macro is used to set the value of GPIO and print the corresponding
+ *              log when the status meets the conditions.
+ *
+ * @__module :  Respective module id which is been calling this Macro
+ * @fmt      :  Formatted string which needs to be print in log
+ * @args     :  Arguments which needs to be print in log
+ */
+#define CAM_DEBUG_HW_TRIGGER(status, __module, fmt, args...)                  \
+	({if (unlikely(status)) {                                             \
+		cam_debug_hw_trigger(__module, status);                       \
+		CAM_ERR(__module, fmt, ##args);                               \
+	}})
 
 /**
  * CAM_[ERR/WARN/INFO]_BUF

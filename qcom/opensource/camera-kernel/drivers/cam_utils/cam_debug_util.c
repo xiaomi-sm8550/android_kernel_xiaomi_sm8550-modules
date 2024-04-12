@@ -11,6 +11,9 @@
 #include "cam_trace.h"
 
 #include "cam_debug_util.h"
+#include <linux/gpio.h>
+#include "cam_res_mgr_api.h"
+#include <cam_soc_util.h>
 
 unsigned long long debug_mdl;
 module_param(debug_mdl, ullong, 0644);
@@ -104,6 +107,58 @@ int cam_debugfs_lookup_subdir(const char *name, struct dentry **subdir)
 
 	*subdir = debugfs_lookup(name, cam_debugfs_root);
 	return (*subdir) ? 0 : -ENOENT;
+}
+
+static int cam_hw_trigger_cnt  = 5;
+// cam_hw_trigger[5] = {gpio, value, module_id, gpio_module, delay}
+static uint cam_hw_trigger[5] = {0, 0, 0, 0, 1000};
+module_param_array(cam_hw_trigger, uint, &cam_hw_trigger_cnt, 0644);
+
+int cam_debug_hw_trigger(unsigned int module_id, bool status)
+{
+	int rc = 0;
+	int restore_value = 0;
+
+	if (!status ||	0 == cam_hw_trigger[0] ||
+			0 == cam_hw_trigger[4] ||
+			!(cam_hw_trigger[2] & module_id))
+		return rc;
+
+	rc = gpio_request_one(cam_hw_trigger[0], cam_hw_trigger[3], "CAM_HW_TRIGGER");
+	if (rc) {
+		CAM_ERR(CAM_UTIL, "[cam_hw_trigger] GPIO %d:%s request failed, rc = %d",
+			cam_hw_trigger[0], "CAM_HW_TRIGGER", rc);
+		return rc;
+	}
+
+	restore_value = gpio_get_value_cansleep(cam_hw_trigger[0]);
+	if (restore_value != 0 && restore_value != 1) {
+		CAM_ERR(CAM_UTIL, "[cam_hw_trigger] Failed to get GPIO %d:%s status",
+			cam_hw_trigger[0], "CAM_HW_TRIGGER");
+		rc = -EIO;
+		goto end_free;
+	}
+
+	if (restore_value == cam_hw_trigger[1]) {
+		CAM_ERR(CAM_UTIL, "[cam_hw_trigger] GPIO %d:%s is already in state %d",
+			cam_hw_trigger[0], "CAM_HW_TRIGGER", cam_hw_trigger[1]);
+		goto end_free;
+	}
+
+	gpio_set_value_cansleep(cam_hw_trigger[0], cam_hw_trigger[1]);
+	CAM_DBG(CAM_UTIL, "[cam_hw_trigger] %s success, GPIO:%d value:%d",
+	CAM_DBG_MOD_NAME(module_id), cam_hw_trigger[0],
+		cam_hw_trigger[1]);
+
+	usleep_range(cam_hw_trigger[4], (cam_hw_trigger[4] + 100));
+
+	gpio_set_value_cansleep(cam_hw_trigger[0], restore_value);
+	CAM_DBG(CAM_UTIL, "[cam_hw_trigger] %s restore, GPIO:%d value:%d",
+	CAM_DBG_MOD_NAME(module_id), cam_hw_trigger[0], restore_value);
+
+end_free:
+	gpio_free(cam_hw_trigger[0]);
+	return rc;
 }
 
 const struct camera_debug_settings *cam_debug_get_settings(void)

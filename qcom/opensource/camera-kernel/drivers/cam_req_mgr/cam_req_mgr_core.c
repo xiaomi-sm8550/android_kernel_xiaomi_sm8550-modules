@@ -79,6 +79,7 @@ void cam_req_mgr_core_link_reset(struct cam_req_mgr_core_link *link)
 	link->is_shdr = false;
 	link->wait_for_dual_trigger = false;
 	link->debug_data.num_skip_frames = 0;
+	link->cont_empty_slots = 0;
 	__cam_req_mgr_reset_apply_data(link);
 
 	for (i = 0; i < MAXIMUM_LINKS_PER_SESSION - 1; i++)
